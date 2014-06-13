@@ -19,6 +19,9 @@ sealed trait Ok[+N, +Y] {
   
   def flatMap[M >: N, Z](f: Y => Ok[M, Z]): Ok[M, Z]
   def flatMapNo[M, Z >: Y](f: N => Ok[M, Z]): Ok[M, Z]
+
+  def filter[M >: N](p: Y => Boolean)(implicit noify: Ok.Defaulter[M,Y]): Ok[M, Y]
+  def withFilter[M >: N](p: Y => Boolean)(implicit noify: Ok.Defaulter[M,Y]): Ok[M, Y] = filter[M](p)(noify)
   
   def flatten[M >: N, Z](implicit ev: Y <:< Ok[M,Z]): Ok[M, Z]
   def flattenNo[M, Z >: Y](implicit ev: N <:< Ok[M,Z]): Ok[M, Z]
@@ -70,6 +73,8 @@ final case class Yes[+Y](yes: Y) extends Ok[Nothing, Y] {
   def flatMap[M, Z](f: Y => Ok[M, Z]): Ok[M, Z] = f(yes)
   def flatMapNo[M, Z >: Y](f: Nothing => Ok[M, Z]): Ok[M, Z] = this
   
+  def filter[M](p: Y => Boolean)(implicit noify: Ok.Defaulter[M,Y]): Ok[M, Y] = if (p(yes)) this else noify(yes)
+  
   def flatten[M, Z](implicit ev: Y <:< Ok[M,Z]): Ok[M, Z] = ev(yes)
   def flattenNo[M, Z >: Y](implicit ev: Nothing <:< Ok[M,Z]): Ok[M, Z] = this
   
@@ -105,6 +110,8 @@ final case class No[+N](no: N) extends Ok[N, Nothing] {
   def flatMap[M >: N, Z](f: Nothing => Ok[M, Z]): Ok[M, Z] = this
   def flatMapNo[M, Z](f: N => Ok[M, Z]): Ok[M, Z] = f(no)
   
+  def filter[M >: N](p: Nothing => Boolean)(implicit noify: Ok.Defaulter[M,Nothing]) = this
+  
   def flatten[M >: N, Z](implicit ev: Nothing <:< Ok[M,Z]): Ok[M, Z] = this
   def flattenNo[M, Z](implicit ev: N <:< Ok[M,Z]): Ok[M, Z] = ev(no)
   
@@ -134,6 +141,10 @@ object Ok {
   trait ValidateOkay[N] {
     def incorrect(n: N): Unit
   }
+  
+  trait Defaulter[N,-Y] { def apply(yes: Y): No[N] }
+  private val DefaultUnitToUnit = new Defaulter[Unit, Any] { def apply(yes: Any) = UnitNo }
+  implicit def defaultToUnit[Y]: Defaulter[Unit, Y] = DefaultUnitToUnit
   
   def ifNot[N](o: Option[N]) = o match {
     case Some(n) => No(n)
