@@ -1,4 +1,5 @@
 ## This file is distributed under the BSD 3-clause license.  See file LICENSE.
+## Copyright (c) 2014 Rex Kerr and UCSF
 
 F = fsc -feature -deprecation -Xfatal-warnings
 S = scalac -feature -deprecation -Xfatal-warnings
@@ -9,13 +10,20 @@ default: Kse.jar
 KSE_JAR_PATH = kse/flow
 
 Kse.jar : \
-  kse/flow/Ok.class
+  kse/flow/Ok.class \
+  kse/flow/Flow.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
 kse/flow/Ok.class : \
   makefile \
   flow/Ok.scala
 	${F} flow/Ok.scala
+
+kse/flow/Flow.class : \
+  makefile \
+  kse/flow/Ok.class \
+  flow/Flow.scala
+	${F} flow/Flow.scala
 
 clean :
 	${F} -shutdown
