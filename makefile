@@ -31,5 +31,5 @@ clean :
 
 docs :
 	mkdir -p api
-	${D} flow/Ok.scala
+	${D} flow/Ok.scala flow/Flow.scala
 	tar czf kse-api.tar.gz api
