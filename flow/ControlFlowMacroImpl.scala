@@ -80,4 +80,33 @@ object ControlFlowMacroImpl {
     }
     """)
   }
+  
+  def nFor(c: Context)(count: c.Tree)(f: c.Tree) = {
+    import c.universe._
+    
+    val i = TermName(c.freshName("i$"))
+    val n = TermName(c.freshName("n$"))
+    
+    var valdefs = List(q"val $n = $count", q"var $i = 0")
+    
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, i)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = valdefs :+ q"val $lf = $tree"
+        q"$lf($i)"
+    }
+    
+    val body = inlineFn(f)
+    c.untypecheck(q"""
+    {
+      ..$valdefs
+      while ($i < $n) {
+        $body
+        $i += 1
+      }
+    }
+    """)
+  }
 }

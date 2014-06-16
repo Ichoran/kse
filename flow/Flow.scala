@@ -225,6 +225,11 @@ package object flow extends LowPriorityOkValidation {
     */
   def aFor[A](array: Array[A])(f: (A,Int) => Unit): Unit = macro ControlFlowMacroImpl.aFor[A]
   
+  /** Indexed loop, counting up from 0. 
+    * Example: {{{ nFor(3)(println) // Prints 0 1 2 on separate lines }}}
+    */
+  def nFor(count: Int)(f: Int => Unit): Unit = macro ControlFlowMacroImpl.nFor
+  
   private val myOops: Flew[Long] with Oops = new Flew[Long] with Oops {
     def apply(): Nothing = throw this
     def apply(a: Long): Nothing = throw this
