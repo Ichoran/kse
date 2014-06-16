@@ -13,6 +13,7 @@ Kse.jar : \
   kse/flow/Ok.class \
   kse/flow/Flow.class \
   kse/coll/packed/package.class \
+  kse/eio/Base64.class \
   kse/eio/Grok.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
@@ -38,6 +39,11 @@ kse/coll/packed/package.class : \
   coll/Packed.scala
 	${F} coll/Packed.scala
 
+kse/eio/Base64.class : \
+  makefile \
+  eio/Base64.scala
+	${F} eio/Base64.scala
+
 kse/eio/Grok.class : \
   makefile \
   kse/flow/Ok.class \
@@ -51,5 +57,5 @@ clean :
 
 docs :
 	mkdir -p api
-	${D} flow/Ok.scala flow/Flow.scala eio/Grok.scala coll/Packed.scala
+	${D} flow/Ok.scala flow/Flow.scala coll/Packed.scala eio/Base64.scala eio/Grok.scala
 	tar czf kse-api.tar.gz api
