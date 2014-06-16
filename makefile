@@ -12,7 +12,7 @@ KSE_JAR_PATH = kse/flow kse/eio kse/coll
 Kse.jar : \
   kse/flow/Ok.class \
   kse/flow/Flow.class \
-  kse/coll/packed.class \
+  kse/coll/packed/package.class \
   kse/eio/Grok.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
@@ -33,7 +33,7 @@ kse/flow/Flow.class : \
   flow/Flow.scala
 	${F} flow/Flow.scala
 
-kse/coll/packed.class : \
+kse/coll/packed/package.class : \
   makefile \
   coll/Packed.scala
 	${F} coll/Packed.scala

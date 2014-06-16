@@ -1123,14 +1123,16 @@ trait GrokArrayControl extends GrokControl {
   def bytes: Array[Byte]
   def reset: this.type
   def resetWith(a: Array[Byte], start: Int, limit: Int): this.type
-  def bigEndian(big: Boolean): this.type
-  
+}
+
+trait GrokArrayBinaryControl extends GrokArrayControl {
+  def bigEndian(big: Boolean): this.type  
   def hasNext(n: Int): Boolean
   def hasPrev(n: Int): Boolean
 }
 
 trait GrokArrayTextControl extends GrokArrayControl {
-  def setDelimiter(delim: Delimiter): this.type
+  def setDelimiter(delim: DelimByte): this.type
 }
 
 object Grok {
@@ -1245,9 +1247,137 @@ object Grok {
     }
   }
   
+  def text(s: Array[Byte]): Grok = rawText(s, 0, s.length, DelimByte.whiteDelimByte)
+  def text(s: Array[Byte], start: Int, limit: Int): Grok = rawText(s, start, limit, DelimByte.whiteDelimByte)
+  def text(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): Grok = rawText(s, start, limit, delimiter)
+  def rawText(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): GrokText with GrokArrayTextControl with Grok = new GrokText with GrokArrayTextControl with Grok {
+    private[this] var myBytes = s
+    private[this] var myZero = math.min(s.length, math.max(start, 0))
+    private[this] var myLimit = math.min(s.length, math.max(myZero, limit))
+    private[this] var myDelim = DelimByte.whiteDelimByte
+    
+    def bytes = myBytes
+    def reset = indexTo(myZero).resume
+    def resetWith(s: Array[Byte], start: Int, limit: Int) = {
+      myBytes = s; myZero = math.min(s.length, math.max(0, start)); myLimit = math.min(s.length, math.max(myZero, limit))
+      reset
+    }
+    def setDelimiter(delim: DelimByte) = { myDelim = delim; this }
+    
+    def hasNext = {
+      val i = index
+      (i < myLimit) && (!myDelim(s(i)) || {
+        skipWhiteB(s)(myLimit, myDelim)
+        index < myLimit
+      })
+    }
+    def hasPrev: Boolean = {
+      val i = index-1
+      (i > myZero) && (!myDelim(s(i))) || {
+        var j = i-1
+        while (j > myZero) {
+          if (!myDelim(s(j))) {
+            indexTo(j+1)
+            return true
+          }
+          j -= 1
+        }
+        indexTo(j+1)
+        !myDelim(s(j-1))
+      }
+    }
+    def skip(implicit oops: Oops) = if (hasNext) { skipBlackB(s)(myLimit, myDelim); this } else OOPS
+    def back(implicit oops: Oops) = if (hasPrev) {
+      var i = index-1
+      while (i > myZero && !myDelim(s(i))) i -= 1
+      indexTo(i)
+      this
+    } else OOPS
+    
+    def Z(implicit oops: Oops): Boolean = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseTokenB(myBytes)(myLimit, myDelim)
+      if (error) OOPS
+      if (ans.length == 0) OOPS
+      else {
+        val b = ans(0) | 0x20
+        if (b=='t') {
+          if (ans.length == 1 || (ans.length == 4 && ((ans(1)|0x20)=='r') && ((ans(2)|0x20)=='u') && ((ans(3)|0x20)=='e'))) true
+          else OOPS
+        }
+        else if (b=='y') {
+          if (ans.length == 1 || (ans.length == 3 && ((ans(1)|0x20)=='e') && ((ans(2)|0x20)=='s'))) true
+          else OOPS
+        }
+        else if (b=='n') {
+          if (ans.length == 1 || (ans.length == 2 && ((ans(1)|0x20)=='o'))) true
+          else OOPS
+        }
+        else if (b=='f') {
+          if (ans.length == 1 || (ans.length == 5 && ((ans(1)|0x20)=='a') && ((ans(2)|0x20)=='l') && ((ans(3)|0x20)=='s') && ((ans(4)|0x20)=='e'))) true
+          else OOPS
+        }
+        else OOPS
+      }
+    }
+    def B(implicit oops: Oops): Byte = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseLongB(myBytes, 10)(myLimit, myDelim)
+      if (error || ans < -128 || ans > 255) OOPS
+      (ans&0xFF).toByte
+    }
+    def S(implicit oops: Oops): Short = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseLongB(myBytes, 10)(myLimit, myDelim)
+      if (error || ans < Short.MinValue || ans > Short.MaxValue) OOPS
+      (ans&0xFFFF).toShort
+    }
+    def C(implicit oops: Oops): Char = {
+      val ans = rawParseCharB(myBytes)(myLimit)
+      if (error) OOPS
+      ans
+    }
+    def I(implicit oops: Oops): Int = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseLongB(myBytes, 10)(myLimit, myDelim)
+      if (error | ans < Int.MinValue || ans > Int.MaxValue) OOPS
+      (ans&0xFFFFFFFFL).toInt
+    }
+    def L(implicit oops: Oops): Long = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseLongB(myBytes, 10)(myLimit, myDelim)
+      if (error) OOPS
+      ans
+    }
+    def F(implicit oops: Oops): Float = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseDoubleB(myBytes)(myLimit, myDelim)
+      if (error) OOPS
+      ans.toFloat
+    }
+    def D(implicit oops: Oops): Double = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseDoubleB(myBytes)(myLimit, myDelim)
+      if (error) OOPS
+      ans
+    }
+    def tok(implicit oops: Oops): String = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseTokenB(myBytes)(myLimit, myDelim)
+      if (error) OOPS
+      new String(ans)
+    }
+    def quoted(implicit oops: Oops): String = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseStringB(myBytes)(myLimit)
+      if (error) OOPS
+      ans
+    }
+  }
+  
   def apply(bs: Array[Byte]) = raw(bs, 0, bs.length)
   def apply(bs: Array[Byte], start: Int, limit: Int): Grok = raw(bs, start, limit)
-  def raw(bs: Array[Byte], start: Int, limit: Int): GrokArrayControl with Grok = new GrokArrayControl with Grok {
+  def raw(bs: Array[Byte], start: Int, limit: Int): GrokArrayBinaryControl with Grok = new GrokArrayBinaryControl with Grok {
     private[this] var myBytes = bs
     private[this] var myZero = math.min(bs.length, math.max(0, start))
     private[this] var myLimit = math.max(myZero, math.min(bs.length, limit))
