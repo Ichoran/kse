@@ -1,3 +1,6 @@
+// This file is distributed under the BSD 3-clause license.  See file LICENSE.
+// Copyright (c) 2014 Rex Kerr and UCSF
+
 package kse.flow
 
 import scala.language.experimental.macros
@@ -105,6 +108,35 @@ object ControlFlowMacroImpl {
       while ($i < $n) {
         $body
         $i += 1
+      }
+    }
+    """)
+  }
+  
+  def iFor[A](c: Context)(iterator: c.Tree)(f: c.Tree) = {
+    import c.universe._
+    
+    val i = TermName(c.freshName("i$"))
+    val x = TermName(c.freshName("x$"))
+    
+    var valdefs = List(q"val $i = $iterator")
+    
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, x)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = valdefs :+ q"val $lf = $tree"
+        q"$lf($x)"
+    }
+    
+    val body = inlineFn(f)
+    c.untypecheck(q"""
+    {
+      ..$valdefs
+      while ($i.hasNext) {
+        val $x = $i.next
+        $body
       }
     }
     """)

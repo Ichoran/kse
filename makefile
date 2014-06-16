@@ -7,11 +7,12 @@ X = scala -feature -deprecation -Xfatal-warnings
 D = scaladoc -d api
 
 default: Kse.jar
-KSE_JAR_PATH = kse/flow
+KSE_JAR_PATH = kse/flow kse/eio
 
 Kse.jar : \
   kse/flow/Ok.class \
-  kse/flow/Flow.class
+  kse/flow/Flow.class \
+  kse/eio/Grok.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
 kse/flow/Ok.class : \
@@ -31,11 +32,18 @@ kse/flow/Flow.class : \
   flow/Flow.scala
 	${F} flow/Flow.scala
 
+kse/eio/Grok.class : \
+  makefile \
+  kse/flow/Ok.class \
+  kse/flow/Flow.class \
+  eio/Grok.scala
+	${F} eio/Grok.scala
+
 clean :
 	${F} -shutdown
 	rm -r ${KSE_JAR_PATH} api
 
 docs :
 	mkdir -p api
-	${D} flow/Ok.scala flow/Flow.scala
+	${D} flow/Ok.scala flow/Flow.scala eio/Grok.scala
 	tar czf kse-api.tar.gz api

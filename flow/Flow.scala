@@ -93,29 +93,6 @@ package flow {
     */
   trait Oops extends Flow[Long] {}
   
-  /** This class is undocumented and may be removed. */
-  class Flop(s: String) extends RuntimeException(s) {
-    private var extra: List[String] = List(s)
-    def more(s: String): Nothing = { extra = s :: extra; throw this }
-    def more(f: Flop): Nothing = {
-      extra = f.extra.map("< " + _) ::: extra.map("> " + _) ::: List("Neither worked: ")
-      throw this
-    }
-    def more(fs: Seq[Flop]): Nothing = {
-      val n = fs.length.toString.length
-      extra = (this +: fs).zipWithIndex.toList.reverse.flatMap{ case (f,i) => f.extra.map(("%0"+n+"d").format(i) + " " + _) } ::: List("None of "+n+" worked:")
-      throw this
-    }
-    override def getMessage = extra.reverse.mkString("\n...")
-  }
-
-  /** This class is undocumented and may be removed. */
-  class Doable[A](val underlying: () => A) extends AnyVal {
-    def until(p: A => Boolean) = { var a = underlying(); while (!p(a)) a = underlying(); a }
-  }
-  object Do {
-    def apply[A](f: => A) = new Doable(() => f)
-  }
   
   /** Provides default behavior for validating an [[Ok]], namely to throw an exception if a disfavored value is found. */
   trait LowPriorityOkValidation {
@@ -248,6 +225,11 @@ package object flow extends LowPriorityOkValidation {
     */
   def nFor(count: Int)(f: Int => Unit): Unit = macro ControlFlowMacroImpl.nFor
   
+  /** Loop over an iterator.
+    * Example: {{{ iFor( io.Source.fromFile(f).getLines )( line => if (line.length>0) builder += line ) }}}
+    */
+  def iFor[A](iterator: Iterator[A])(f: A => Unit): Unit = macro ControlFlowMacroImpl.iFor[A]
+   
   
   private val myOops: Flew[Long] with Oops = new Flew[Long] with Oops {
     def apply(): Nothing = throw this
@@ -491,8 +473,5 @@ package object flow extends LowPriorityOkValidation {
       case t if NonFatal(t) => No(no(t))
     }
   }
-  
-  /** This method is undocumented and may be removed. */
-  def FLOP(s: String) = throw new Flop(s)
 }
 
