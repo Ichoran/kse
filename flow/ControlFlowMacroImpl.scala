@@ -46,4 +46,38 @@ object ControlFlowMacroImpl {
     }
     """)
   }
+  
+  def aFor[A](c: Context)(array: c.Tree)(f: c.Tree) = {
+    import c.universe._
+    
+    val a = TermName(c.freshName("a$"))
+    val i = TermName(c.freshName("i$"))
+    val x = TermName(c.freshName("x$"))
+    
+    var valdefs = List(q"val $a = $array", q"var $i = 0")
+    
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(paramA, paramInt), body) =>
+        val bodyPrime = rename[c.type](c)(body, paramA.name, x)
+        rename[c.type](c)(bodyPrime, paramInt.name, i)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = valdefs :+ q"val $lf = $tree"
+        q"$lf($a, $i)"
+    }
+    
+    val body = inlineFn(f)
+    
+    c.untypecheck(q"""
+    {
+      ..$valdefs
+      while ($i < $a.length) {
+        val $x = $a.apply($i)
+        $body
+        $i += 1
+      }
+    }
+    """)
+  }
 }

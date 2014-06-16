@@ -156,7 +156,7 @@ package object flow extends LowPriorityOkValidation {
   /** Provides standard methods that should exist on Object. */
   implicit class EverythingCanTapAndSuch[A](val underlying: A) extends AnyVal {
     /** Transforms self according to the function `f`. */
-    def fn[Z](f: A=>Z) = f(underlying)
+    def fn[Z](f: A => Z) = f(underlying)
     
     /** Executes a side effect that depends on self, and returns self */
     def tap(f: A => Any) = { f(underlying); underlying }
@@ -171,7 +171,7 @@ package object flow extends LowPriorityOkValidation {
     def optIf(p: A => Boolean) = if (p(underlying)) Some(underlying) else None
     
     /** Wraps the value in an [[Ok]], in a `Yes` if `p` is true, otherwise in a `No`. */
-    def okIf(p: A => Boolean) = if (p(underlying)) Yes(underlying) else No(underlying)
+    def okIf(p: A => Boolean): Ok[A,A] = if (p(underlying)) Yes(underlying) else No(underlying)
     
     /** Tries to cast (without numeric conversion), placing the value in a `Yes` if it succeeds, or leaving it in a `No` if it fails. */
     def okAs[Z](implicit tg: scala.reflect.ClassTag[Z]): Ok[A,Z] = {
@@ -193,10 +193,10 @@ package object flow extends LowPriorityOkValidation {
     }
     
     /** If `p` is true, replace the value with `default`. */
-    def defaultIf(p: A=>Boolean)(default: => A) = if (p(underlying)) default else underlying
+    def defaultIf(p: A => Boolean)(default: => A) = if (p(underlying)) default else underlying
     
     /** If `p` is true, continue, otherwise throw an Oops */
-    def must(p: A=>Boolean)(implicit oops: Oops) = if (p(underlying)) underlying else oops()
+    def must(p: A => Boolean)(implicit oops: Oops) = if (p(underlying)) underlying else oops()
 
     /** If `p` is true, send the value as an implicit `Flow`; otherwise return self */
     def flowIf(p: A => Boolean)(implicit flow: FlowWith[A]) = if (p(underlying)) flow(underlying) else underlying
@@ -205,13 +205,25 @@ package object flow extends LowPriorityOkValidation {
       * transforming self according to `f`. 
       * Example: {{{ scala.io.Source.fromFile(file).tidy(_.close)( _.getLines.toVector ) }}}
       */
-    def tidy[Z](g: A=>Any)(f: A=>Z) = try { f(underlying) } finally { g(underlying) }
+    def tidy[Z](g: A => Any)(f: A => Z) = try { f(underlying) } finally { g(underlying) }
   }
   
   
-  /** C-style for loop (translated to while loop via macro) */
+  /** C-style for loop (translated to while loop via macro).
+    * Example: {{{ cFor(1)(_ <= 10)(_ + 1)(i => println("Line "+i)) }}}
+    */
   def cFor[A](zero: A)(p: A => Boolean)(next: A => A)(f: A => Unit): Unit = macro ControlFlowMacroImpl.cFor[A]
-    
+  
+  /** Indexed array iterator--provides both the element and the index at each step.
+    * Example:
+    * {{{ 
+    * val arr = Array(5,4,3,2,1,0)
+    * var s = 0
+    * aFor(arr){ (x,i) => s += x*i }
+    * println(s)
+    * }}}
+    */
+  def aFor[A](array: Array[A])(f: (A,Int) => Unit): Unit = macro ControlFlowMacroImpl.aFor[A]
   
   private val myOops: Flew[Long] with Oops = new Flew[Long] with Oops {
     def apply(): Nothing = throw this
