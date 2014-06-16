@@ -19,9 +19,15 @@ kse/flow/Ok.class : \
   flow/Ok.scala
 	${F} flow/Ok.scala
 
+kse/flow/ControlFlowMacroImpl.class : \
+  makefile \
+  flow/ControlFlowMacroImpl.scala
+	${F} flow/ControlFlowMacroImpl.scala
+
 kse/flow/Flow.class : \
   makefile \
   kse/flow/Ok.class \
+  kse/flow/ControlFlowMacroImpl.class \
   flow/Flow.scala
 	${F} flow/Flow.scala
 

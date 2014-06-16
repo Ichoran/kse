@@ -3,6 +3,8 @@
 
 package kse
 
+import scala.language.experimental.macros
+
 import scala.util.control.{ NonFatal, ControlThrowable }
 
 package flow {
@@ -123,6 +125,94 @@ package flow {
 }
 
 package object flow extends LowPriorityOkValidation {
+  /** Allows `grab` as an alternative to `get` on `Option`: `grab` will throw an available `Oops` if the `Option` is empty. */
+  implicit class OptionIsFlowable[A](val underlying: Option[A]) extends AnyVal {
+    def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops()
+  }
+
+  /** Allows alternatives to `get` on `Try`. */
+  implicit class TryIsFlowable[A](val underlying: scala.util.Try[A]) extends AnyVal {
+    /** Throws an available `Oops` if the `Try` is a `Failure`, gives the `Success` value otherwise. */
+    def grab(implicit oops: Oops): A = underlying match {
+      case scala.util.Success(a) => a
+      case _ => oops()
+    }
+    /** Throws a `Failure` value with an available `Flow`; gives the `Success` value otherwise. */
+    def orFlow(implicit flow: FlowWith[Throwable]): A = underlying match {
+      case scala.util.Success(a) => a
+      case scala.util.Failure(t) => flow(t)
+    }
+  }
+  
+  /** Allows alternatives to `yes` on [[Ok]] */
+  implicit class OkIsFlowable[N,Y](val underlying: Ok[N,Y]) extends AnyVal {
+    /** Throws an available `Oops` if the [[Ok]] is a `No`, gives the `Yes` value otherwise. */
+    def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops()
+    /** Throws a `No` value with an available `Flow`; gives the `Yes` value otherwise. */
+    def orFlow(implicit flow: FlowWith[N]): Y = if (underlying.isOk) underlying.yes else flow(underlying.no)
+  }
+  
+  
+  /** Provides standard methods that should exist on Object. */
+  implicit class EverythingCanTapAndSuch[A](val underlying: A) extends AnyVal {
+    /** Transforms self according to the function `f`. */
+    def fn[Z](f: A=>Z) = f(underlying)
+    
+    /** Executes a side effect that depends on self, and returns self */
+    def tap(f: A => Any) = { f(underlying); underlying }
+
+    /** Transforms self according to `pf` only for those values where `pf` is defined. */
+    def partFn(pf: PartialFunction[A,A]) = if (pf.isDefinedAt(underlying)) pf(underlying) else underlying
+    
+    /** Transforms self according to `f` for those values where `p` is true. */
+    def pickFn(p: A => Boolean)(f: A => A) = if (p(underlying)) f(underlying) else underlying
+    
+    /** Wraps the value in an `Option`, discarding values where `p` is false. */
+    def optIf(p: A => Boolean) = if (p(underlying)) Some(underlying) else None
+    
+    /** Wraps the value in an [[Ok]], in a `Yes` if `p` is true, otherwise in a `No`. */
+    def okIf(p: A => Boolean) = if (p(underlying)) Yes(underlying) else No(underlying)
+    
+    /** Tries to cast (without numeric conversion), placing the value in a `Yes` if it succeeds, or leaving it in a `No` if it fails. */
+    def okAs[Z](implicit tg: scala.reflect.ClassTag[Z]): Ok[A,Z] = {
+      try { underlying match {
+        case _: Unit => if (tg.runtimeClass == classOf[Unit]) Ok.UnitYes.asInstanceOf[Yes[Z]] else No(underlying)
+        case z: Boolean => if (tg.runtimeClass == classOf[Boolean]) Yes(z).asInstanceOf[Yes[Z]] else No(underlying)
+        case b: Byte => if (tg.runtimeClass == classOf[Byte]) Yes(b).asInstanceOf[Yes[Z]] else No(underlying)
+        case s: Short => if (tg.runtimeClass == classOf[Short]) Yes(s).asInstanceOf[Yes[Z]] else No(underlying)
+        case c: Char => if (tg.runtimeClass == classOf[Char]) Yes(c).asInstanceOf[Yes[Z]] else No(underlying)
+        case i: Int => if (tg.runtimeClass == classOf[Int]) Yes(i).asInstanceOf[Yes[Z]] else No(underlying)
+        case l: Long => if (tg.runtimeClass == classOf[Long]) Yes(l).asInstanceOf[Yes[Z]] else No(underlying)
+        case f: Float => if (tg.runtimeClass == classOf[Float]) Yes(f).asInstanceOf[Yes[Z]] else No(underlying)
+        case d: Double => if (tg.runtimeClass == classOf[Double]) Yes(d).asInstanceOf[Yes[Z]] else No(underlying)
+        case _ =>
+          val a = underlying.asInstanceOf[AnyRef]  // Need to handle null this way or we get a MatchError
+          if ((a ne null) && tg.runtimeClass.isAssignableFrom(a.getClass)) Yes(a.asInstanceOf[Z]) else No(underlying)
+      }}
+      catch { case cce: ClassCastException => No(underlying) }
+    }
+    
+    /** If `p` is true, replace the value with `default`. */
+    def defaultIf(p: A=>Boolean)(default: => A) = if (p(underlying)) default else underlying
+    
+    /** If `p` is true, continue, otherwise throw an Oops */
+    def must(p: A=>Boolean)(implicit oops: Oops) = if (p(underlying)) underlying else oops()
+
+    /** If `p` is true, send the value as an implicit `Flow`; otherwise return self */
+    def flowIf(p: A => Boolean)(implicit flow: FlowWith[A]) = if (p(underlying)) flow(underlying) else underlying
+
+    /** Perform a side-effect `g`, typically to clean up a resource, after
+      * transforming self according to `f`. 
+      * Example: {{{ scala.io.Source.fromFile(file).tidy(_.close)( _.getLines.toVector ) }}}
+      */
+    def tidy[Z](g: A=>Any)(f: A=>Z) = try { f(underlying) } finally { g(underlying) }
+  }
+  
+  
+  /** C-style for loop (translated to while loop via macro) */
+  def cFor[A](zero: A)(p: A => Boolean)(next: A => A)(f: A => Unit): Unit = macro ControlFlowMacroImpl.cFor[A]
+    
+  
   private val myOops: Flew[Long] with Oops = new Flew[Long] with Oops {
     def apply(): Nothing = throw this
     def apply(a: Long): Nothing = throw this
@@ -204,33 +294,6 @@ package object flow extends LowPriorityOkValidation {
   }
   
   
-  /** Allows `grab` as an alternative to `get` on `Option`: `grab` will throw an available `Oops` if the `Option` is empty. */
-  implicit class OptionIsFlowable[A](val underlying: Option[A]) extends AnyVal {
-    def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops()
-  }
-
-  /** Allows alternatives to `get` on `Try`. */
-  implicit class TryIsFlowable[A](val underlying: scala.util.Try[A]) extends AnyVal {
-    /** Throws an available `Oops` if the `Try` is a `Failure`, gives the `Success` value otherwise. */
-    def grab(implicit oops: Oops): A = underlying match {
-      case scala.util.Success(a) => a
-      case _ => oops()
-    }
-    /** Throws a `Failure` value with an available `Flow`; gives the `Success` value otherwise. */
-    def orFlow(implicit flow: FlowWith[Throwable]): A = underlying match {
-      case scala.util.Success(a) => a
-      case scala.util.Failure(t) => flow(t)
-    }
-  }
-  
-  /** Allows alternatives to `yes` on [[Ok]] */
-  implicit class OkIsFlowable[N,Y](val underlying: Ok[N,Y]) extends AnyVal {
-    /** Throws an available `Oops` if the [[Ok]] is a `No`, gives the `Yes` value otherwise. */
-    def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops()
-    /** Throws a `No` value with an available `Flow`; gives the `Yes` value otherwise. */
-    def orFlow(implicit flow: FlowWith[N]): Y = if (underlying.isOk) underlying.yes else flow(underlying.no)
-  }
-
   private sealed class FlowingImpl[A] extends Flew[A] with FlowChain[A] {
     private[this] var myValue: A = _
     def value = myValue
