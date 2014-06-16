@@ -124,10 +124,14 @@ package flow {
   }
 }
 
+/** A nice tutorial should go here.  For now, just browse everything. */
 package object flow extends LowPriorityOkValidation {
   /** Allows `grab` as an alternative to `get` on `Option`: `grab` will throw an available `Oops` if the `Option` is empty. */
   implicit class OptionIsFlowable[A](val underlying: Option[A]) extends AnyVal {
+    /** Retrieve the value from this option or throw an `Oops` otherwise. */
     def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops()
+    /** Convert to [[Ok]] with `Unit` for the disfavored branch. */
+    def toOk: Ok[Unit, A] = underlying match { case Some(a) => Yes(a); case _ => Ok.UnitNo }
   }
 
   /** Allows alternatives to `get` on `Try`. */
@@ -141,6 +145,20 @@ package object flow extends LowPriorityOkValidation {
     def orFlow(implicit flow: FlowWith[Throwable]): A = underlying match {
       case scala.util.Success(a) => a
       case scala.util.Failure(t) => flow(t)
+    }
+    /** Convert to [[Ok]] with `Success` favored. */
+    def toOk: Ok[Throwable, A] = underlying match {
+      case scala.util.Success(a) => Yes(a)
+      case scala.util.Failure(t) => No(t)
+    }
+  }
+  
+  /** Supplies a method on `Either` to convert it to an [[Ok]]. */
+  implicit class EitherCanBeOk[L,R](val underlying: scala.util.Either[L,R]) extends AnyVal {
+    /** Convert to [[Ok]] with `Right` favored. */
+    def toOk: Ok[L, R] = underlying match {
+      case scala.util.Right(r) => Yes(r)
+      case scala.util.Left(l) => No(l)
     }
   }
   
@@ -229,6 +247,7 @@ package object flow extends LowPriorityOkValidation {
     * Example: {{{ nFor(3)(println) // Prints 0 1 2 on separate lines }}}
     */
   def nFor(count: Int)(f: Int => Unit): Unit = macro ControlFlowMacroImpl.nFor
+  
   
   private val myOops: Flew[Long] with Oops = new Flew[Long] with Oops {
     def apply(): Nothing = throw this
