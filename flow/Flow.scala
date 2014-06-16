@@ -238,6 +238,15 @@ package object flow extends LowPriorityOkValidation {
     def value(a: Long) = this
     def valueFn(f: Long => Long) = this
   }
+  
+  /** Use this when you want an [[Oops]] that will throw an IllegalArgumentException instead of a stackless exception */
+  val oopsThrowingRealException = new Oops {
+    def apply(): Nothing = throw new IllegalArgumentException
+    def apply(a: Long): Nothing = throw new IllegalArgumentException
+    def value = -1L
+    def value(a: Long) = this
+    def valueFn(f: Long => Long) = this
+  }
 
 
   /** Call when something has gone wrong, in a context where an implicit `Oops` is available for error handling.

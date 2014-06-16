@@ -1073,10 +1073,10 @@ trait Grok {
   def hasPrev: Boolean
   def skip(implicit oops: Oops): this.type
   def skip(n: Int)(implicit oops: Oops): this.type = { var i = n; while (i>0) { skip; i -= 1}; this }
-  def drop(n: Int)(implicit oops: Oops): this.type = { var i = n; while (i>0 && hasNext) { skip; i -= 1}; this }
+  def drop(n: Int): this.type = { var i = n; while (i>0 && hasNext) { skip(oopsThrowingRealException); i -= 1}; this }
   def back(implicit oops: Oops): this.type
   def back(n: Int)(implicit oops: Oops): this.type = { var i = n; while (i>0) { back; i -= 1}; this }
-  def undrop(n: Int)(implicit oops: Oops): this.type = { var i = n; while (i>0 && hasPrev) { back; i -= 1}; this }
+  def undrop(n: Int): this.type = { var i = n; while (i>0 && hasPrev) { back(oopsThrowingRealException); i -= 1}; this }
   
   def Z(implicit oops: Oops): Boolean
   def B(implicit oops: Oops): Byte
@@ -1123,6 +1123,10 @@ trait GrokArrayControl extends GrokControl {
   def bytes: Array[Byte]
   def reset: this.type
   def resetWith(a: Array[Byte], start: Int, limit: Int): this.type
+  def bigEndian(big: Boolean): this.type
+  
+  def hasNext(n: Int): Boolean
+  def hasPrev(n: Int): Boolean
 }
 
 trait GrokArrayTextControl extends GrokArrayControl {
@@ -1135,14 +1139,14 @@ object Grok {
   def apply(s: String, start: Int, limit: Int, delimiter: Delimiter): Grok = raw(s, start, limit, delimiter)
   def raw(s: String, start: Int, limit: Int, delimiter: Delimiter): GrokText with GrokStringControl with Grok = new GrokText with GrokStringControl with Grok {
     private[this] var myString = s
-    private[this] var myZero = start
-    private[this] var myLimit = math.min(s.length, math.max(start, limit))
+    private[this] var myZero = math.min(s.length, math.max(start, 0))
+    private[this] var myLimit = math.min(s.length, math.max(myZero, limit))
     private[this] var myDelim = Delimiter.whiteDelimiter
     
     def string = myString
     def reset = indexTo(myZero).resume
     def resetWith(s: String, start: Int, limit: Int) = {
-      myString = s; myZero = math.max(0, start); myLimit = math.min(s.length,limit)
+      myString = s; myZero = math.min(s.length, math.max(0, start)); myLimit = math.min(s.length, math.max(myZero, limit))
       reset
     }
     def setDelimiter(delim: Delimiter) = { myDelim = delim; this }
@@ -1238,6 +1242,89 @@ object Grok {
       val ans = rawParseString(myString)(myLimit)
       if (error) OOPS
       ans
+    }
+  }
+  
+  def apply(bs: Array[Byte]) = raw(bs, 0, bs.length)
+  def apply(bs: Array[Byte], start: Int, limit: Int): Grok = raw(bs, start, limit)
+  def raw(bs: Array[Byte], start: Int, limit: Int): GrokArrayControl with Grok = new GrokArrayControl with Grok {
+    private[this] var myBytes = bs
+    private[this] var myZero = math.min(bs.length, math.max(0, start))
+    private[this] var myLimit = math.max(myZero, math.min(bs.length, limit))
+    private[this] var j = start
+    private[this] var myEndian = java.nio.ByteOrder.LITTLE_ENDIAN == java.nio.ByteOrder.nativeOrder
+    private[this] lazy val myGrok = new GrokText
+    
+    def bytes = myBytes
+    def reset: this.type = { j = myZero; this }
+    def resetWith(a: Array[Byte], start: Int, limit: Int) = {
+      myBytes = a
+      myZero = math.min(a.length, math.max(0, start))
+      myLimit = math.max(myZero, math.min(a.length, limit))
+      this
+    }
+    def bigEndian(big: Boolean): this.type = { myEndian = !big; this }
+    def error = myGrok.error
+    def index = j
+    def indexTo(i: Int) = { j = math.max(myZero, math.min(i, myLimit)); this }
+    def resume = this
+    
+    def hasNext(n: Int) = (j+n) <= myLimit
+    def hasPrev(n: Int) = (j-n) >= myZero
+    def hasNext = hasNext(1)
+    def hasPrev = hasPrev(1)
+    override def skip(n: Int)(implicit oops: Oops) = if (!hasNext(n)) OOPS else { j += n; this }
+    def skip(implicit oops: Oops) = skip(1)(oops)
+    override def drop(n: Int) = { j = math.max(myZero, j-n); this }
+    override def back(n: Int)(implicit oops: Oops) = if (!hasPrev(n)) OOPS else { j -= n; this }
+    def back(implicit oops: Oops) = back(1)(oops)
+    override def undrop(n: Int) = { j = math.min(myLimit, j+n); this }
+    
+    def Z(implicit oops: Oops) = if (j >= myLimit) OOPS else { val ans = myBytes(j) != 0; j += 1; ans }
+    def B(implicit oops: Oops) = if (j >= myLimit) OOPS else { val ans = myBytes(j); j += 1; ans }
+    def S(implicit oops: Oops) = if (j+1 >= myLimit) OOPS else {
+      val ans = if (myEndian) (myBytes(j)&0xFF) | ((myBytes(j+1)&0xFF)<<8) else ((myBytes(j)&0xFF)<<8) | (myBytes(j+1)&0xFF)
+      j += 2
+      ans.toShort
+    }
+    @inline def C(implicit oops: Oops) = S(oops).toChar
+    def I(implicit oops: Oops) = if (j+3 >= myLimit) OOPS else {
+      val ans =
+        if (myEndian) (myBytes(j)&0xFF) | ((myBytes(j+1)&0xFF)<<8) | ((myBytes(j+2)&0xFF)<<16) | ((myBytes(j+3)&0xFF)<<24)
+        else ((myBytes(j)&0xFF)<<24) | ((myBytes(j+1)&0xFF)<<16) | ((myBytes(j+2)&0xFF)<<8) | ((myBytes(j+3)&0xFF))
+      j += 4
+      ans
+    }
+    def L(implicit oops: Oops) = if (j+7 >= myLimit) OOPS else {
+      val ans = 
+        if (myEndian) (myBytes(j)&0xFFL) | ((myBytes(j+1)&0xFFL)<<8)  | ((myBytes(j+2)&0xFFL)<<16) | ((myBytes(j+3)&0xFFL)<<24) | 
+              ((myBytes(j+4)&0xFFL)<<32) | ((myBytes(j+5)&0xFFL)<<40) | ((myBytes(j+6)&0xFFL)<<48) | ((myBytes(j+7)&0xFFL)<<56)
+        else ((myBytes(j)&0xFFL)<<56) | ((myBytes(j+1)&0xFFL)<<48) | ((myBytes(j+2)&0xFFL)<<40) | ((myBytes(j+3)&0xFFL)<<32) | 
+           ((myBytes(j+4)&0xFFL)<<24) | ((myBytes(j+5)&0xFFL)<<16) | ((myBytes(j+6)&0xFFL)<<8)  | ((myBytes(j+7)&0xFFL))
+      j += 8
+      ans
+    }
+    @inline def F(implicit oops: Oops) = java.lang.Float.intBitsToFloat(I(oops))
+    @inline def D(implicit oops: Oops) = java.lang.Double.longBitsToDouble(L(oops))
+    def tok(implicit oops: Oops) = {
+      var k = j
+      while (k < myLimit && myBytes(k) != 0) k += 1
+      val ans = new String(myBytes, j, k)
+      j = math.min(myLimit, k+1)
+      ans
+    }
+    def quoted(implicit oops: Oops) = {
+      val ans = myGrok.resume.indexTo(j).rawParseStringB(myBytes)(myLimit)
+      if (myGrok.error) OOPS
+      j = myGrok.index
+      ans
+    }
+    override def getBs(a: Array[Byte], offset: Int, count: Int)(implicit oops: Oops): this.type = {
+      val n = math.min(myLimit - j, count)
+      java.lang.System.arraycopy(myBytes, j, a, offset, n)
+      j += n
+      if (n < count) OOPS
+      this
     }
   }
 }
