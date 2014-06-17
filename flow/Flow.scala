@@ -148,7 +148,7 @@ package object flow extends LowPriorityOkValidation {
   }
   
   
-  /** Provides standard methods that should exist on Object. */
+  /** Provides standard control-flow methods that should exist on Object. */
   implicit class EverythingCanTapAndSuch[A](val underlying: A) extends AnyVal {
     /** Transforms self according to the function `f`. */
     def fn[Z](f: A => Z) = f(underlying)
@@ -239,7 +239,10 @@ package object flow extends LowPriorityOkValidation {
     def valueFn(f: Long => Long) = this
   }
   
-  /** Use this when you want an [[Oops]] that will throw an IllegalArgumentException instead of a stackless exception */
+  /** Use this when you want an [[Oops]] that will throw an
+    * IllegalArgumentException instead of a stackless exception; it will not 
+    * be caught by the methods that catch stackless exceptions.
+    */
   val oopsThrowingRealException = new Oops {
     def apply(): Nothing = throw new IllegalArgumentException
     def apply(a: Long): Nothing = throw new IllegalArgumentException
