@@ -12,7 +12,7 @@ KSE_JAR_PATH = kse/tpck kse/flow kse/eio kse/coll
 Kse.jar : \
   kse/tpck/package.class \
   kse/flow/Ok.class \
-  kse/flow/Flow.class \
+  kse/flow/Hop.class \
   kse/coll/packed/package.class \
   kse/coll/package.class \
   kse/eio/Base64.class \
@@ -34,12 +34,12 @@ kse/flow/ControlFlowMacroImpl.class : \
   flow/ControlFlowMacroImpl.scala
 	${F} flow/ControlFlowMacroImpl.scala
 
-kse/flow/Flow.class : \
+kse/flow/Hop.class : \
   makefile \
   kse/flow/Ok.class \
   kse/flow/ControlFlowMacroImpl.class \
-  flow/Flow.scala
-	${F} flow/Flow.scala
+  flow/Hop.scala
+	${F} flow/Hop.scala
 
 kse/coll/packed/package.class : \
   makefile \
@@ -60,7 +60,7 @@ kse/eio/Base64.class : \
 kse/eio/Grok.class : \
   makefile \
   kse/flow/Ok.class \
-  kse/flow/Flow.class \
+  kse/flow/Hop.class \
   eio/Grok.scala
 	${F} eio/Grok.scala
 
@@ -70,5 +70,5 @@ clean :
 
 docs :
 	mkdir -p api
-	${D} tpck/Typecheck.scala flow/Ok.scala flow/Flow.scala coll/Packed.scala eio/Base64.scala eio/Grok.scala
+	${D} tpck/Typecheck.scala flow/Ok.scala flow/Hop.scala coll/Packed.scala eio/Base64.scala eio/Grok.scala
 	tar czf kse-api.tar.gz api
