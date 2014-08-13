@@ -13,6 +13,7 @@ Kse.jar : \
   kse/tpck/package.class \
   kse/flow/Ok.class \
   kse/flow/Hop.class \
+  kse/flow/package.class \
   kse/coll/packed/package.class \
   kse/coll/package.class \
   kse/eio/Base64.class \
@@ -40,6 +41,14 @@ kse/flow/Hop.class : \
   kse/flow/ControlFlowMacroImpl.class \
   flow/Hop.scala
 	${F} flow/Hop.scala
+
+kse/flow/package.class : \
+  makefile \
+  kse/flow/Ok.class \
+  kse/flow/ControlFlowMacroImpl.class \
+  kse/flow/Hop.class \
+  flow/Flow.scala
+	${F} flow/Flow.scala
 
 kse/coll/packed/package.class : \
   makefile \
@@ -70,5 +79,5 @@ clean :
 
 docs :
 	mkdir -p api
-	${D} tpck/Typecheck.scala flow/Ok.scala flow/Hop.scala coll/Packed.scala eio/Base64.scala eio/Grok.scala
+	${D} tpck/Typecheck.scala flow/Ok.scala flow/Hop.scala flow/Flow.scala coll/Packed.scala eio/Base64.scala eio/Grok.scala
 	tar czf kse-api.tar.gz api
