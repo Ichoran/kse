@@ -338,7 +338,7 @@ trait GrokControl {
   def resume: this.type
 }
 
-class GrokText extends GrokControl {
+abstract class GrokText extends GrokControl {
   import GrokNumber._
   import Delimiter._
   import DelimByte._
@@ -347,9 +347,9 @@ class GrokText extends GrokControl {
   def index = j
   def indexTo(i: Int): this.type = { j = i; this }
   
-  private var parseError = false
-  def error = parseError
-  def resume: this.type = { parseError = false; this }
+  protected var errorLevel = 0
+  def error = errorLevel > 0
+  def resume: this.type = { errorLevel = 0; this }
   
   
   def skipWhite(s: String)(limit: Int = s.length, delim: Delimiter = whiteDelimiter): this.type = {
@@ -381,23 +381,23 @@ class GrokText extends GrokControl {
   
   
   private[this] def myParseLong10(s: String, limit: Int, delim: Delimiter, unsigned: Boolean): Long = {
-    if (j >= limit) { parseError = true; return 0 }
-    val sign = (if (s(j) == '-') { if (unsigned) { parseError = true; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
+    if (j >= limit) { errorLevel = 2; return 0 }
+    val sign = (if (s(j) == '-') { if (unsigned) { errorLevel = 2; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
     var m = 922337203685477579L
-    parseError = false
+    errorLevel = 0
     var v = 0L
     val j0 = j
     while (j < limit) {
       if (delim(s(j))) {
-        if (j == j0) parseError = true
+        if (j == j0) errorLevel = 2
         return if (sign < 0) -v else v
       }
       var c = s(j) - '0'
-      if (c < 0 || c > 9) { parseError = true; return v }
+      if (c < 0 || c > 9) { errorLevel = 1; return v }
       val u = v*10 + c
       if (v >= m || v < 0) {
         if (m == 922337203685477579L) m = parseLongMax(10, sign)
-        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { parseError = true; return v }
+        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { errorLevel = 2; return v }
       }
       v = u
       j += 1
@@ -405,24 +405,24 @@ class GrokText extends GrokControl {
     if (sign < 0) -v else v
   }
   private[this] def myParseLong(s: String, radix: Int, limit: Int, delim: Delimiter, unsigned: Boolean): Long = {
-    if (j >= limit) { parseError = true; return 0 }
-    val sign = (if (s(j) == '-') { if (unsigned) { parseError = true; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
+    if (j >= limit) { errorLevel = 2; return 0 }
+    val sign = (if (s(j) == '-') { if (unsigned) { errorLevel = 2; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
     var m = 256204778801521549L
-    parseError = false
+    errorLevel = 0
     var v = 0L
     val j0 = 0
     while (j < limit) {
       if (delim(s(j))) {
-        if (j == j0) parseError = true
+        if (j == j0) errorLevel = 2
         return if (sign < 0) -v else v
       }
       var c = s(j) - '0'
       if (radix > 10 && c > 9) c = (c-7) & 0xFFDF
-      if (c < 0 || c >= radix) { parseError = true; return v }
+      if (c < 0 || c >= radix) { errorLevel = 1; return v }
       val u = v*radix + c
       if (v >= m || v < 0) {
         if (m == 256204778801521549L) m = parseLongMax(radix, sign)
-        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { parseError = true; return v }
+        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { errorLevel = 2; return v }
       }
       v = u
       j += 1
@@ -430,23 +430,23 @@ class GrokText extends GrokControl {
     if (sign < 0) -v else v
   }
   private[this] def myParseLong10B(s: Array[Byte], limit: Int, delim: DelimByte, unsigned: Boolean): Long = {
-    if (j >= limit) { parseError = true; return 0 }
-    val sign = (if (s(j) == '-') { if (unsigned) { parseError = true; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
+    if (j >= limit) { errorLevel = 2; return 0 }
+    val sign = (if (s(j) == '-') { if (unsigned) { errorLevel = 2; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
     var m = 922337203685477579L
-    parseError = false
+    errorLevel = 0
     var v = 0L
     val j0 = j
     while (j < limit) {
       if (delim(s(j))) {
-        if (j == j0) parseError = true
+        if (j == j0) errorLevel = 2
         return if (sign < 0) -v else v
       }
       var c = s(j) - '0'
-      if (c < 0 || c > 9) { parseError = true; return v }
+      if (c < 0 || c > 9) { errorLevel = 1; return v }
       val u = v*10 + c
       if (v >= m || v < 0) {
         if (m == 922337203685477579L) m = parseLongMax(10, sign)
-        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { parseError = true; return v }
+        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { errorLevel = 2; return v }
       }
       v = u
       j += 1
@@ -454,24 +454,24 @@ class GrokText extends GrokControl {
     if (sign < 0) -v else v
   }
   private[this] def myParseLongB(s: Array[Byte], radix: Int, limit: Int, delim: DelimByte, unsigned: Boolean): Long = {
-    if (j >= limit) { parseError = true; return 0 }
-    val sign = (if (s(j) == '-') { if (unsigned) { parseError = true; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
+    if (j >= limit) { errorLevel = 2; return 0 }
+    val sign = (if (s(j) == '-') { if (unsigned) { errorLevel = 2; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
     var m = 256204778801521549L
-    parseError = false
+    errorLevel = 0
     var v = 0L
     val j0 = 0
     while (j < limit) {
       if (delim(s(j))) {
-        if (j == j0) parseError = true
+        if (j == j0) errorLevel = 2
         return if (sign < 0) -v else v
       }
       var c = s(j) - '0'
       if (radix > 10 && c > 9) c = (c-7) & 0xFFDF
-      if (c < 0 || c >= radix) { parseError = true; return v }
+      if (c < 0 || c >= radix) { errorLevel = 1; return v }
       val u = v*radix + c
       if (v >= m || v < 0) {
         if (m == 256204778801521549L) m = parseLongMax(radix, sign)
-        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { parseError = true; return v }
+        if (v > m || (sign > 0 && u < 0) || (sign < 0 && 0 < -u) || (sign == 0 && u >= 0 && u < v)) { errorLevel = 2; return v }
       }
       v = u
       j += 1
@@ -539,7 +539,7 @@ class GrokText extends GrokControl {
         v = (v0 >> 1) + (v0&1)
         v0 = (v0 >> 1)
       }
-      if ((w&0x7FFF) >= 0x7FFE) parseError = true  // May not be exact
+      if ((w&0x7FFF) >= 0x7FFE) errorLevel = 1  // May not be exact
       val ex = (0x3FFL - tensToTwos(i-1) + 22 + nz)
       val top = (ex << 52) | (if (neg) 0x8000000000000000L else 0)
       if (ex >= 2047) {
@@ -557,7 +557,7 @@ class GrokText extends GrokControl {
   }
   
   private[this] def myParseDouble10(s: String, limit: Int, delim: Delimiter, dot: Char): Double = {
-    if (j >= limit) { parseError = true; return parseErrorNaN }
+    if (j >= limit) { errorLevel = 2; return parseErrorNaN }
     val j0 = j
     
     // Pull out the sign first
@@ -566,22 +566,22 @@ class GrokText extends GrokControl {
       case '+' => j += 1; false
       case _ => false
     }
-    if (j >= limit) { parseError = true; return parseErrorNaN }
+    if (j >= limit) { errorLevel = 2; return parseErrorNaN }
     val j1 = j
     
     // Handle NaN and the infinities
     if ((s(j) & 0xFFDF) == 'N') {
-      if (j+2 >= limit || !((s(j+1) & 0xFFDF) == 'A') || !((s(j+2) & 0xFFDF) == 'N')) { parseError = true; return parseErrorNaN }
+      if (j+2 >= limit || !((s(j+1) & 0xFFDF) == 'A') || !((s(j+2) & 0xFFDF) == 'N')) { errorLevel = 2; return parseErrorNaN }
       j += 2
-      if (j < limit && !delim(s(j))) { parseError = true; return parseErrorNaN }
+      if (j < limit && !delim(s(j))) errorLevel = 1
       return Double.NaN
     }
     if ((s(j) & 0xFFDF) == 'I') {
       j += 1
       var k = 1
       while (j < limit && k < charsInInfinity.length && s(j) == charsInInfinity(k)) { j += 1; k += 1 }
-      if (k != 3 && k != charsInInfinity.length) { parseError = true; return parseErrorNaN }
-      if (j < limit && !delim(s(j))) { parseError = true; return parseErrorNaN }
+      if (k != 3 && k != charsInInfinity.length) { errorLevel = 2; return parseErrorNaN }
+      if (j < limit && !delim(s(j))) errorLevel = 1
       return if (negative) Double.NegativeInfinity else Double.PositiveInfinity
     }
     
@@ -592,22 +592,23 @@ class GrokText extends GrokControl {
     val j2 = j
     
     // Get ready to parse something substantive
-    parseError = false
+    errorLevel = 0
     val notdig = nonDigit10Delimiter
     var ndig = 0
     var digA, digB = -1L
     
     // Handle any digits before the decimal point or exponent
     if (j < limit && !notdig(s(j))) {
-      digA = myParseLong10(s, math.min(limit, j+18), notdig, true)
-      if (parseError) return parseErrorNaN
+      digA = myParseLong10(s, math.min(limit, j+18), delim, true)
+      if (errorLevel > 1) return parseErrorNaN
       ndig = j - j2
       if (ndig == 18 && j < limit && !notdig(s(j))) {
-        digB = myParseLong10(s, math.min(limit, j+18), notdig, true)
-        if (parseError) return parseErrorNaN
+        digB = myParseLong10(s, math.min(limit, j+18), delim, true)
+        if (errorLevel > 1) return parseErrorNaN
         ndig = j - j2
         if (ndig == 27) while (j < limit && !notdig(s(j))) j += 1
       }
+      errorLevel = 0
     }
     
     // Keep track of where the decimal point was
@@ -623,17 +624,17 @@ class GrokText extends GrokControl {
       
       // Special case of no (nonzero) digits before decimal point--is it exactly zero or an error?
       if (ndig == 0 && (j >= limit || notdig(s(j)))) {
-        if (j == j1+1) { parseError = true; return parseErrorNaN }   // No actual numbers
+        if (j == j1+1) { errorLevel = 2; return parseErrorNaN }   // No actual numbers
         if (j < limit && ((s(j)&0xFFDF) == 'E')) {
           // Need to parse and ignore exponent
           j += 1
           if (j < limit && (s(j)=='+' || s(j)=='-')) j += 1
-          if (j >= limit || notdig(s(j))) { parseError = true; return parseErrorNaN }
+          if (j >= limit || notdig(s(j))) { errorLevel = 2; return parseErrorNaN }
           while (j < limit && !notdig(s(j))) j += 1
-          if (j < limit && !delim(s(j))) parseError = true
+          if (j < limit && !delim(s(j))) errorLevel = 1
         }
         else {
-          if (j < limit && !delim(s(j))) parseError = true
+          if (j < limit && !delim(s(j))) errorLevel = 1
         }
         // Might be an error, but return the correct sign anyway
         return (if (negative) -0.0 else 0)
@@ -668,8 +669,8 @@ class GrokText extends GrokControl {
         val jd1 = j
         val nread = if (ndig < 18) 18 - ndig else 27-ndig
         if (nread > 0) {
-          val value = myParseLong10(s, math.min(limit, j+nread), notdig, true)
-          if (parseError) return parseErrorNaN
+          val value = myParseLong10(s, math.min(limit, j+nread), delim, true)
+          if (errorLevel > 1) return parseErrorNaN
           if (ndig == 0) {
             digA = value
             ndig = j - jd1
@@ -684,25 +685,26 @@ class GrokText extends GrokControl {
             val jd2 = j
             val nread2 = 27 - ndig
             val value2 = myParseLong10(s, math.min(limit, jd2+nread2), notdig, true)
-            if (parseError) return parseErrorNaN
+            if (errorLevel > 1) return parseErrorNaN
             if (ndig == 18) digB = value2
             else digB = digB*smallPowersOfTen(nread2-(j-jd2)) + value2
             ndig += (j-jd2)
           }
+          errorLevel = 0
         }
         while (j < limit && !notdig(s(j))) j += 1
       }
       
       // Check to make sure we got at least some digit somewhere
       if (jd0 == j1+1 && j==jd0) {
-        parseError = true
+        errorLevel = 2
         return parseErrorNaN
       }
     }
     else {
       // No dot, so check to make sure we had a digit before the dot
       if (j == j1) {
-        parseError = true
+        errorLevel = 2
         return parseErrorNaN
       }
     }
@@ -715,9 +717,9 @@ class GrokText extends GrokControl {
         case '-' => j += 1; -1
         case _ => 1
       }
-      val expval = myParseLong10(s, math.min(s.length, j+10), notdig, true)
-      if (j < limit && !delim(s(j))) parseError = true
-      if (parseError) return parseErrorNaN
+      val expval = myParseLong10(s, math.min(s.length, j+10), delim, true)
+      if (j < limit && !delim(s(j)) && errorLevel < 1) errorLevel = 1
+      if (errorLevel > 1) return parseErrorNaN
         
       // Handle clearly over-large and under-small cases
       val pt = expval*negexp + point
@@ -731,15 +733,15 @@ class GrokText extends GrokControl {
       
     // Process the results
     val ans = myDoubleConversion(negative, digA, digB.toInt, ndig, point)
-    if (parseError) {
-      parseError = false
+    if (errorLevel > 0) {
+      errorLevel = 0
       try { s.substring(j0,j).toDouble }
-      catch { case _: NumberFormatException => parseError = true; return parseErrorNaN }
+      catch { case _: NumberFormatException => errorLevel = 2; return parseErrorNaN }
     }
     else ans
   }
   private[this] def myParseDouble10B(s: Array[Byte], limit: Int, delim: DelimByte, dot: Byte): Double = {
-    if (j >= limit) { parseError = true; return parseErrorNaN }
+    if (j >= limit) { errorLevel = 2; return parseErrorNaN }
     val j0 = j
     
     // Pull out the sign first
@@ -748,22 +750,22 @@ class GrokText extends GrokControl {
       case '+' => j += 1; false
       case _ => false
     }
-    if (j >= limit) { parseError = true; return parseErrorNaN }
+    if (j >= limit) { errorLevel = 2; return parseErrorNaN }
     val j1 = j
     
     // Handle NaN and the infinities
     if ((s(j) & 0xFFDF) == 'N') {
-      if (j+2 >= limit || !((s(j+1) & 0xFFDF) == 'A') || !((s(j+2) & 0xFFDF) == 'N')) { parseError = true; return parseErrorNaN }
+      if (j+2 >= limit || !((s(j+1) & 0xFFDF) == 'A') || !((s(j+2) & 0xFFDF) == 'N')) { errorLevel = 2; return parseErrorNaN }
       j += 2
-      if (j < limit && !delim(s(j))) { parseError = true; return parseErrorNaN }
+      if (j < limit && !delim(s(j))) errorLevel = 1
       return Double.NaN
     }
     if ((s(j) & 0xFFDF) == 'I') {
       j += 1
       var k = 1
       while (j < limit && k < charsInInfinity.length && s(j) == charsInInfinity(k)) { j += 1; k += 1 }
-      if (k != 3 && k != charsInInfinity.length) { parseError = true; return parseErrorNaN }
-      if (j < limit && !delim(s(j))) { parseError = true; return parseErrorNaN }
+      if (k != 3 && k != charsInInfinity.length) { errorLevel = 2; return parseErrorNaN }
+      if (j < limit && !delim(s(j))) errorLevel = 1
       return if (negative) Double.NegativeInfinity else Double.PositiveInfinity
     }
     
@@ -774,22 +776,23 @@ class GrokText extends GrokControl {
     val j2 = j
     
     // Get ready to parse something substantive
-    parseError = false
+    errorLevel = 0
     val notdig = nonDigit10DelimByte
     var ndig = 0
     var digA, digB = -1L
     
     // Handle any digits before the decimal point or exponent
     if (j < limit && !notdig(s(j))) {
-      digA = myParseLong10B(s, math.min(limit, j+18), notdig, true)
-      if (parseError) return parseErrorNaN
+      digA = myParseLong10B(s, math.min(limit, j+18), delim, true)
+      if (errorLevel > 1) return parseErrorNaN
       ndig = j - j2
       if (ndig == 18 && j < limit && !notdig(s(j))) {
-        digB = myParseLong10B(s, math.min(limit, j+18), notdig, true)
-        if (parseError) return parseErrorNaN
+        digB = myParseLong10B(s, math.min(limit, j+18), delim, true)
+        if (errorLevel > 1) return parseErrorNaN
         ndig = j - j2
         if (ndig == 27) while (j < limit && !notdig(s(j))) j += 1
       }
+      errorLevel = 0
     }
     
     // Keep track of where the decimal point was
@@ -805,17 +808,17 @@ class GrokText extends GrokControl {
       
       // Special case of no (nonzero) digits before decimal point--is it exactly zero or an error?
       if (ndig == 0 && (j >= limit || notdig(s(j)))) {
-        if (j == j1+1) { parseError = true; return parseErrorNaN }   // No actual numbers
+        if (j == j1+1) { errorLevel = 2; return parseErrorNaN }   // No actual numbers
         if (j < limit && ((s(j)&0xFFDF) == 'E')) {
           // Need to parse and ignore exponent
           j += 1
           if (j < limit && (s(j)=='+' || s(j)=='-')) j += 1
-          if (j >= limit || notdig(s(j))) { parseError = true; return parseErrorNaN }
+          if (j >= limit || notdig(s(j))) { errorLevel = 2; return parseErrorNaN }
           while (j < limit && !notdig(s(j))) j += 1
-          if (j < limit && !delim(s(j))) parseError = true
+          if (j < limit && !delim(s(j))) errorLevel = 1
         }
         else {
-          if (j < limit && !delim(s(j))) parseError = true
+          if (j < limit && !delim(s(j))) errorLevel = 1
         }
         // Might be an error, but return the correct sign anyway
         return (if (negative) -0.0 else 0)
@@ -850,8 +853,8 @@ class GrokText extends GrokControl {
         val jd1 = j
         val nread = if (ndig < 18) 18 - ndig else 27-ndig
         if (nread > 0) {
-          val value = myParseLong10B(s, math.min(limit, j+nread), notdig, true)
-          if (parseError) return parseErrorNaN
+          val value = myParseLong10B(s, math.min(limit, j+nread), delim, true)
+          if (errorLevel > 1) return parseErrorNaN
           if (ndig == 0) {
             digA = value
             ndig = j - jd1
@@ -865,26 +868,27 @@ class GrokText extends GrokControl {
           if (ndig < 27 && j < limit && !notdig(s(j))) {
             val jd2 = j
             val nread2 = 27 - ndig
-            val value2 = myParseLong10B(s, math.min(limit, jd2+nread2), notdig, true)
-            if (parseError) return parseErrorNaN
+            val value2 = myParseLong10B(s, math.min(limit, jd2+nread2), delim, true)
+            if (errorLevel > 1) return parseErrorNaN
             if (ndig == 18) digB = value2
             else digB = digB*smallPowersOfTen(nread2-(j-jd2)) + value2
             ndig += (j-jd2)
           }
         }
         while (j < limit && !notdig(s(j))) j += 1
+        errorLevel = 0
       }
       
       // Check to make sure we got at least some digit somewhere
       if (jd0 == j1+1 && j==jd0) {
-        parseError = true
+        errorLevel = 2
         return parseErrorNaN
       }
     }
     else {
       // No dot, so check to make sure we had a digit before the dot
       if (j == j1) {
-        parseError = true
+        errorLevel = 2
         return parseErrorNaN
       }
     }
@@ -897,9 +901,9 @@ class GrokText extends GrokControl {
         case '-' => j += 1; -1
         case _ => 1
       }
-      val expval = myParseLong10B(s, math.min(s.length, j+10), notdig, true)
-      if (j < limit && !delim(s(j))) parseError = true
-      if (parseError) return parseErrorNaN
+      val expval = myParseLong10B(s, math.min(s.length, j+10), delim, true)
+      if (j < limit && !delim(s(j)) && errorLevel < 1) errorLevel = 1
+      if (errorLevel > 1) return parseErrorNaN
         
       // Handle clearly over-large and under-small cases
       val pt = expval*negexp + point
@@ -913,10 +917,10 @@ class GrokText extends GrokControl {
       
     // Process the results
     val ans = myDoubleConversion(negative, digA, digB.toInt, ndig, point)
-    if (parseError) {
-      parseError = false
+    if (errorLevel == 1) {
+      errorLevel = 0
       try { (new String(s, j0, j-j0)).toDouble }
-      catch { case _: NumberFormatException => parseError = true; return parseErrorNaN }
+      catch { case _: NumberFormatException => errorLevel = 2; return parseErrorNaN }
     }
     else ans
   }
@@ -925,14 +929,40 @@ class GrokText extends GrokControl {
   def rawParseDoubleB(s: Array[Byte], dot: Byte = '.'.toByte)(limit: Int = s.length, delim: DelimByte = whiteDelimByte) = myParseDouble10B(s, limit, delim, dot)
   
   
+  def rawParseExact(s: String, token: String)(limit: Int = s.length, delim: Delimiter = whiteDelimiter) {
+    if (j + token.length >= limit) {
+      j = limit
+      errorLevel = 2
+    }
+    else {
+      errorLevel = 0
+      var i = 0
+      while (j < limit && i < token.length && s(j)==token(i)) { j += 1; i += 1 }
+      if (j < limit && !delim(s(j))) errorLevel = 1
+    }
+  }
+  def rawParseExactB(s: Array[Byte], token: String)(limit: Int = s.length, delim: DelimByte = whiteDelimByte) {
+    if (j + token.length >= limit) {
+      j = limit
+      errorLevel = 2
+    }
+    else {
+      errorLevel = 0
+      var i = 0
+      while (j < limit && i < token.length && s(j)==token(i)) { j += 1; i += 1 }
+      if (j < limit && !delim(s(j))) errorLevel = 1
+    }
+  }
+  
+  
   def rawParseToken(s: String)(limit: Int = s.length, delim: Delimiter = whiteDelimiter): String = {
-    parseError = (j >= limit)
+    errorLevel = if (j >= limit) 2 else 0
     val i = j
     while (j < limit && !delim(s(j))) j += 1
     s.substring(i,j)
   }
   def rawParseTokenB(s: Array[Byte])(limit: Int = s.length, delim: DelimByte = whiteDelimByte): Array[Byte] = {
-    parseError = (j >= limit)
+    errorLevel = if (j >= limit) 2 else 0
     val i = j
     while (j < limit && !delim(s(j))) j += 1
     java.util.Arrays.copyOfRange(s, i, j)
@@ -940,66 +970,67 @@ class GrokText extends GrokControl {
   
   
   def rawParseCodePoint(s: String)(limit: Int = s.length): Int = {
-    if (j >= limit) { parseError = true; return 0x80000000 }
+    if (j >= limit) { errorLevel = 2; return 0x80000000 }
     val c = s(j).toInt
-    parseError = false
+    errorLevel = 0
     if (c < 0xD800 || c > 0xDFFF) {
       j += 1
       c
     }
-    else if (c >= 0xDC00 || j+1 >= limit) { parseError = true; return 0x8000000 | c }
+    else if (c >= 0xDC00 || j+1 >= limit) { errorLevel = 2; return 0x8000000 | c }
     else {
       val cc = s(j+1).toInt
-      if (cc < 0xDC00 || cc > 0xDFFF) { parseError = true; return (c<<16) | cc }
+      if (cc < 0xDC00 || cc > 0xDFFF) { errorLevel = 2; return (c<<16) | cc }
       j += 2
       (((c & 0x3FF) << 10) | ((cc & 0x3FF))) + 0x10000
     }
   }
   def rawParseCodePointB(s: Array[Byte], allowLongZero: Boolean = false, allowD800: Boolean = false)(limit: Int = s.length): Int = {
-    if (j >= limit) { parseError = true; return 0x80000000 }
+    if (j >= limit) { errorLevel = 2; return 0x80000000 }
     val c = s(j)
-    parseError = false
+    errorLevel = 0
     if ((c&0x80) == 0) { j += 1; c.toInt }
-    else if ((c&0xC0) == 0x80 || j+1 >= limit) { parseError = true; return 0x80000000 | c.toInt }
+    else if ((c&0xC0) == 0x80 || j+1 >= limit) { errorLevel = 2; return 0x80000000 | c.toInt }
     else if ((c&0xE0) == 0xC0) {
       val cc = s(j+1)
-      if ((cc&0xC0) != 0x80) { parseError = true; return 0x80000000 | (c.toInt << 8) | (cc.toInt) }
+      if ((cc&0xC0) != 0x80) { errorLevel = 2; return 0x80000000 | (c.toInt << 8) | (cc.toInt) }
       val ans = ((c & 0x1F) << 6) | (cc & 0x3F)
-      if (ans <= 0x7F && !(allowLongZero && ans==0)) { parseError = true; return 0x80000000 | (c.toInt << 8) | (cc.toInt) }
+      if (ans <= 0x7F && !(allowLongZero && ans==0)) { errorLevel = 2; return 0x80000000 | (c.toInt << 8) | (cc.toInt) }
       j += 2
       ans
     }
-    else if (j+2 >= limit) { parseError = true; return 0x80000000 | c.toInt }
+    else if (j+2 >= limit) { errorLevel = 2; return 0x80000000 | c.toInt }
     else if ((c&0xF0) == 0xE0) {
       val cc = s(j+1)
       val ccc = s(j+2)
-      if ((cc&0xC0) != 0x80 || (ccc&0xC0) != 0x80) { parseError = true; return 0x80000000 | (c.toInt << 16) | (cc.toInt << 8) | (ccc.toInt) }
+      if ((cc&0xC0) != 0x80 || (ccc&0xC0) != 0x80) { errorLevel = 2; return 0x80000000 | (c.toInt << 16) | (cc.toInt << 8) | (ccc.toInt) }
       val ans = ((c & 0xF) << 12) | ((cc & 0x3F) << 6) | (ccc &0x3F)
-      if (ans <= 0x7FF || (!allowD800 && (ans & 0xF800) == 0xD800)) { parseError = true; return 0x80000000 | (c.toInt << 16) | (cc.toInt << 8) | (ccc.toInt) }
+      if (ans <= 0x7FF || (!allowD800 && (ans & 0xF800) == 0xD800)) { errorLevel = 2; return 0x80000000 | (c.toInt << 16) | (cc.toInt << 8) | (ccc.toInt) }
       j += 3
       ans
     }
-    else if (j+3 >= limit || !((c&0xF8)==0xF0)) { parseError = true; return 0x80000000 | c.toInt }
+    else if (j+3 >= limit || !((c&0xF8)==0xF0)) { errorLevel = 2; return 0x80000000 | c.toInt }
     else {
       val cc = s(j+1)
       val ccc = s(j+2)
       val cccc = s(j+3)
-      if ((cc&0xC0) != 0x80 || (ccc&0xC0) != 0x80 || (cccc&0xC0) != 0x80) { parseError = true; return (c.toInt << 24) | (cc.toInt << 16) | (ccc.toInt << 8) | cccc.toInt }
+      if ((cc&0xC0) != 0x80 || (ccc&0xC0) != 0x80 || (cccc&0xC0) != 0x80) { errorLevel = 2; return (c.toInt << 24) | (cc.toInt << 16) | (ccc.toInt << 8) | cccc.toInt }
       val ans = ((c & 0x7) << 18) | ((cc & 0x3F) << 12) | ((ccc & 0x3F) << 6) | (cccc & 0x3F);
-      if (ans >= 0xFFFF || ans >= 0x110000) { parseError = true; return (c.toInt << 24) | (cc.toInt << 16) | (ccc.toInt << 8) | cccc.toInt }
+      if (ans >= 0xFFFF || ans >= 0x110000) { errorLevel = 2; return (c.toInt << 24) | (cc.toInt << 16) | (ccc.toInt << 8) | cccc.toInt }
       j += 4
       ans
     }
   }
   
   def rawParseCharB(s: Array[Byte], allowLongZero: Boolean = false, allowD800: Boolean = false)(limit: Int = s.length): Char = {
-    if (j >= limit) { parseError = true; return 0xDC00 }
+    if (j >= limit) { errorLevel = 2; return 0xDC00 }
     val c = s(j)
+    errorLevel = 0
     if ((c&0x80) == 0) { j += 1; c.toChar }
     else if ((c&0xC0) == 0xC0) {
       val j0 = j
       val i = rawParseCodePointB(s, allowLongZero, allowD800)(limit)
-      if (parseError) return 0xDC00
+      if (errorLevel > 1) return 0xDC00
       if (i > 0xFFFF) { j = j0+1; (0xD800 | ((i-0x10000) >> 10)).toChar }
       else i.toChar
     }
@@ -1007,24 +1038,24 @@ class GrokText extends GrokControl {
       val j0 = j
       while (j > 0 && ((s(j-1)&0xC0) == 0x80)) j -= 1
       val i = rawParseCodePointB(s, allowLongZero, allowD800)(limit)
-      if (parseError) { j = j0; return 0xDC00 }
-      if (i <= 0xFFFF) { parseError = true; return 0xDC00 }
-      if (j <= j0) { parseError = true; return 0xDC00 }
+      if (errorLevel > 1) { j = j0; return 0xDC00 }
+      if (i <= 0xFFFF) { errorLevel = 2; return 0xDC00 }
+      if (j <= j0) { errorLevel = 2; return 0xDC00 }
       ((i - 0x10000) & 0x3FF).toChar
     }
   } 
   
   
   def rawParseString(s: String, qL: Char = '"', qR: Char = '"', esc: Char = '\\')(limit: Int = s.length): String = {
-    if (j >= limit || s(j) != qL) { parseError = true; return "" }
+    if (j >= limit || s(j) != qL) { errorLevel = 2; return "" }
     j += 1
     val j0 = j
     var c: Char = ' '
     var nesc = 0
     while (j < limit && { c = s(j); c != qR }) if (c == esc) { nesc += 1; j += 2 } else j += 1
-    if (j <= limit) { j = limit; parseError = true; return "" }
-    if (c != qR) { parseError = true; return "" }
-    parseError = false
+    if (j <= limit) { j = limit; errorLevel = 2; return "" }
+    if (c != qR) { errorLevel = 2; return "" }
+    errorLevel = 0
     if (nesc == 0) {
       j += 1
       s.substring(j0, j-1)
@@ -1039,15 +1070,15 @@ class GrokText extends GrokControl {
   }
   
   def rawParseStringB(s: Array[Byte], qL: Byte = '"'.toByte, qR: Byte = '"'.toByte, esc: Byte = '\\'.toByte)(limit: Int = s.length, charset: Option[java.nio.charset.Charset] = None): String = {
-    if (j >= limit || s(j) != qL) { parseError = true; return "" }
+    if (j >= limit || s(j) != qL) { errorLevel = 2; return "" }
     j += 1
     val j0 = j
     var c: Byte = 0
     var nesc = 0
     while (j < limit && { c = s(j); c != qR }) if (c == esc) { nesc += 1; j += 2 } else j += 1
-    if (j <= limit) { j = limit; parseError = true; return "" }
-    if (c != qR) { parseError = true; return "" }
-    parseError = false
+    if (j <= limit) { j = limit; errorLevel = 2; return "" }
+    if (c != qR) { errorLevel = 2; return "" }
+    errorLevel = 0
     if (nesc == 0) {
       j += 1
       charset match {
@@ -1066,6 +1097,11 @@ class GrokText extends GrokControl {
       }
     }
   }
+
+  def atTokenEnd: Boolean
+  def exact(target: String)(implicit oops: Oops): this.type
+  def until(delim: Delimiter)(implicit oops: Oops): String
+  def until(delim: DelimByte)(implicit oops: Oops): String
 }
 
 trait Grok {
@@ -1099,7 +1135,9 @@ trait Grok {
   def tapD[A](f: Double => A)(implicit oops: Oops): this.type = { f(D); this }
   def tapTok[A](f: String => A)(implicit oops: Oops): this.type = { f(tok); this }
   def tapQuoted[A](f: String => A)(implicit oops: Oops): this.type = { f(quoted); this }
-  
+}
+
+trait GrokFullDelim extends Grok {
   def getZs(a: Array[Boolean], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = Z; i += 1 }; this }
   def getBs(a: Array[Byte], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = B; i += 1 }; this }
   def getSs(a: Array[Short], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = S; i += 1 }; this }
@@ -1136,10 +1174,20 @@ trait GrokArrayTextControl extends GrokArrayControl {
 }
 
 object Grok {
-  def apply(s: String): Grok = raw(s, 0, s.length, Delimiter.whiteDelimiter)
-  def apply(s: String, start: Int, limit: Int): Grok = raw(s, start, limit, Delimiter.whiteDelimiter)
-  def apply(s: String, start: Int, limit: Int, delimiter: Delimiter): Grok = raw(s, start, limit, delimiter)
-  def raw(s: String, start: Int, limit: Int, delimiter: Delimiter): GrokText with GrokStringControl with Grok = new GrokText with GrokStringControl with Grok {
+  def apply(s: String): GrokFullDelim = raw(s, 0, s.length, Delimiter.whiteDelimiter)
+  def apply(s: String, delimiter: Delimiter): GrokFullDelim = raw(s, 0, s.length, delimiter)
+  def apply(s: String, start: Int, limit: Int): GrokFullDelim = raw(s, start, limit, Delimiter.whiteDelimiter)
+  def apply(s: String, start: Int, limit: Int, delimiter: Delimiter): GrokFullDelim = raw(s, start, limit, delimiter)
+  def selfDelim(s: String): Grok = rawSelfDelim(s, 0, s.length, Delimiter.whiteDelimiter)
+  def selfDelim(s: String, delimiter: Delimiter): Grok = rawSelfDelim(s, 0, s.length, delimiter)
+  def selfDelim(s: String, start: Int, limit: Int): Grok = rawSelfDelim(s, start, limit, Delimiter.whiteDelimiter)
+  def selfDelim(s: String, start: Int, limit: Int, delimiter: Delimiter): Grok = rawSelfDelim(s, start, limit, delimiter)
+  def raw(s: String, start: Int, limit: Int, delimiter: Delimiter): GrokText with GrokStringControl with GrokFullDelim = 
+    new GrokTextStringControlImpl(s, start, limit, delimiter)
+  def rawSelfDelim(s: String, start: Int, limit: Int, delimiter: Delimiter): GrokText with GrokStringControl with Grok =
+    new GrokTextStringControlImpl(s, start, limit, delimiter) { override def error = errorLevel > 1 }
+  
+  private class GrokTextStringControlImpl(s: String, start: Int, limit: Int, delimiter: Delimiter) extends GrokText with GrokStringControl with GrokFullDelim {
     private[this] var myString = s
     private[this] var myZero = math.min(s.length, math.max(start, 0))
     private[this] var myLimit = math.min(s.length, math.max(myZero, limit))
@@ -1153,6 +1201,7 @@ object Grok {
     }
     def setDelimiter(delim: Delimiter) = { myDelim = delim; this }
     
+    def atTokenEnd = index >= myLimit || myDelim(s(index))
     def hasNext = {
       val i = index
       (i < myLimit) && (!myDelim(s(i)) || {
@@ -1245,12 +1294,40 @@ object Grok {
       if (error) OOPS
       ans
     }
+    def exact(target: String)(implicit oops: Oops): this.type = {
+      skipWhite(myString)(myLimit, myDelim)
+      rawParseExact(myString, target)(myLimit, myDelim)
+      if (error) OOPS
+      this
+    }
+    def until(delim: Delimiter)(implicit oops: Oops): String = {
+      skipWhite(myString)(myLimit, myDelim)
+      val ans = rawParseToken(myString)(myLimit, delim)
+      if (errorLevel > 1) OOPS
+      if (!atTokenEnd) errorLevel = 1
+      if (error) OOPS
+      ans
+    }
+    def until(delim: DelimByte)(implicit oops: Oops): String = {
+      val d = new Delimiter{ def apply(c: Char) = ((c&0xFF00) == 0) && delim(c.toByte) }
+      until(d)(oops)
+    }
   }
   
-  def text(s: Array[Byte]): Grok = rawText(s, 0, s.length, DelimByte.whiteDelimByte)
-  def text(s: Array[Byte], start: Int, limit: Int): Grok = rawText(s, start, limit, DelimByte.whiteDelimByte)
-  def text(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): Grok = rawText(s, start, limit, delimiter)
-  def rawText(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): GrokText with GrokArrayTextControl with Grok = new GrokText with GrokArrayTextControl with Grok {
+  def text(s: Array[Byte]): GrokFullDelim = rawText(s, 0, s.length, DelimByte.whiteDelimByte)
+  def text(s: Array[Byte], delim: DelimByte): GrokFullDelim = rawText(s, 0, s.length, delim)
+  def text(s: Array[Byte], start: Int, limit: Int): GrokFullDelim = rawText(s, start, limit, DelimByte.whiteDelimByte)
+  def text(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): GrokFullDelim = rawText(s, start, limit, delimiter)
+  def textSelfDelim(s: Array[Byte]): Grok = rawTextSelfDelim(s, 0, s.length, DelimByte.whiteDelimByte)
+  def textSelfDelim(s: Array[Byte], delim: DelimByte): Grok = rawTextSelfDelim(s, 0, s.length, delim)
+  def textSelfDelim(s: Array[Byte], start: Int, limit: Int): Grok = rawTextSelfDelim(s, start, limit, DelimByte.whiteDelimByte)
+  def textSelfDelim(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): Grok = rawTextSelfDelim(s, start, limit, delimiter)
+  def rawText(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): GrokText with GrokArrayTextControl with GrokFullDelim = 
+    new GrokTextArrayTextControlImpl(s, start, limit, delimiter)
+  def rawTextSelfDelim(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte): GrokText with GrokArrayTextControl with Grok =
+    new GrokTextArrayTextControlImpl(s, start, limit, delimiter) { override def error = errorLevel > 1 }
+  
+  private class GrokTextArrayTextControlImpl(s: Array[Byte], start: Int, limit: Int, delimiter: DelimByte) extends GrokText with GrokArrayTextControl with GrokFullDelim {
     private[this] var myBytes = s
     private[this] var myZero = math.min(s.length, math.max(start, 0))
     private[this] var myLimit = math.min(s.length, math.max(myZero, limit))
@@ -1264,6 +1341,7 @@ object Grok {
     }
     def setDelimiter(delim: DelimByte) = { myDelim = delim; this }
     
+    def atTokenEnd = index >= myLimit || myDelim(s(index))
     def hasNext = {
       val i = index
       (i < myLimit) && (!myDelim(s(i)) || {
@@ -1373,17 +1451,41 @@ object Grok {
       if (error) OOPS
       ans
     }
+    def exact(target: String)(implicit oops: Oops): this.type = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      rawParseExactB(myBytes, target)(myLimit, myDelim)
+      if (error) OOPS
+      this
+    }
+    def until(delim: DelimByte)(implicit oops: Oops): String = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseTokenB(myBytes)(myLimit, delim)
+      if (errorLevel > 1) OOPS
+      if (!atTokenEnd) errorLevel = 1
+      if (error) OOPS
+      new String(ans)
+    }
+    def until(delim: Delimiter)(implicit oops: Oops): String = {
+      val d = new DelimByte{ def apply(b: Byte) = delim((b&0xFF).toChar) }
+      until(d)(oops)
+    }
   }
   
   def apply(bs: Array[Byte]) = raw(bs, 0, bs.length)
   def apply(bs: Array[Byte], start: Int, limit: Int): Grok = raw(bs, start, limit)
-  def raw(bs: Array[Byte], start: Int, limit: Int): GrokArrayBinaryControl with Grok = new GrokArrayBinaryControl with Grok {
+  def raw(bs: Array[Byte], start: Int, limit: Int): GrokArrayBinaryControl with Grok = new GrokArrayBinaryControl with GrokFullDelim {
     private[this] var myBytes = bs
     private[this] var myZero = math.min(bs.length, math.max(0, start))
     private[this] var myLimit = math.max(myZero, math.min(bs.length, limit))
     private[this] var j = start
     private[this] var myEndian = java.nio.ByteOrder.LITTLE_ENDIAN == java.nio.ByteOrder.nativeOrder
-    private[this] lazy val myGrok = new GrokText
+    private[this] lazy val myGrok = new GrokText {
+      def atTokenEnd = false
+      def exact(target: String)(implicit oops: Oops) = ???
+      def until(delim: kse.eio.DelimByte)(implicit oops: kse.flow.Oops): String = ???
+      def until(delim: kse.eio.Delimiter)(implicit oops: kse.flow.Oops): String = ???
+    }
+
     
     def bytes = myBytes
     def reset: this.type = { j = myZero; this }
