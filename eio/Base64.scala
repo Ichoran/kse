@@ -10,7 +10,7 @@ import java.nio._
 import kse.flow._
 
 package object base64 {
-  private[eio] def lengthAs64(n: Int, pad: Boolean, wrapAt: Int, wrapAdds: Int) = {
+  def spaceRequiredEncoded(n: Int, pad: Boolean, wrapAt: Int, wrapAdds: Int) = {
     val m =
       if (pad) 4*((n+2 - ((n+2)%3))/3)
       else (4*n + 2)/3
@@ -85,26 +85,37 @@ package object base64 {
       else cstor(1+mod3)
     }
   }
+  
+  def encodeToBase64(source: Array[Byte], pad: Boolean, wrapAt: Int, wrapAdds: Int, dest: Array[Byte], at: Int, encoder: Array[Byte]) {
+    encodeToBase64(source, 0, source.length, pad, wrapAt, wrapAdds, dest, at, encoder)
+  }
+  
+  def encodeToBase64(source: Array[Byte], start: Int, end: Int, pad: Boolean, wrapAt: Int, wrapAdds: Int, encoder: Array[Byte]): Array[Byte] = {
+    val z = new Array[Byte](spaceRequiredEncoded(source.length, pad, wrapAt, wrapAdds))
+    encodeToBase64(source, start, end, pad, wrapAt, wrapAdds, z, 0, encoder)
+    z
+  }
 
   def encodeToBase64(source: Array[Byte], pad: Boolean, wrapAt: Int, wrapAdds: Int, encoder: Array[Byte]): Array[Byte] = {
-    val z = new Array[Byte](lengthAs64(source.length, pad, wrapAt, wrapAdds))
+    val z = new Array[Byte](spaceRequiredEncoded(source.length, pad, wrapAt, wrapAdds))
     encodeToBase64(source, 0, source.length, pad, wrapAt, wrapAdds, z, 0, encoder)
     z
   }
 
-  def decodeFromBase64(coded: Array[Byte], start: Int, end: Int, dest: Array[Byte], at: Int, decoder: Array[Byte]) {
+  def decodeFromBase64(coded: Array[Byte], start: Int, end: Int, dest: Array[Byte], at: Int, decoder: Array[Byte]): Int = {
     var i = start
     var j = at
     var bits, n = 0
     while (i < end) {
-      val x = coded(i)
-      if (x < 64) {
+      val x = decoder(coded(i))
+      if (x < 0) return -1
+      else if (x < 64) {
         n += 1
-        bits = (bits << 6) | coded(i)
+        bits = (bits << 6) | x
         if (n > 3) {
-          dest(j) = decoder((bits>>16) & 0xFF)
-          dest(j+1) = decoder((bits>>8) & 0xFF)
-          dest(j+2) = decoder(bits & 0xFF)
+          dest(j) = ((bits>>16) & 0xFF).toByte
+          dest(j+1) = ((bits>>8) & 0xFF).toByte
+          dest(j+2) = (bits & 0xFF).toByte
           bits = 0
           n = 0
           j += 3
@@ -113,20 +124,44 @@ package object base64 {
       i += 1
     }
     if (n == 2) {
-      dest(j) = decoder((bits >> 4) & 0xFF)
+      dest(j) = ((bits >> 4) & 0xFF).toByte
+      j += 1
     }
     else if (n == 3) {
-      dest(j) = decoder((bits >> 10) & 0xFF)
-      dest(j+1) = decoder((bits >> 2) & 0xFF)
+      dest(j) = ((bits >> 10) & 0xFF).toByte
+      dest(j+1) = ((bits >> 2) & 0xFF).toByte
+      j += 2
     }
+    j
   }
+  
+  
+  def decodeFromBase64(coded: Array[Byte], start: Int, end: Int, decoder: Array[Byte])(implicit oops: Oops): Array[Byte] = {
+    val buffer = new Array[Byte](((end - start).toLong*3/4).toInt)
+    val n = decodeFromBase64(coded, start, end, buffer, 0, decoder)
+    if (n < 0) OOPS
+    if (n < buffer.length) java.util.Arrays.copyOf(buffer, n) else buffer
+  }
+  
+  def decodeFromBase64Option(coded: Array[Byte], start: Int, end: Int, decoder: Array[Byte]): Option[Array[Byte]] = {
+    val buffer = new Array[Byte](((end - start).toLong*3/4).toInt)
+    val n = decodeFromBase64(coded, start, end, buffer, 0, decoder)
+    if (n < 0) None
+    else Some(if (n < buffer.length) java.util.Arrays.copyOf(buffer, n) else buffer)
+  }
+  
+  def decodeFromBase64(coded: Array[Byte], decoder: Array[Byte])(implicit oops: Oops): Array[Byte] = decodeFromBase64(coded, 0, coded.length, decoder)(oops)
+  
+  def decodeFromBase64Option(coded: Array[Byte], decoder: Array[Byte]): Option[Array[Byte]] = decodeFromBase64Option(coded, 0, coded.length, decoder)
 }
 
 package base64 {
   object CommonBase64Encodings {
-    val Core = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    val Core = (('A' to 'Z') ++ ('a' to 'z') ++ ('0' to '9')).mkString
     val Mime = Core + "+/=\r\n"
     val Url  = Core + "-_+"
+    val Uucode = (' ' to (' '+63).toChar).mkString + "`"
+    val Binhex = "!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr:\r"
   }
 
   abstract class Base64(val pad: Boolean, val wrapAt: Int, charset: Array[Byte]) {
@@ -136,16 +171,22 @@ package base64 {
       a
     }
     private val decoder = {
-      val a = Array.fill(256)(64)
-      aFor(charset)( (c,i) => encoder(c & 0xFF) = (i min 24).toByte )
+      val a = Array.fill[Byte](256)(-1)
+      aFor(charset)( (c,i) => encoder(c & 0xFF) = (i min 64).toByte )
       a
     }
     val wrapAdds = charset.length - 65;
+    
+    def decode(s: String)(implicit oops: Oops) = decodeFromBase64(s.getBytes, decoder)
   }
   
   object Mime64 extends Base64(true, 72, CommonBase64Encodings.Mime.getBytes) {}
   
   object Url64 extends Base64(false, Int.MaxValue, CommonBase64Encodings.Url.getBytes) {}
+  
+  object UucodeLine extends Base64(false, Int.MaxValue, CommonBase64Encodings.Uucode.getBytes) {}
+  
+  object Binhex extends Base64(true, 64, CommonBase64Encodings.Binhex.getBytes) {}
 }
 
 /*

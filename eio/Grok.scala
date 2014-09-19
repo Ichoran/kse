@@ -1124,6 +1124,7 @@ trait Grok {
   def D(implicit oops: Oops): Double
   def tok(implicit oops: Oops): String
   def quoted(implicit oops: Oops): String
+  def base64(coder: kse.eio.base64.Base64)(implicit oops: Oops): Array[Byte] = coder.decode(tok)
   
   def tapZ[A](f: Boolean => A)(implicit oops: Oops): this.type = { f(Z); this }
   def tapB[A](f: Byte => A)(implicit oops: Oops): this.type = { f(B); this }
