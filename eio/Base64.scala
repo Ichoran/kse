@@ -5,107 +5,167 @@
 package kse.eio
 
 import scala.language.implicitConversions
+
 import java.nio._
+import kse.flow._
 
-object Base64 {
-  
-  def backmap(m: Array[Byte], a0: Byte) = {
-    val a = Array.fill(256)(a0)
-    var i=0
-    while (i<m.length) {
-      a( m(i)&0xFF ) = i.toByte
-      i += 1
-    }
-    a
+package object base64 {
+  private[eio] def lengthAs64(n: Int, pad: Boolean, wrapAt: Int, wrapAdds: Int) = {
+    val m =
+      if (pad) 4*((n+2 - ((n+2)%3))/3)
+      else (4*n + 2)/3
+    m + { if (wrapAt == Int.MaxValue) 0 else wrapAdds * ((m-1 max 0)/wrapAt) }
   }
-  val base64mime = (('A' to 'Z') ++ ('a' to 'z') ++ ('0' to '9') ++ List('+','/','=','\r','\n')).toArray.map(_.toByte)
-  val mime64base = backmap(base64mime,64:Byte)
-  val wrapmime = Some(76,2)
-  val base64url = base64mime.take(62) ++ Array('-','_','+').map(_.toByte)
-  val url64base = backmap(base64url,64:Byte)
-  
-  def lengthAs64(a: Array[Byte], pad: Boolean = false, wrap: Option[(Int,Int)] = None) = {
-    val n = a.length
-    val m = if (pad) 4*((n+2 - ((n+2)%3))/3)
-            else (4*n + 2)/3
-    m + wrap.map(x => x._2 * ((m-1 max 0)/x._1)).getOrElse(0)
-  }
-  def validate(a: Array[Byte], d: Array[Byte]): Boolean = {
+
+  def encodeToBase64(source: Array[Byte], start: Int, end: Int, pad: Boolean, wrapAt: Int, wrapAdds: Int, dest: Array[Byte], at: Int, encoder: Array[Byte]) {
     var i = 0
-    var lastpad = false
-    while (i < a.length) {
-      if (d(a(i)&0xFF) == (64: Byte)) lastpad = true
-      else if (lastpad) return false
-      i += 1
-    }
-    return true
-  }
+    val n = end - start
+    var j = at
+    var bits = 0
+    var c0, c1, c2, c3 = (0: Byte)
 
-  def binaryTo64(a: Array[Byte], pad: Boolean = false, wrap: Option[(Int,Int)] = None) = {
-    val z = new Array[Byte](lengthAs64(a,pad,wrap))
-    var i,j,bits = 0
-    var c0,c1,c2,c3 = 0:Byte
     def cload {
       c0 = ((bits>>18)&0x3F).toByte
       c1 = ((bits>>12)&0x3F).toByte
       c2 = ((bits>>6)&0x3F).toByte
       c3 = (bits&0x3F).toByte
     }
+
+    // Must call with n == 2 or 3 or 4
     def cstor(n: Int) {
-      if (wrap.isDefined) wrap.foreach(w => {
-	val l = w._1 + w._2
-	val padone = if (pad) 1 else 0
-	var shift = 6*(n-1)
-	var m = n
-	while (m > 0) {
-	  if (j%l==w._1) {
-	    var k=0
-	    while (k<w._2) {
-	      z(j) = (64 + padone + k).toByte
-	      j += 1
-	      k += 1
-	    }
-	  }
-	  z(j) = ((bits>>shift)&0x3F).toByte
-	  j += 1
-	  shift -= 6
-	  m -= 1
-	}
-      })
+      if (wrapAt < Int.MaxValue) {
+        val l = wrapAt + wrapAdds
+        val wrapidx = if (pad) 65 else 64
+        var shift = 6*(n - 1)
+        var m = n
+        var jmod = (j-at) % l
+        while (m > 0) {
+          if (jmod == wrapAt) {
+            nFor(wrapAdds){ k => dest(j) = encoder(wrapidx + k); j += 1 }
+            jmod = 0
+          }
+          dest(j) = encoder((bits>>shift) & 0x3F)
+          j += 1
+          jmod += 1
+          shift -= 6
+          m -= 1
+        }
+      }
       else {
-	z(j) = c0
-	z(j+1) = c1
-	if (n<3) { j += 2; return }
-	z(j+2) = c2
-	if (n<4) { j += 3; return }
-	z(j+3) = c3
-	j += 4
+        dest(j) = encoder(c0)
+        dest(j+1) = encoder(c1)
+        if (n<3) { j += 2; return }
+        dest(j+2) = encoder(c2)
+        if (n<4) { j += 3; return }
+        dest(j+3) = encoder(c3)
+        j += 4
       }
     }
-    while (i<a.length) {
-      bits = (bits<<8) | (a(i)&0xFF)
-      i += 1
-      if (i%3==0) {
-	cload
-	cstor(4)
+
+    var mod3 = 0
+    nFor(n){ i =>
+      bits = (bits<<8) | (source(start+i)&0xFF)
+      mod3 += 1
+      if (mod3 > 2) {
+        cload
+        cstor(4)
         bits = 0
+        mod3 = 0
       }
     }
-    val mod3 = i%3
     if (mod3 != 0) {
-      while ((i%3) != 0) { bits = bits<<8; i+=1 }
+      bits = bits << (if (mod3 == 2) 8 else 16)
       cload
       if (pad) {
-	cstor(4)
-	val pad = 3-mod3
-	var k = 1
-	while (k<=pad) { z(j-k) = 64:Byte; k += 1 }
+        cstor(4)
+        val npad = 3-mod3
+        var k = 1
+        while (k <= npad) { dest(j-k) = encoder(64); k += 1 }
       }
       else cstor(1+mod3)
     }
+  }
+
+  def encodeToBase64(source: Array[Byte], pad: Boolean, wrapAt: Int, wrapAdds: Int, encoder: Array[Byte]): Array[Byte] = {
+    val z = new Array[Byte](lengthAs64(source.length, pad, wrapAt, wrapAdds))
+    encodeToBase64(source, 0, source.length, pad, wrapAt, wrapAdds, z, 0, encoder)
     z
   }
+
+  def decodeFromBase64(coded: Array[Byte], start: Int, end: Int, dest: Array[Byte], at: Int, decoder: Array[Byte]) {
+    var i = start
+    var j = at
+    var bits, n = 0
+    while (i < end) {
+      val x = coded(i)
+      if (x < 64) {
+        n += 1
+        bits = (bits << 6) | coded(i)
+        if (n > 3) {
+          dest(j) = decoder((bits>>16) & 0xFF)
+          dest(j+1) = decoder((bits>>8) & 0xFF)
+          dest(j+2) = decoder(bits & 0xFF)
+          bits = 0
+          n = 0
+          j += 3
+        }
+      }
+      i += 1
+    }
+    if (n == 2) {
+      dest(j) = decoder((bits >> 4) & 0xFF)
+    }
+    else if (n == 3) {
+      dest(j) = decoder((bits >> 10) & 0xFF)
+      dest(j+1) = decoder((bits >> 2) & 0xFF)
+    }
+  }
+}
+
+package base64 {
+  object CommonBase64Encodings {
+    val Core = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    val Mime = Core + "+/=\r\n"
+    val Url  = Core + "-_+"
+  }
+
+  abstract class Base64(val pad: Boolean, val wrapAt: Int, charset: Array[Byte]) {
+    private val encoder = {
+      val a = new Array[Byte](256)
+      Array.copy(charset, 0, a, 0, 256 min charset.length)
+      a
+    }
+    private val decoder = {
+      val a = Array.fill(256)(64)
+      aFor(charset)( (c,i) => encoder(c & 0xFF) = (i min 24).toByte )
+      a
+    }
+    val wrapAdds = charset.length - 65;
+  }
   
+  object Mime64 extends Base64(true, 72, CommonBase64Encodings.Mime.getBytes) {}
+  
+  object Url64 extends Base64(false, Int.MaxValue, CommonBase64Encodings.Url.getBytes) {}
+}
+
+/*
+package base64 {
+}
+
+  private[eio] def validate(a: Array[Byte], start: Int, end: Int, decoder: Array[Byte]): Boolean = {
+    var i = start
+    while (i < end) {
+      while (i < end && decoder(a(i) & 0xFF) != 64) i += 1
+      if (i >= end) return true
+      i += 1
+      while (i < end && decoder(a(i) & 0xFF) == 64) i += 1
+    }
+    false  // Exited in the middle of padding--this is not allowed
+  }
+
+
+object Base64 {
+
   def binaryFrom64(a: Array[Byte], b: Array[Byte] = null) = {
     var i,j = 0
     while (i<a.length) {
@@ -118,8 +178,8 @@ object Base64 {
     var c0,c1,c2 = 0:Byte
     while (i<a.length) {
       if (a(i)<64) {
-	n += 1
-	k += 1
+        n += 1
+        k += 1
         bits = (bits << 6) | a(i)
         if ((k&0x3)==0) {
           c0 = ((bits>>16)&0xFF).toByte
@@ -145,6 +205,7 @@ object Base64 {
     }
     z
   }
+  
   
   def encodedBy64(a: Array[Byte], e: Array[Byte] = base64url) = {
     var i = 0
@@ -356,3 +417,4 @@ object Base64 {
   val Mime64 = new Base64Converter(base64mime, mime64base, true, wrapmime)
   val Url64 = new Base64Converter(base64url, url64base, false, None)
 }
+*/
