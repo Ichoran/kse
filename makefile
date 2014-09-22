@@ -16,7 +16,7 @@ Kse.jar : \
   kse/flow/package.class \
   kse/coll/packed/package.class \
   kse/coll/package.class \
-  kse/eio/Base64.class \
+  kse/eio/base64/Base64.class \
   kse/eio/Grok.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
@@ -61,7 +61,7 @@ kse/coll/package.class : \
   coll/Coll.scala
 	${F} coll/Coll.scala
 
-kse/eio/Base64.class : \
+kse/eio/base64/Base64.class : \
   makefile \
   eio/Base64.scala
 	${F} eio/Base64.scala

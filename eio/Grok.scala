@@ -1099,7 +1099,7 @@ abstract class GrokText extends GrokControl {
   }
 
   def atTokenEnd: Boolean
-  def exact(target: String)(implicit oops: Oops): this.type
+  def exact(target: String)(implicit oops: Oops): Unit
   def until(delim: Delimiter)(implicit oops: Oops): String
   def until(delim: DelimByte)(implicit oops: Oops): String
 }
@@ -1107,6 +1107,7 @@ abstract class GrokText extends GrokControl {
 trait Grok {
   def hasNext: Boolean
   def hasPrev: Boolean
+  def atTokenEnd: Boolean
   def skip(implicit oops: Oops): this.type
   def skip(n: Int)(implicit oops: Oops): this.type = { var i = n; while (i>0) { skip; i -= 1}; this }
   def drop(n: Int): this.type = { var i = n; while (i>0 && hasNext) { skip(oopsThrowingRealException); i -= 1}; this }
@@ -1125,6 +1126,10 @@ trait Grok {
   def tok(implicit oops: Oops): String
   def quoted(implicit oops: Oops): String
   def base64(coder: kse.eio.base64.Base64)(implicit oops: Oops): Array[Byte] = coder.decode(tok)
+  def until(delim: Delimiter)(implicit oops: Oops): String
+  def until(delim: DelimByte)(implicit oops: Oops): String
+  def exact(target: String)(implicit oops: Oops): Unit
+  def select(targets: Array[String])(implicit oops: Oops): Int
   
   def tapZ[A](f: Boolean => A)(implicit oops: Oops): this.type = { f(Z); this }
   def tapB[A](f: Byte => A)(implicit oops: Oops): this.type = { f(B); this }
@@ -1136,6 +1141,11 @@ trait Grok {
   def tapD[A](f: Double => A)(implicit oops: Oops): this.type = { f(D); this }
   def tapTok[A](f: String => A)(implicit oops: Oops): this.type = { f(tok); this }
   def tapQuoted[A](f: String => A)(implicit oops: Oops): this.type = { f(quoted); this }
+  def tapBase64[A](coder: kse.eio.base64.Base64)(f: Array[Byte] => A)(implicit oops: Oops): this.type = { f(base64(coder)); this }
+  def tapUntil[A](delim: Delimiter)(f: String => A)(implicit oops: Oops): this.type = { f(until(delim)); this }
+  def tapUntil[A](delim: DelimByte)(f: String => A)(implicit oops: Oops): this.type = { f(until(delim)); this }
+  def tapExact[A](f: => A)(implicit oops: Oops): this.type = { f; this }
+  def tapSelect[A](targets: Array[String])(f: (Int,String) => A)(implicit oops: Oops): this.type = { val i = select(targets); f(i, targets(i)); this }
 }
 
 trait GrokFullDelim extends Grok {
@@ -1149,6 +1159,8 @@ trait GrokFullDelim extends Grok {
   def getDs(a: Array[Double], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = D; i += 1 }; this }
   def getToks(a: Array[String], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = tok; i += 1 }; this }
   def getQuotes(a: Array[String], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = quoted; i += 1 }; this }
+  def getBase64s(coder: kse.eio.base64.Base64)(a: Array[Array[Byte]], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = base64(coder); i += 1 }; this }
+  def getSelects(targets: Array[String])(a: Array[Int], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = select(targets); i += 1 }; this }
 }
 
 trait GrokStringControl extends GrokControl {
@@ -1171,7 +1183,10 @@ trait GrokArrayBinaryControl extends GrokArrayControl {
 }
 
 trait GrokArrayTextControl extends GrokArrayControl {
-  def setDelimiter(delim: DelimByte): this.type
+  def setDelimiter(delim: DelimByte): this.type  
+  def atTokenEnd: Boolean
+  def until(delim: DelimByte)(implicit oops: Oops): String
+  def exact(target: String)(implicit oops: Oops): Unit
 }
 
 object Grok {
@@ -1295,11 +1310,23 @@ object Grok {
       if (error) OOPS
       ans
     }
-    def exact(target: String)(implicit oops: Oops): this.type = {
+    def exact(target: String)(implicit oops: Oops) {
       skipWhite(myString)(myLimit, myDelim)
       rawParseExact(myString, target)(myLimit, myDelim)
       if (error) OOPS
-      this
+    }
+    def select(targets: Array[String])(implicit oops: Oops): Int = {
+      if (targets.length < 1) OOPS
+      skipWhite(myString)(myLimit, myDelim)
+      val j0 = index
+      var i = -1
+      do {
+        i += 1
+        indexTo(j0)
+        rawParseExact(myString, targets(i))(myLimit, myDelim)
+      } while (error);
+      if (error) OOPS
+      i - 1
     }
     def until(delim: Delimiter)(implicit oops: Oops): String = {
       skipWhite(myString)(myLimit, myDelim)
@@ -1452,11 +1479,23 @@ object Grok {
       if (error) OOPS
       ans
     }
-    def exact(target: String)(implicit oops: Oops): this.type = {
+    def exact(target: String)(implicit oops: Oops) {
       skipWhiteB(myBytes)(myLimit, myDelim)
       rawParseExactB(myBytes, target)(myLimit, myDelim)
       if (error) OOPS
-      this
+    }
+    def select(targets: Array[String])(implicit oops: Oops): Int = {
+      if (targets.length < 1) OOPS
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val j0 = index
+      var i = -1
+      do {
+        i += 1
+        indexTo(j0)
+        rawParseExactB(myBytes, targets(i))(myLimit, myDelim)
+      } while (error);
+      if (error) OOPS
+      i - 1
     }
     def until(delim: DelimByte)(implicit oops: Oops): String = {
       skipWhiteB(myBytes)(myLimit, myDelim)
@@ -1482,7 +1521,7 @@ object Grok {
     private[this] var myEndian = java.nio.ByteOrder.LITTLE_ENDIAN == java.nio.ByteOrder.nativeOrder
     private[this] lazy val myGrok = new GrokText {
       def atTokenEnd = false
-      def exact(target: String)(implicit oops: Oops) = ???
+      def exact(target: String)(implicit oops: Oops) { ??? }
       def until(delim: kse.eio.DelimByte)(implicit oops: kse.flow.Oops): String = ???
       def until(delim: kse.eio.Delimiter)(implicit oops: kse.flow.Oops): String = ???
     }
@@ -1502,6 +1541,7 @@ object Grok {
     def indexTo(i: Int) = { j = math.max(myZero, math.min(i, myLimit)); this }
     def resume = this
     
+    def atTokenEnd =  j > myZero
     def hasNext(n: Int) = (j+n) <= myLimit
     def hasPrev(n: Int) = (j-n) >= myZero
     def hasNext = hasNext(1)
@@ -1559,6 +1599,10 @@ object Grok {
       if (n < count) OOPS
       this
     }
+    def exact(target: String)(implicit oops: Oops) { ??? }
+    def until(delim: kse.eio.DelimByte)(implicit oops: kse.flow.Oops): String = ???
+    def until(delim: kse.eio.Delimiter)(implicit oops: kse.flow.Oops): String = ???
+    def select(targets: Array[String])(implicit oops: kse.flow.Oops): Int = ???
   }
 }
 

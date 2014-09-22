@@ -186,7 +186,7 @@ package base64 {
   
   object UucodeLine extends Base64(false, Int.MaxValue, CommonBase64Encodings.Uucode.getBytes) {}
   
-  object Binhex extends Base64(true, 64, CommonBase64Encodings.Binhex.getBytes) {}
+  object BinhexCore extends Base64(true, 64, CommonBase64Encodings.Binhex.getBytes) {}
 }
 
 /*
