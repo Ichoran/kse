@@ -37,7 +37,7 @@ sealed trait Ok[+N, +Y] {
   def fold[A](f: N => A)(g: Y => A): A
   
   /** Returns whichever value is stored by finding a common supertype. */
-  def merge[A](implicit evn: N <:< A, evy: Y <:< A): A
+  def merge[A, N1 >: N <: A, Y1 >: Y <: A]: A = if (isOk) yes.asInstanceOf[A] else no.asInstanceOf[A]
   
   /** Retrieves a stored `Y` value or produces one from a `N` using `f`. */
   def yesOr[Z >: Y](f: N => Z): Z
@@ -74,12 +74,12 @@ sealed trait Ok[+N, +Y] {
   /** With nested `Ok`s of the form `Ok[A,Ok[B,Z]]`, un-nest the possible 
     * disfavored values into the common supertype `M` of `A` and `B`.
     */
-  def flatten[M >: N, Z](implicit ev: Y <:< Ok[M,Z]): Ok[M, Z]
+  //def flatten[M, Z, L, N1 >: N <: L, M1 >: M <: L](implicit ev: Y <:< Ok[M,Z]): Ok[L, Z] = if (!isOk) this.asInstanceOf[Ok[L,Z]] else yes.asInstanceOf[Ok[L,Z]]
   
   /** With nested `Ok`s of the form `Ok[Ok[N,A],B]`, un-nest the possible 
     * favored values into the common supertype `Z` of `A` and `B`.
     */
-  def flattenNo[M, Z >: Y](implicit ev: N <:< Ok[M,Z]): Ok[M, Z]
+  //def flattenNo[M, Z >: Y](implicit ev: N <:< Ok[M,Z]): Ok[M, Z]
   
   
   /** Apply an operation only to a favored value. */
@@ -122,9 +122,12 @@ sealed trait Ok[+N, +Y] {
     case _ => None
   }
   
-  /** Converts to a `scala.util.Try` by wrapping a disfavored value in a [[NotOkException]]. */
+  /** Converts to a `scala.util.Try` by wrapping a disfavored value in a [[NotOkException]]
+    * or just by unwrapping a `Throwable`, as appropriate.
+    */
   def toTry: scala.util.Try[Y] = this match {
     case Yes(y) => scala.util.Success(y)
+    case No(t: Throwable) => scala.util.Failure(t)
     case No(n) => scala.util.Failure(new NotOkException(no))
   }
   
@@ -143,7 +146,7 @@ final case class Yes[+Y](yes: Y) extends Ok[Nothing, Y] {
   def valid[M](implicit validator: Ok.ValidateOkay[M]): this.type = this
 
   def fold[A](f: Nothing => A)(g: Y => A) = g(yes)
-  def merge[A](implicit evn: Nothing <:< A, evy: Y <:< A): A = evy(yes)
+  //def merge[A](implicit evn: Nothing <:< A, evy: Y <:< A): A = evy(yes)
   
   def yesOr[Z >: Y](f: Nothing => Z) = yes
   def noOr[M](f: Y => M) = f(yes)
@@ -156,8 +159,8 @@ final case class Yes[+Y](yes: Y) extends Ok[Nothing, Y] {
   
   def filter[M](p: Y => Boolean)(implicit noify: Ok.Defaulter[M,Y]): Ok[M, Y] = if (p(yes)) this else noify(yes)
   
-  def flatten[M, Z](implicit ev: Y <:< Ok[M,Z]): Ok[M, Z] = ev(yes)
-  def flattenNo[M, Z >: Y](implicit ev: Nothing <:< Ok[M,Z]): Ok[M, Z] = this
+  //def flatten[M, Z, N1 >: Nothing <: M](implicit ev: Y <:< Ok[M,Z]): Ok[M, Z] = ev(yes)
+  //def flattenNo[M, Z >: Y](implicit ev: Nothing <:< Ok[M,Z]): Ok[M, Z] = this
   
   def foreach[A](f: Y => A): Unit = { f(yes); () }
   def foreachNo[A](f: Nothing => A): Unit = {}
@@ -183,7 +186,7 @@ final case class No[+N](no: N) extends Ok[N, Nothing] {
   def valid[M >: N](implicit validator: Ok.ValidateOkay[M]): this.type = { validator.incorrect(no); this }
   
   def fold[A](f: N => A)(g: Nothing => A) = f(no)
-  def merge[A](implicit evn: N <:< A, evy: Nothing <:< A): A = evn(no)
+  //def merge[A](implicit evn: N <:< A, evy: Nothing <:< A): A = evn(no)
   
   def yesOr[Z](f: N => Z) = f(no)
   def noOr[M >: N](f: Nothing => M) = no
@@ -196,8 +199,8 @@ final case class No[+N](no: N) extends Ok[N, Nothing] {
   
   def filter[M >: N](p: Nothing => Boolean)(implicit noify: Ok.Defaulter[M,Nothing]) = this
   
-  def flatten[M >: N, Z](implicit ev: Nothing <:< Ok[M,Z]): Ok[M, Z] = this
-  def flattenNo[M, Z](implicit ev: N <:< Ok[M,Z]): Ok[M, Z] = ev(no)
+  //def flatten[M, Z, N1 >: N <: M](implicit ev: Nothing <:< Ok[M,Z]): Ok[M, Z] = this.asInstanceOf[Ok[M, Z]]
+  //def flattenNo[M, Z](implicit ev: N <:< Ok[M,Z]): Ok[M, Z] = ev(no)
   
   def foreach[A](f: Nothing => A): Unit = {}
   def foreachNo[A](f: N => A): Unit = { f(no); () }
@@ -217,7 +220,7 @@ final case class No[+N](no: N) extends Ok[N, Nothing] {
 
 /** Used to convert a disfavored alternative into an `Exception` so that [[Ok]] can be mapped into `scala.util.Try`. */
 class NotOkException[N](val no: N) extends Exception {
-  override def toString = "ichi.core.NotOkException("+no.toString+")"
+  override def toString = "kse.flow.NotOkException("+no.toString+")"
 }
 
 
@@ -244,28 +247,35 @@ object Ok {
   private val DefaultUnitToUnit = new Defaulter[Unit, Any] { def apply(yes: Any) = UnitNo }
   /** Enables returning a `Unit` on the [[No]] branch when filtering. */
   implicit def defaultToUnit[Y]: Defaulter[Unit, Y] = DefaultUnitToUnit
+
+  implicit class FlattenOkYes[N, Y, M, Z](ok: Ok[N, Y])(implicit ev: Y <:< Ok[M,Z]) {
+    def flatten[L, M1 >: M <: L, N1 >: N <: L]: Ok[L,Z] = if (ok.isOk) ok.yes.asInstanceOf[Ok[L,Z]] else ok.asInstanceOf[Ok[L,Z]]
+  }
+  implicit class FlattenOkNo[N, Y, M, Z](ok: Ok[N, Y])(implicit ev: N <:< Ok[M,Z]) {
+    def flattenNo[A, Z1 >: Z <: A, Y1 >: Y <: A]: Ok[M,A] = if (!ok.isOk) ok.no.asInstanceOf[Ok[M,A]] else ok.asInstanceOf[Ok[M,A]]
+  }
   
   
   /** Converts an `Option` to a disfavored value.  `None` maps to a content-free (`Unit`) favored value. */
-  def ifNot[N](o: Option[N]) = o match {
+  def ifNot[N](o: Option[N]): Ok[N, Unit] = o match {
     case Some(n) => No(n)
     case None => UnitYes
   }
   
   /** Converts an `Option` to a favored value.  `None` maps to a content-free (`Unit`) disfavored value. */
-  def from[Y](o: Option[Y]) = o match {
+  def from[Y](o: Option[Y]): Ok[Unit,Y] = o match {
     case Some(y) => Yes(y)
     case None => UnitNo
   }
   
   /** Converts an `Either` to an [[Ok]], favoring the `Right` alternative. */
-  def from[N,Y](e: Either[N,Y]) = e match {
+  def from[N,Y](e: Either[N,Y]): Ok[N,Y] = e match {
     case Left(n) => No(n)
     case Right(y) => Yes(y)
   }
   
   /** Converts a `Try` to an [[Ok]]; the disfavored alternative is a `Throwable`. */
-  def from[Y](t: scala.util.Try[Y]) = t match {
+  def from[Y](t: scala.util.Try[Y]): Ok[Throwable, Y] = t match {
     case scala.util.Success(y) => Yes(y)
     case scala.util.Failure(t) => No(t)
   }
@@ -273,7 +283,7 @@ object Ok {
   /** Given a bunch of [[Ok]]s, return either all the `No` values if there are
     * any (disfavored result); otherwise return all the `Yes` values (favored result).
     */
-  def gather[N,Y](oks: Ok[N,Y]*) = {
+  def gather[N,Y](oks: Ok[N,Y]*): Ok[Seq[N], Seq[Y]] = {
     val nos = oks.collect{ case No(n) => n }
     if (nos.size > 0) No(nos) else Yes(oks.map(_.yes))
   }
