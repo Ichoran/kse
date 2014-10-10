@@ -43,6 +43,19 @@ trait Test_Kse { self =>
       case v if v.length == 0 => oks.length
     }
   }
+
+  def typicalMain(args: Array[String]) {
+    run match {
+      case Yes(n) => println(s"No failures, $n tests passed!")
+      case No(v) => 
+        v foreach { u =>
+          u.foreach(println)
+          println
+        }
+        println(s"${v.length} failures.")
+        sys.exit(1)
+    }
+  }
 }
 
 object Test_Kse {

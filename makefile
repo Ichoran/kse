@@ -7,10 +7,10 @@ X = scala -feature -deprecation -Xfatal-warnings
 D = scaladoc -d api
 
 default: Kse.jar
-KSE_JAR_PATH = kse/tpck kse/flow kse/eio kse/coll
+KSE_JAR_PATH = kse/typecheck kse/flow kse/eio kse/coll
 
 Kse.jar : \
-  kse/tpck/package.class \
+  kse/typecheck/package.class \
   kse/flow/Ok.class \
   kse/flow/Hop.class \
   kse/flow/package.class \
@@ -20,7 +20,7 @@ Kse.jar : \
   kse/eio/Grok.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
-kse/tpck/package.class : \
+kse/typecheck/package.class : \
   makefile \
   tpck/Typecheck.scala
 	${F} tpck/Typecheck.scala
@@ -57,7 +57,7 @@ kse/coll/packed/package.class : \
 
 kse/coll/package.class : \
   makefile \
-  kse/tpck/package.class \
+  kse/typecheck/package.class \
   coll/Coll.scala
 	${F} coll/Coll.scala
 

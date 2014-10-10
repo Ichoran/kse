@@ -216,16 +216,5 @@ object Test_Ok extends Test_Kse {
     Ok.gather(No("labrador"), No("terrier"), No("poodle")) == No(Seq("labrador", "terrier", "poodle")) &&
     Ok.gather(Yes("salmon"), No("poodle"), Yes("perch"), No("chihuahua")) == No(Seq("poodle", "chihuahua"))
 
-  def main(args: Array[String]) {
-    run match {
-      case Yes(n) => println(s"No failures, $n tests passed!")
-      case No(v) => 
-        v foreach { u =>
-          u.foreach(println)
-          println
-        }
-        println(s"${v.length} failures :(")
-        sys.exit(1)
-    }
-  }
+  def main(args: Array[String]) { typicalMain(args) }
 }

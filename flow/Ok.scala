@@ -70,17 +70,7 @@ sealed trait Ok[+N, +Y] {
     * not selected by `p`.  This simply defers to `filter`.
     */
   def withFilter[M >: N](p: Y => Boolean)(implicit noify: Ok.Defaulter[M,Y]): Ok[M, Y] = filter[M](p)(noify)
-  
-  /** With nested `Ok`s of the form `Ok[A,Ok[B,Z]]`, un-nest the possible 
-    * disfavored values into the common supertype `M` of `A` and `B`.
-    */
-  //def flatten[M, Z, L, N1 >: N <: L, M1 >: M <: L](implicit ev: Y <:< Ok[M,Z]): Ok[L, Z] = if (!isOk) this.asInstanceOf[Ok[L,Z]] else yes.asInstanceOf[Ok[L,Z]]
-  
-  /** With nested `Ok`s of the form `Ok[Ok[N,A],B]`, un-nest the possible 
-    * favored values into the common supertype `Z` of `A` and `B`.
-    */
-  //def flattenNo[M, Z >: Y](implicit ev: N <:< Ok[M,Z]): Ok[M, Z]
-  
+
   
   /** Apply an operation only to a favored value. */
   def foreach[A](f: Y => A): Unit
@@ -146,7 +136,6 @@ final case class Yes[+Y](yes: Y) extends Ok[Nothing, Y] {
   def valid[M](implicit validator: Ok.ValidateOkay[M]): this.type = this
 
   def fold[A](f: Nothing => A)(g: Y => A) = g(yes)
-  //def merge[A](implicit evn: Nothing <:< A, evy: Y <:< A): A = evy(yes)
   
   def yesOr[Z >: Y](f: Nothing => Z) = yes
   def noOr[M](f: Y => M) = f(yes)
@@ -158,9 +147,6 @@ final case class Yes[+Y](yes: Y) extends Ok[Nothing, Y] {
   def flatMapNo[M, Z >: Y](f: Nothing => Ok[M, Z]): Ok[M, Z] = this
   
   def filter[M](p: Y => Boolean)(implicit noify: Ok.Defaulter[M,Y]): Ok[M, Y] = if (p(yes)) this else noify(yes)
-  
-  //def flatten[M, Z, N1 >: Nothing <: M](implicit ev: Y <:< Ok[M,Z]): Ok[M, Z] = ev(yes)
-  //def flattenNo[M, Z >: Y](implicit ev: Nothing <:< Ok[M,Z]): Ok[M, Z] = this
   
   def foreach[A](f: Y => A): Unit = { f(yes); () }
   def foreachNo[A](f: Nothing => A): Unit = {}
@@ -245,13 +231,22 @@ object Ok {
   trait Defaulter[N,-Y] { def apply(yes: Y): No[N] }
   
   private val DefaultUnitToUnit = new Defaulter[Unit, Any] { def apply(yes: Any) = UnitNo }
+
   /** Enables returning a `Unit` on the [[No]] branch when filtering. */
   implicit def defaultToUnit[Y]: Defaulter[Unit, Y] = DefaultUnitToUnit
 
+
   implicit class FlattenOkYes[N, Y, M, Z](ok: Ok[N, Y])(implicit ev: Y <:< Ok[M,Z]) {
+    /** With nested `Ok`s of the form `Ok[A,Ok[B,Z]]`, un-nest the possible 
+      * disfavored values into the common supertype `M` of `A` and `B`.
+      */
     def flatten[L, M1 >: M <: L, N1 >: N <: L]: Ok[L,Z] = if (ok.isOk) ok.yes.asInstanceOf[Ok[L,Z]] else ok.asInstanceOf[Ok[L,Z]]
   }
+
   implicit class FlattenOkNo[N, Y, M, Z](ok: Ok[N, Y])(implicit ev: N <:< Ok[M,Z]) {
+    /** With nested `Ok`s of the form `Ok[Ok[N,A],B]`, un-nest the possible 
+      * favored values into the common supertype `Z` of `A` and `B`.
+      */
     def flattenNo[A, Z1 >: Z <: A, Y1 >: Y <: A]: Ok[M,A] = if (!ok.isOk) ok.no.asInstanceOf[Ok[M,A]] else ok.asInstanceOf[Ok[M,A]]
   }
   

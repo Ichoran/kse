@@ -3,7 +3,7 @@
 
 package kse
 
-import kse.tpck._
+import kse.typecheck._
 import kse.flow._
 
 package coll {
@@ -53,7 +53,7 @@ package coll {
     def apply() = if (ok) value else throw new java.util.NoSuchElementException("Vx")
 
     def :=(a: A): this.type = { ok = true; value = a; this }
-    def zap(f: A => A): this.type = { if (ok) { value = f(value) }; this }
+    def xform(f: A => A): this.type = { if (ok) { value = f(value) }; this }
     def tap(f: A => Unit): this.type = { if (ok) { f(value) }; this }
     def reject(p: A => Boolean): this.type = { if (ok && p(value)) ok = false; this }
     def exists(p: A => Boolean) = ok && p(value)
@@ -136,22 +136,22 @@ package coll {
     def apply(o: Option[Double]) = { val m = new MoptDouble; if (o.isDefined) { m := o.get }; m }
     def apply[A <: AnyRef](oa: Option[A]) = { val m = new MoptAny[A]; if (oa.isDefined) { m := oa.get }; m }
     def apply[A <: AnyRef](a: A) = (new MoptAny[A]) := a
-    def empty[@specialized A](implicit iv: ImplicitValue1[Mopt[A], Mopt.type]) = iv.valueA
+    def empty[@specialized A](implicit iv: ImplicitValue[Mopt[A], Mopt.type]) = iv.value
   }
 }
 
 package object coll {
-  implicit val unitMoptInstanceProvider = new ImplicitValue1[Mopt[Unit], Mopt.type] { def valueA = new Mopt.MoptUnit }
-  implicit val booleanMoptInstanceProvider = new ImplicitValue1[Mopt[Boolean], Mopt.type] { def valueA = new Mopt.MoptBoolean }
-  implicit val byteMoptInstanceProvider = new ImplicitValue1[Mopt[Byte], Mopt.type] { def valueA = new Mopt.MoptByte }
-  implicit val shortMoptInstanceProvider = new ImplicitValue1[Mopt[Short], Mopt.type] { def valueA = new Mopt.MoptShort }
-  implicit val charMoptInstanceProvider = new ImplicitValue1[Mopt[Char], Mopt.type] { def valueA = new Mopt.MoptChar }
-  implicit val intMoptInstanceProvider = new ImplicitValue1[Mopt[Int], Mopt.type] { def valueA = new Mopt.MoptInt }
-  implicit val longMoptInstanceProvider = new ImplicitValue1[Mopt[Long], Mopt.type] { def valueA = new Mopt.MoptLong }
-  implicit val floatMoptInstanceProvider = new ImplicitValue1[Mopt[Float], Mopt.type] { def valueA = new Mopt.MoptFloat }
-  implicit val doubleMoptInstanceProvider = new ImplicitValue1[Mopt[Double], Mopt.type] { def valueA = new Mopt.MoptDouble }
-  private val genericMoptInstanceProvider = new ImplicitValue1[Mopt[AnyRef], Mopt.type] { def valueA = new Mopt.MoptAny }
-  implicit def anyrefMoptInstanceProvider[A <: AnyRef] = genericMoptInstanceProvider.asInstanceOf[ImplicitValue1[Mopt[A], Mopt.type]]
+  implicit val unitMoptInstanceProvider = new ImplicitValue[Mopt[Unit], Mopt.type] { def value = new Mopt.MoptUnit }
+  implicit val booleanMoptInstanceProvider = new ImplicitValue[Mopt[Boolean], Mopt.type] { def value = new Mopt.MoptBoolean }
+  implicit val byteMoptInstanceProvider = new ImplicitValue[Mopt[Byte], Mopt.type] { def value = new Mopt.MoptByte }
+  implicit val shortMoptInstanceProvider = new ImplicitValue[Mopt[Short], Mopt.type] { def value = new Mopt.MoptShort }
+  implicit val charMoptInstanceProvider = new ImplicitValue[Mopt[Char], Mopt.type] { def value = new Mopt.MoptChar }
+  implicit val intMoptInstanceProvider = new ImplicitValue[Mopt[Int], Mopt.type] { def value = new Mopt.MoptInt }
+  implicit val longMoptInstanceProvider = new ImplicitValue[Mopt[Long], Mopt.type] { def value = new Mopt.MoptLong }
+  implicit val floatMoptInstanceProvider = new ImplicitValue[Mopt[Float], Mopt.type] { def value = new Mopt.MoptFloat }
+  implicit val doubleMoptInstanceProvider = new ImplicitValue[Mopt[Double], Mopt.type] { def value = new Mopt.MoptDouble }
+  private val genericMoptInstanceProvider = new ImplicitValue[Mopt[AnyRef], Mopt.type] { def value = new Mopt.MoptAny }
+  implicit def anyrefMoptInstanceProvider[A <: AnyRef] = genericMoptInstanceProvider.asInstanceOf[ImplicitValue[Mopt[A], Mopt.type]]
   
   trait Tuple1LowPriorityImplicits[A] extends Any {
     def underlying: A
@@ -166,7 +166,7 @@ package object coll {
     def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2)
     def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2))
     def eachFn[Y,Z](f: A => Y)(g: B => Z) = (f(underlying._1), g(underlying._2))
-    def foldFn[Z](f: (A,B) => Z) = f(underlying._1, underlying._2)
+    def fold[Z](f: (A,B) => Z) = f(underlying._1, underlying._2)
     def also[Z](f: (A,B) => Z) = (underlying._1, underlying._2, f(underlying._1, underlying._2))
   }
   implicit class Tuple2IdenticalUtilityMethods[A](val underlying: (A,A)) extends AnyVal {
@@ -181,8 +181,8 @@ package object coll {
     def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3)
     def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3))
     def eachFn[A1, B1, C1](f: A => A1)(g: B => B1)(h: C => C1) = (f(underlying._1), g(underlying._2), h(underlying._3))
-    def foldFn[Z](f: (A,B,C) => Z) = f(underlying._1, underlying._2, underlying._3)
-    def also[Z](f: (A,B,C) => Z) = (underlying._1, underlying._2, underlying._3, foldFn(f))
+    def fold[Z](f: (A,B,C) => Z) = f(underlying._1, underlying._2, underlying._3)
+    def also[Z](f: (A,B,C) => Z) = (underlying._1, underlying._2, underlying._3, fold(f))
   }
   implicit class Tuple3IdenticalUtilityMethods[A](val underlying: (A,A,A)) extends AnyVal {
     def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3))
@@ -198,8 +198,8 @@ package object coll {
     def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4)
     def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4))
     def eachFn[A1, B1, C1, D1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4))
-    def foldFn[Z](f: (A,B,C,D) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4)
-    def also[Z](f: (A,B,C,D) => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, foldFn(f))
+    def fold[Z](f: (A,B,C,D) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4)
+    def also[Z](f: (A,B,C,D) => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, fold(f))
   }
   implicit class Tuple4IdenticalUtilityMethods[A](val underlying: (A,A,A,A)) extends AnyVal {
     def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4))
@@ -217,7 +217,7 @@ package object coll {
     def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4), underlying._5)
     def _5Fn[Z](f: E => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, f(underlying._5))
     def eachFn[A1, B1, C1, D1, E1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1)(j: E => E1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4), j(underlying._5))
-    def foldFn[Z](f: (A,B,C,D,E) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4, underlying._5)
+    def fold[Z](f: (A,B,C,D,E) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4, underlying._5)
   }
   implicit class Tuple5IdenticalUtilityMethods[A](val underlying: (A,A,A,A,A)) extends AnyVal {
     def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4), f(underlying._5))
