@@ -10,6 +10,7 @@ default: Kse.jar
 KSE_JAR_PATH = kse/typecheck kse/flow kse/eio kse/coll
 
 Kse.jar : \
+  makefile \
   kse/typecheck/package.class \
   kse/flow/Ok.class \
   kse/flow/Hop.class \
@@ -21,29 +22,24 @@ Kse.jar : \
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
 kse/typecheck/package.class : \
-  makefile \
   tpck/Typecheck.scala
 	${F} tpck/Typecheck.scala
 
 kse/flow/Ok.class : \
-  makefile \
   flow/Ok.scala
 	${F} flow/Ok.scala
 
 kse/flow/ControlFlowMacroImpl.class : \
-  makefile \
   flow/ControlFlowMacroImpl.scala
 	${F} flow/ControlFlowMacroImpl.scala
 
 kse/flow/Hop.class : \
-  makefile \
   kse/flow/Ok.class \
   kse/flow/ControlFlowMacroImpl.class \
   flow/Hop.scala
 	${F} flow/Hop.scala
 
 kse/flow/package.class : \
-  makefile \
   kse/flow/Ok.class \
   kse/flow/ControlFlowMacroImpl.class \
   kse/flow/Hop.class \
@@ -51,23 +47,19 @@ kse/flow/package.class : \
 	${F} flow/Flow.scala
 
 kse/coll/packed/package.class : \
-  makefile \
   coll/Packed.scala
 	${F} coll/Packed.scala
 
 kse/coll/package.class : \
-  makefile \
   kse/typecheck/package.class \
   coll/Coll.scala
 	${F} coll/Coll.scala
 
 kse/eio/base64/Base64.class : \
-  makefile \
   eio/Base64.scala
 	${F} eio/Base64.scala
 
 kse/eio/Grok.class : \
-  makefile \
   kse/flow/Ok.class \
   kse/flow/Hop.class \
   eio/Grok.scala
@@ -81,3 +73,28 @@ docs :
 	mkdir -p api
 	${D} tpck/Typecheck.scala flow/Ok.scala flow/Hop.scala flow/Flow.scala coll/Packed.scala eio/Base64.scala eio/Grok.scala
 	tar czf kse-api.tar.gz api
+
+test : \
+  makefile \
+  kse/tests/Test_Typecheck.class \
+  kse/tests/Test_Ok.class
+	scala kse.tests.Test_Typecheck
+	scala kse.tests.Test_Ok
+
+kse/tests/Test_Typecheck.class : \
+  kse/tests/Test_Kse.class \
+  kse/typecheck/package.class \
+  tests/Test_Typecheck.scala
+	${F} tests/Test_Typecheck.scala
+
+kse/tests/Test_Ok.class : \
+  kse/tests/Test_Kse.class \
+  kse/flow/Ok.class \
+  tests/Test_Ok.scala
+	${F} tests/Test_Ok.scala
+
+kse/tests/Test_Kse.class : \
+  kse/flow/Ok.class \
+  kse/flow/package.class \
+  tests/Test_Kse.scala
+	${F} tests/Test_Kse.scala
