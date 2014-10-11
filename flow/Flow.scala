@@ -145,12 +145,12 @@ package object flow extends LowPriorityOkValidation {
   def iFor[A](iterator: Iterator[A])(f: A => Unit): Unit = macro ControlFlowMacroImpl.iFor[A]
    
   
-  private val myOops: Hopped[Long] with Oops = new Hopped[Long] with Oops {
+  private val myOops: Hopped[Unit] with Oops = new Hopped[Unit] with Oops {
     def apply(): Nothing = throw this
-    def apply(a: Long): Nothing = throw this
-    def value = -1L
-    def value(a: Long) = this
-    def valueFn(f: Long => Long) = this
+    def apply(a: Unit): Nothing = throw this
+    def value = ()
+    def valueTo(a: Unit) = this
+    def valueFn(f: Unit => Unit) = { f(value); this }
   }
   
   /** Use this when you want an [[Oops]] that will throw an
@@ -158,11 +158,11 @@ package object flow extends LowPriorityOkValidation {
     * be caught by the methods that catch stackless exceptions.
     */
   val oopsThrowingRealException = new Oops {
-    def apply(): Nothing = throw new IllegalArgumentException
-    def apply(a: Long): Nothing = throw new IllegalArgumentException
-    def value = -1L
-    def value(a: Long) = this
-    def valueFn(f: Long => Long) = this
+    def apply(): Nothing = throw new OopsException
+    def apply(a: Unit): Nothing = throw new OopsException
+    def value = ()
+    def valueTo(a: Unit) = this
+    def valueFn(f: Unit => Unit) = { f(value); this }
   }
 
 
@@ -171,13 +171,13 @@ package object flow extends LowPriorityOkValidation {
     */
   def OOPS(implicit oops: Oops): Nothing = oops()
   
-  /** Execute a side-effect when something has gone wrong, in a context where an implicit `Oops` will be thrown in case of error; allow the `Oops` to continue. */
-  def tapOops[A, U](f: => A)(aside: => U)(implicit oops: Oops): A = try{ f } catch { case t if t eq oops => aside; throw t }
+  /** Execute a side-effect when something has gone wrong in `f`, in a context where an implicit `Oops` will be thrown in case of error; allow the `Oops` to continue. */
+  def tapOops[A, U](f: => A)(sideEffect: => U)(implicit oops: Oops): A = try{ f } catch { case t if t eq oops => sideEffect; throw t }
   
   /** Call when an implicit `Hop` is available and you wish to execute a non-local return of `value`. */
   def HOP[@specialized(Int, Long) A](value: A)(implicit hop: HopWith[A]): Nothing = hop(value)
   
-  /** Execute a side-effect when a non-local `Hop` has been thrown, but allow it to continue. */
+  /** Execute a side-effect when a non-local `Hop` is thrown inside `f`, but allow it to continue. */
   def tapHop[A, B, U](f: => A)(sideEffect: B => U)(implicit hop: HopView[B]): A = try { f } catch { case t if t eq hop => sideEffect(hop.value); throw t }
 
 
@@ -270,21 +270,21 @@ package object flow extends LowPriorityOkValidation {
   private sealed class HopImplRef[A <: AnyRef](var value: A) extends Hopped[A] with Hop[A] {
     def apply() = throw this
     def apply(a: A) = { value = a; throw this }
-    def value(a: A) = { value = a; this }
+    def valueTo(a: A) = { value = a; this }
     def valueFn(f: A => A) = { value = f(value); this }
   }
 
   private sealed class HopImplInt(var value: Int) extends Hopped[Int] with Hop[Int] {
     def apply() = throw this
     def apply(a: Int) = { value = a; throw this }
-    def value(a: Int) = { value = a; this }
+    def valueTo(a: Int) = { value = a; this }
     def valueFn(f: Int => Int) = { value = f(value); this }
   }
 
   private sealed class HopImplLong(var value: Long) extends Hopped[Long] with Hop[Long] {
     def apply() = throw this
     def apply(a: Long) = { value = a; throw this }
-    def value(a: Long) = { value = a; this }
+    def valueTo(a: Long) = { value = a; this }
     def valueFn(f: Long => Long) = { value = f(value); this }
   }
 
@@ -323,7 +323,7 @@ package object flow extends LowPriorityOkValidation {
   /** Constructs an [[Ok]] via a `Hop`: `Hop`s will return a `No` value, while a successful result in a `Yes`.
     * Example:
     * {{{
-    * okay[String]{ implicit hop =>
+    * okay[String]{ hop =>
     *   if (!file.exists) hop(file.getName)
     *   file.length
     * }

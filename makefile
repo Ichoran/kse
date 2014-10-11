@@ -77,9 +77,11 @@ docs :
 test : \
   makefile \
   kse/tests/Test_Typecheck.class \
-  kse/tests/Test_Ok.class
+  kse/tests/Test_Ok.class \
+  kse/tests/Test_Hop.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
+	scala kse.tests.Test_Hop
 
 kse/tests/Test_Typecheck.class : \
   kse/tests/Test_Kse.class \
@@ -90,10 +92,20 @@ kse/tests/Test_Typecheck.class : \
 kse/tests/Test_Ok.class : \
   kse/tests/Test_Kse.class \
   kse/flow/Ok.class \
+  kse/flow/package.class \
   tests/Test_Ok.scala
 	${F} tests/Test_Ok.scala
 
+kse/tests/Test_Hop.class : \
+  kse/tests/Test_Kse.class \
+  kse/flow/Ok.class \
+  kse/flow/Hop.class \
+  kse/flow/package.class \
+  tests/Test_Hop.scala
+	${F} tests/Test_Hop.scala
+
 kse/tests/Test_Kse.class : \
+  kse/typecheck/package.class \
   kse/flow/Ok.class \
   kse/flow/package.class \
   tests/Test_Kse.scala

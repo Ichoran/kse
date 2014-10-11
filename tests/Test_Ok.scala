@@ -208,13 +208,35 @@ object Test_Ok extends Test_Kse {
     val b = Try{ 1 / 0 }
     val t = new TypeIdentity(Ok.from(a))
     t.ident[Ok[Throwable,Int]]
-    Ok.from(a) == Yes(1) && (Ok.from(b) match { case No(x: ArithmeticException) => true; case _ => false })
+    t.t == Yes(1) && (Ok.from(b) match { case No(x: ArithmeticException) => true; case _ => false })
   }
 
   def test_gather =
     Ok.gather(Yes("salmon"), Yes("herring"), Yes("cod")) == Yes(Seq("salmon", "herring", "cod")) &&
     Ok.gather(No("labrador"), No("terrier"), No("poodle")) == No(Seq("labrador", "terrier", "poodle")) &&
     Ok.gather(Yes("salmon"), No("poodle"), Yes("perch"), No("chihuahua")) == No(Seq("poodle", "chihuahua"))
+
+  def test_Option_toOk = Option("fish").toOk == Yes("fish") && Option[String](null).toOk == Ok.UnitNo
+
+  def test_Either_toOk = {
+    import scala.util._
+    val e: Either[Int, String] = Right("fish")
+    val f: Either[Int, String] = Left(1)
+    val ty = new TypeIdentity(e.toOk)
+    val tn = new TypeIdentity(f.toOk)
+    ty.ident[Ok[Int, String]]
+    tn.ident[Ok[Int, String]]
+    ty.t == Yes("fish") && tn.t == No(1)
+  }
+
+  def test_Try_toOk = {
+    import scala.util._
+    val a = Try{ 1 / 1 }
+    val b = Try{ 1 / 0 }
+    val t = new TypeIdentity(a.toOk)
+    t.ident[Ok[Throwable,Int]]
+    t.t == Yes(1) && (b.toOk match { case No(x: ArithmeticException) => true; case _ => false })
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }

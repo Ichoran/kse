@@ -24,7 +24,7 @@ trait Hopper extends HopStackless {
 }
 
 /** On `apply`, throws a stackless exception that carries a value; this should be caught by whichever code created this instance. */
-trait HopWith[@specialized(Int, Long) A] {
+trait HopWith[@specialized(Int, Long) A] extends HopStackless {
   /** Throws a value-carrying exception to leave the local execution context. */
   def apply(a: A): Nothing
 }
@@ -58,8 +58,9 @@ trait HopView[@specialized(Int, Long) A] extends Hopper with HopHasValue[A] {
   *   case Some(i) => i
   *   case None => nobody(s)
   * }
-  * okayWith("???"){ implicit nobody => who("Joe") }  // Returns Ok[String,Int] = Yes(1)
-  * okayWith("???"){ implicit nobody => who("Moe") }  // Returns Ok[String,Int] = No(Moe)
+  * okayWith(""){ implicit nobody => who("Joe") }  // Returns Ok[String,Int] = Yes(1)
+  * okayWith(""){ implicit nobody => who("Moe") }  // Returns Ok[String,Int] = No(Moe)
+  * okayWith("?"){ implicit nobody => nobody() }    // Returns Ok[String,Int] = No(?)
   * }}}
   * 
   * This pattern is particularly useful when performing many operations which
@@ -73,16 +74,12 @@ trait HopView[@specialized(Int, Long) A] extends Hopper with HopHasValue[A] {
   */
 trait Hop[@specialized(Int, Long) A] extends HopView[A] with HopWith[A] with Hopper {
   /** Sets the value to be carried when an exception is thrown. */
-  def value(a: A): this.type
+  def valueTo(a: A): this.type
   /** Alters the value to be carried according to the function `f`. */
   def valueFn(f: A => A): this.type
 }
 
-/** A trait specifically to handle errors that probably have no information, 
-  * but you can provide your own to accept a `Long` if you wish.
-  * The standard control flow functions that give an `Oops` will give one that
-  * ignores any information stored in it, and will return only `-1` when caught.
-  * 
+/** A trait specifically to handle errors that have no information.
   * Example:
   * {{{
   * def getBoth[A,B](a: Option[A], b: Try[B]): Option[(A,B)] =
@@ -93,4 +90,8 @@ trait Hop[@specialized(Int, Long) A] extends HopView[A] with HopWith[A] with Hop
   * where the overall computation is not highly certain to complete, and when there
   * is no useful information to return aside from the fact that something went wrong.
   */
-trait Oops extends Hop[Long] {}
+trait Oops extends Hop[Unit] {}
+
+/** Thrown by special Oops instance that will throw real exceptions instead of itself. */
+class OopsException extends RuntimeException("Uncaught Oops.") {}
+

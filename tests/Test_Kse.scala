@@ -1,11 +1,13 @@
 package kse.tests
 
+import kse.typecheck._
 import kse.flow._
 
 trait Test_Kse { self =>
-  protected def explainThrowable(t: Throwable): Vector[String] = {
+  protected def explainThrowable(t: Throwable)(implicit extraTitle: ImplicitValue[String, Test_Kse]): Vector[String] = {
     val title = t.getClass.getName + Option(t.getMessage).map(": " + _).getOrElse("")
-    title +: t.getStackTrace.map("  " + _).toVector
+    if (extraTitle.value == null || extraTitle.value == "") title +: t.getStackTrace.map("  " + _).toVector
+    else (Array(extraTitle.value, title) ++ t.getStackTrace.map("  " + _)).toVector
   }
 
   private val registration = Test_Kse.register(this)
@@ -30,6 +32,7 @@ trait Test_Kse { self =>
       map(_._2).toArray.
       sortBy(_.getName)
     val oks = ms.map{ m =>
+      implicit val title = new ImplicitValue[String, Test_Kse] { def value = "In " + m.getName }
       safeOk(explainThrowable){ fail =>
         val o: Any = m.invoke(self)
         o match {
