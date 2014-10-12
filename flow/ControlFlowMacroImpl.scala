@@ -27,8 +27,8 @@ object ControlFlowMacroImpl {
     var valdefs = List(q"var $i = $zero")
     
     def inlineFn(tree: c.Tree): c.Tree = tree match {
-      case Function(List(param), body) => println(s"Function $param $body"); rename[c.type](c)(body, param.name, i)
-      case Block(Nil, last) => println("Block"); inlineFn(last)
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, i)
+      case Block(Nil, last) => inlineFn(last)
       case _ =>
         val lf = TermName(c.freshName("lf$"))
         valdefs = q"val $lf = $tree" :: valdefs

@@ -79,11 +79,13 @@ test : \
   kse/tests/Test_Typecheck.class \
   kse/tests/Test_Ok.class \
   kse/tests/Test_Hop.class \
-  kse/tests/Test_Flow.class
+  kse/tests/Test_Flow.class \
+  kse/tests/Test_Flow_Macros.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
 	scala kse.tests.Test_Hop
 	scala kse.tests.Test_Flow
+	scala kse.tests.Test_Flow_Macros
 
 kse/tests/Test_Typecheck.class : \
   kse/tests/Test_Kse.class \
@@ -113,6 +115,15 @@ kse/tests/Test_Flow.class : \
   kse/flow/package.class \
   tests/Test_Flow.scala
 	${F} tests/Test_Flow.scala
+
+kse/tests/Test_Flow_Macros.class : \
+  kse/tests/Test_Kse.class \
+  kse/flow/Ok.class \
+  kse/flow/Hop.class \
+  kse/flow/package.class \
+  kse/flow/ControlFlowMacroImpl.class \
+  tests/Test_Flow_Macros.scala
+	${F} tests/Test_Flow_Macros.scala
 
 kse/tests/Test_Kse.class : \
   kse/typecheck/package.class \
