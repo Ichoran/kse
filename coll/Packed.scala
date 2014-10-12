@@ -4,9 +4,7 @@
 package kse.coll
 
 package packed {
-  trait HasByteRepr extends Any { def B: Byte; def box: ByteAsBox }
-  
-  sealed trait Packed8bits extends Any with HasByteRepr {
+  final class ByteAsBox(val B: Byte) extends AnyVal {
     @inline def Z = bit0
     
     def bit0 = (B & 0x01) != 0
@@ -19,20 +17,6 @@ package packed {
     def bit7 = (B & 0x80) != 0
     def bit(i: Int) = (B & (1<<i)) != 0
     def bits(i: Int, n: Int) = ((B >>> i) & (0xFF >>> (8-n))).toShort
-    def bit0(b: Boolean): Packed8bits
-    def bit1(b: Boolean): Packed8bits
-    def bit2(b: Boolean): Packed8bits
-    def bit3(b: Boolean): Packed8bits
-    def bit4(b: Boolean): Packed8bits
-    def bit5(b: Boolean): Packed8bits
-    def bit6(b: Boolean): Packed8bits
-    def bit7(b: Boolean): Packed8bits
-    def bit(i: Int)(b: Boolean): Packed8bits
-    def bits(i: Int, n: Int)(value: Byte): Packed8bits
-  }
-  
-  final class ByteAsBox(val B: Byte) extends AnyVal with Packed8bits {
-    @inline def box = this
     
     def bit0(b: Boolean) = new ByteAsBox((if (b) (B | 0x01) else (B & 0xFE)).toByte)
     def bit1(b: Boolean) = new ByteAsBox((if (b) (B | 0x02) else (B & 0xFD)).toByte)
@@ -49,10 +33,7 @@ package packed {
     }
   }
   
-  
-  trait HasShortRepr extends Any { def S: Short; def box: ShortAsBox }
-  
-  sealed trait Packed16bits extends Any with HasShortRepr {
+  final class ShortAsBox(val S: Short) extends AnyVal {    
     @inline def Z = bit0
     def bit0  = (S & 0x0001) != 0
     def bit1  = (S & 0x0002) != 0
@@ -72,44 +53,6 @@ package packed {
     def bit15 = (S & 0x8000) != 0
     def bit(i: Int) = (S & (1<<i)) != 0
     def bits(i: Int, n: Int) = ((S >>> i) & (0xFFFF >>> (16-n))).toShort
-    def bit0(b: Boolean): Packed16bits
-    def bit1(b: Boolean): Packed16bits
-    def bit2(b: Boolean): Packed16bits
-    def bit3(b: Boolean): Packed16bits
-    def bit4(b: Boolean): Packed16bits
-    def bit5(b: Boolean): Packed16bits
-    def bit6(b: Boolean): Packed16bits
-    def bit7(b: Boolean): Packed16bits
-    def bit8(b: Boolean): Packed16bits
-    def bit9(b: Boolean): Packed16bits
-    def bit10(b: Boolean): Packed16bits
-    def bit11(b: Boolean): Packed16bits
-    def bit12(b: Boolean): Packed16bits
-    def bit13(b: Boolean): Packed16bits
-    def bit14(b: Boolean): Packed16bits
-    def bit15(b: Boolean): Packed16bits
-    def bit(i: Int)(b: Boolean): Packed16bits
-    def bits(i: Int, n: Int)(value: Short): Packed16bits
-  }
-  
-  sealed trait PackedBB extends Any with HasShortRepr {
-    @inline def B = b0
-    def b0 = (S & 0xFF).toByte
-    def b1 = ((S&0xFFFF)>>8).toByte
-    def b0(b: Byte): PackedBB
-    def b1(b: Byte): PackedBB
-    def swapB: PackedBB
-  }
-  
-  sealed trait PackedC extends Any with HasShortRepr {
-    @inline def C = c0
-    def c0 = S.toChar
-    def c0(c: Char): PackedC
-  }
-  
-  final class ShortAsBox(val S: Short) extends AnyVal with Packed16bits with PackedBB with PackedC {    
-    @inline def box = this
-    
     def bit0(b: Boolean)  = new ShortAsBox((if (b) (S | 0x0001) else (S & 0xFFFE)).toShort)
     def bit1(b: Boolean)  = new ShortAsBox((if (b) (S | 0x0002) else (S & 0xFFFD)).toShort)
     def bit2(b: Boolean)  = new ShortAsBox((if (b) (S | 0x0004) else (S & 0xFFFB)).toShort)
@@ -132,17 +75,19 @@ package packed {
       new ShortAsBox( ((S & (0xFFFF - m)) | ((value << i) & m)).toShort )
     }    
     
+    @inline def B = b0
+    def b0 = (S & 0xFF).toByte
+    def b1 = ((S&0xFFFF)>>8).toByte
     def b0(b: Byte) = new ShortAsBox(((S&0xFF00)|(b&0xFF)).toShort)
     def b1(b: Byte) = new ShortAsBox(((S&0xFF)|((b&0xFF)<<8)).toShort)
     def swapB = new ShortAsBox((((S&0xFF00)>>8) | ((S&0xFF)<<8)).toShort)
     
+    @inline def C = c0
+    def c0 = S.toChar
     def c0(c: Char) = new ShortAsBox(c.toShort)
   }
   
-  
-  trait HasIntRepr extends Any { def I: Int; def box: IntAsBox }
-  
-  sealed trait Packed32bits extends Any with HasIntRepr {
+  final class IntAsBox(val I: Int) extends AnyVal {
     @inline def Z = bit0
     def bit0  = (I & 0x00000001) != 0
     def bit1  = (I & 0x00000002) != 0
@@ -178,84 +123,6 @@ package packed {
     def bit31 = (I & 0x80000000) != 0    
     def bit(i: Int) = (I & (1<<i)) != 0
     def bits(i: Int, n: Int) = (I >>> i) & (-1 >>> (32-n))
-    def bit0(b: Boolean): Packed32bits
-    def bit1(b: Boolean): Packed32bits
-    def bit2(b: Boolean): Packed32bits
-    def bit3(b: Boolean): Packed32bits
-    def bit4(b: Boolean): Packed32bits
-    def bit5(b: Boolean): Packed32bits
-    def bit6(b: Boolean): Packed32bits
-    def bit7(b: Boolean): Packed32bits
-    def bit8(b: Boolean): Packed32bits
-    def bit9(b: Boolean): Packed32bits
-    def bit10(b: Boolean): Packed32bits
-    def bit11(b: Boolean): Packed32bits
-    def bit12(b: Boolean): Packed32bits
-    def bit13(b: Boolean): Packed32bits
-    def bit14(b: Boolean): Packed32bits
-    def bit15(b: Boolean): Packed32bits
-    def bit16(b: Boolean): Packed32bits
-    def bit17(b: Boolean): Packed32bits
-    def bit18(b: Boolean): Packed32bits
-    def bit19(b: Boolean): Packed32bits
-    def bit20(b: Boolean): Packed32bits
-    def bit21(b: Boolean): Packed32bits
-    def bit22(b: Boolean): Packed32bits
-    def bit23(b: Boolean): Packed32bits
-    def bit24(b: Boolean): Packed32bits
-    def bit25(b: Boolean): Packed32bits
-    def bit26(b: Boolean): Packed32bits
-    def bit27(b: Boolean): Packed32bits
-    def bit28(b: Boolean): Packed32bits
-    def bit29(b: Boolean): Packed32bits
-    def bit30(b: Boolean): Packed32bits
-    def bit31(b: Boolean): Packed32bits
-    def bit(i: Int)(b: Boolean): Packed32bits
-    def bits(i: Int, n: Int)(value: Int): Packed32bits
-  }
-  
-  sealed trait PackedBBBB extends Any with HasIntRepr {
-    @inline def B = b0
-    def b0 =  (I & 0xFF)            .toByte
-    def b1 = ((I & 0xFF00)   >>   8).toByte
-    def b2 = ((I & 0xFF0000) >>  16).toByte
-    def b3 =  (I             >>> 24).toByte
-    def b0(b: Byte): PackedBBBB
-    def b1(b: Byte): PackedBBBB
-    def b2(b: Byte): PackedBBBB
-    def b3(b: Byte): PackedBBBB
-    def rotrB: PackedBBBB
-    def rotlB: PackedBBBB
-    def swapBB: PackedBBBB
-    def flipB: PackedBBBB
-  }
-  
-  sealed trait PackedSS extends Any with HasIntRepr {
-    @inline def S = s0
-    def s0 = (I & 0xFFFF).toShort
-    def s1 = (I >>> 16).toShort
-    def s0(s: Short): PackedSS
-    def s1(s: Short): PackedSS
-    def swapS: PackedSS
-  }
-  
-  sealed trait PackedCC extends Any with HasIntRepr {
-    @inline def C = c0
-    def c0 = I.toChar
-    def c1 = (I >>> 16).toChar
-    def c0(c: Char): PackedCC
-    def c1(c: Char): PackedCC
-    def swapC: PackedCC
-  }
-  
-  sealed trait PackedF extends Any with HasIntRepr {
-    @inline def F = f0
-    def f0 = java.lang.Float.intBitsToFloat(I)
-  }
-  
-  final class IntAsBox(val I: Int) extends AnyVal with Packed32bits with PackedBBBB with PackedSS with PackedCC with PackedF {
-    @inline def box = this
-    
     def bit0(b: Boolean)  = new IntAsBox(if (b) (I | 0x00000001) else (I & 0xFFFFFFFE))
     def bit1(b: Boolean)  = new IntAsBox(if (b) (I | 0x00000002) else (I & 0xFFFFFFFD))
     def bit2(b: Boolean)  = new IntAsBox(if (b) (I | 0x00000004) else (I & 0xFFFFFFFB))
@@ -294,6 +161,11 @@ package packed {
       new IntAsBox( (I & (-1 - m)) | ((value << i) & m) )
     }
 
+    @inline def B = b0
+    def b0 =  (I & 0xFF)            .toByte
+    def b1 = ((I & 0xFF00)   >>   8).toByte
+    def b2 = ((I & 0xFF0000) >>  16).toByte
+    def b3 =  (I             >>> 24).toByte
     def b0(b: Byte) = new IntAsBox((I & 0xFFFFFF00) | (b & 0xFF))
     def b1(b: Byte) = new IntAsBox((I & 0xFFFF00FF) | ((b & 0xFF) << 8))
     def b2(b: Byte) = new IntAsBox((I & 0xFF00FFFF) | ((b & 0xFF) << 16))
@@ -303,21 +175,26 @@ package packed {
     def swapBB = new IntAsBox(((I & 0xFF00FF00) >>> 8) | ((I & 0x00FF00FF) << 8))
     def flipB = new IntAsBox(((I&0xFF000000)>>24) | ((I&0xFF0000)>>8) | ((I&0xFF00)<<8) | ((I&0xFF)<<24))
 
+    @inline def S = s0
+    def s0 = (I & 0xFFFF).toShort
+    def s1 = (I >>> 16).toShort
     def s0(s: Short) = new IntAsBox((I&0xFFFF0000) | (s&0xFFFF))
     def s1(s: Short) = new IntAsBox((I&0xFFFF) | ((s&0xFFFF)<<16))
     def swapS = new IntAsBox((I>>>16) | (I<<16))
 
+    @inline def C = c0
+    def c0 = I.toChar
+    def c1 = (I >>> 16).toChar
     def c0(c: Char) = new IntAsBox((I&0xFFFF0000) | c)
     def c1(c: Char) = new IntAsBox((I&0xFFFF) | (c<<16))
     def swapC = new IntAsBox((I>>>16) | (I<<16))
 
+    @inline def F = f0
+    def f0 = java.lang.Float.intBitsToFloat(I)
     def f0(f: Float) = java.lang.Float.floatToRawIntBits(f)
   }
-
-
-  sealed trait HasLongRepr extends Any { def L: Long; def box: LongAsBox }
-
-  sealed trait Packed64bits extends Any with HasLongRepr {
+  
+  final class LongAsBox(val L: Long) extends AnyVal {
     @inline def Z = bit0
     def bit0  = (L & 0x0000000000000001L) != 0
     def bit1  = (L & 0x0000000000000002L) != 0
@@ -385,157 +262,6 @@ package packed {
     def bit63 = (L & 0x8000000000000000L) != 0
     def bit(i: Int) = (L & (1L<<i)) != 0
     def bits(i: Int, n: Int) = (L >>> i) & (-1L >>> (64-n))
-    def bit0(b: Boolean): Packed64bits
-    def bit1(b: Boolean): Packed64bits
-    def bit2(b: Boolean): Packed64bits
-    def bit3(b: Boolean): Packed64bits
-    def bit4(b: Boolean): Packed64bits
-    def bit5(b: Boolean): Packed64bits
-    def bit6(b: Boolean): Packed64bits
-    def bit7(b: Boolean): Packed64bits
-    def bit8(b: Boolean): Packed64bits
-    def bit9(b: Boolean): Packed64bits
-    def bit10(b: Boolean): Packed64bits
-    def bit11(b: Boolean): Packed64bits
-    def bit12(b: Boolean): Packed64bits
-    def bit13(b: Boolean): Packed64bits
-    def bit14(b: Boolean): Packed64bits
-    def bit15(b: Boolean): Packed64bits
-    def bit16(b: Boolean): Packed64bits
-    def bit17(b: Boolean): Packed64bits
-    def bit18(b: Boolean): Packed64bits
-    def bit19(b: Boolean): Packed64bits
-    def bit20(b: Boolean): Packed64bits
-    def bit21(b: Boolean): Packed64bits
-    def bit22(b: Boolean): Packed64bits
-    def bit23(b: Boolean): Packed64bits
-    def bit24(b: Boolean): Packed64bits
-    def bit25(b: Boolean): Packed64bits
-    def bit26(b: Boolean): Packed64bits
-    def bit27(b: Boolean): Packed64bits
-    def bit28(b: Boolean): Packed64bits
-    def bit29(b: Boolean): Packed64bits
-    def bit30(b: Boolean): Packed64bits
-    def bit31(b: Boolean): Packed64bits
-    def bit32(b: Boolean): Packed64bits
-    def bit33(b: Boolean): Packed64bits
-    def bit34(b: Boolean): Packed64bits
-    def bit35(b: Boolean): Packed64bits
-    def bit36(b: Boolean): Packed64bits
-    def bit37(b: Boolean): Packed64bits
-    def bit38(b: Boolean): Packed64bits
-    def bit39(b: Boolean): Packed64bits
-    def bit40(b: Boolean): Packed64bits
-    def bit41(b: Boolean): Packed64bits
-    def bit42(b: Boolean): Packed64bits
-    def bit43(b: Boolean): Packed64bits
-    def bit44(b: Boolean): Packed64bits
-    def bit45(b: Boolean): Packed64bits
-    def bit46(b: Boolean): Packed64bits
-    def bit47(b: Boolean): Packed64bits
-    def bit48(b: Boolean): Packed64bits
-    def bit49(b: Boolean): Packed64bits
-    def bit50(b: Boolean): Packed64bits
-    def bit51(b: Boolean): Packed64bits
-    def bit52(b: Boolean): Packed64bits
-    def bit53(b: Boolean): Packed64bits
-    def bit54(b: Boolean): Packed64bits
-    def bit55(b: Boolean): Packed64bits
-    def bit56(b: Boolean): Packed64bits
-    def bit57(b: Boolean): Packed64bits
-    def bit58(b: Boolean): Packed64bits
-    def bit59(b: Boolean): Packed64bits
-    def bit60(b: Boolean): Packed64bits
-    def bit61(b: Boolean): Packed64bits
-    def bit62(b: Boolean): Packed64bits
-    def bit63(b: Boolean): Packed64bits
-    def bit(i: Int)(b: Boolean): Packed64bits
-    def bits(i: Int, n: Int)(value: Long): Packed64bits
-  }
-
-  sealed trait PackedB8 extends Any with HasLongRepr {
-    @inline def B = b0
-    def b0 =  (L & 0xFF)                     .toByte
-    def b1 = ((L & 0xFF00)            >>   8).toByte
-    def b2 = ((L & 0xFF0000)          >>  16).toByte
-    def b3 = ((L & 0xFF000000L)       >>  24).toByte
-    def b4 = ((L & 0xFF00000000L)     >>  32).toByte
-    def b5 = ((L & 0xFF0000000000L)   >>  40).toByte
-    def b6 = ((L & 0xFF000000000000L) >>  48).toByte
-    def b7 = ( L                      >>> 56).toByte
-    def b0(b: Byte): PackedB8
-    def b1(b: Byte): PackedB8
-    def b2(b: Byte): PackedB8
-    def b3(b: Byte): PackedB8
-    def b4(b: Byte): PackedB8
-    def b5(b: Byte): PackedB8
-    def b6(b: Byte): PackedB8
-    def b7(b: Byte): PackedB8
-    def rotrB: PackedB8
-    def rotlB: PackedB8
-    def swapBB: PackedB8
-    def reverseB: PackedB8
-  }
-
-  sealed trait PackedSSSS extends Any with HasLongRepr {
-    @inline def S = s0
-    def s0 =  (L & 0xFFFF)                 .toShort
-    def s1 = ((L & 0xFFFF0000L)     >>  16).toShort
-    def s2 = ((L & 0xFFFF00000000L) >>  32).toShort
-    def s3 = ( L                    >>> 48).toShort
-    def s0(s: Short): PackedSSSS
-    def s1(s: Short): PackedSSSS
-    def s2(s: Short): PackedSSSS
-    def s3(s: Short): PackedSSSS
-    def rotrS: PackedSSSS
-    def rotlS: PackedSSSS
-    def swapSS: PackedSSSS
-    def reverseS: PackedSSSS
-  }
-  
-  sealed trait PackedCCCC extends Any with HasLongRepr {
-    @inline def C = c0
-    def c0 =  (L & 0xFFFF)                 .toChar
-    def c1 = ((L & 0xFFFF0000L)     >>  16).toChar
-    def c2 = ((L & 0xFFFF00000000L) >>  32).toChar
-    def c3 = ( L                    >>> 48).toChar
-    def c0(c: Char): PackedCCCC
-    def c1(c: Char): PackedCCCC
-    def c2(c: Char): PackedCCCC
-    def c3(c: Char): PackedCCCC
-    def rotrC: PackedCCCC
-    def rotlC: PackedCCCC
-    def swapCC: PackedCCCC
-    def reverseC: PackedCCCC
-  }
-
-  sealed trait PackedII extends Any with HasLongRepr {
-    @inline def I = i0
-    def i0 = (L & 0xFFFFFFFFL).toInt
-    def i1 = (L >>> 32).toInt
-    def i0(i: Int): PackedII
-    def i1(i: Int): PackedII
-    def swapI: PackedII    
-  }
-
-  sealed trait PackedFF extends Any with HasLongRepr {
-    @inline def F = f0
-    def f0 = java.lang.Float.intBitsToFloat((L & 0xFFFFFFFFL).toInt)
-    def f1 = java.lang.Float.intBitsToFloat((L >>> 32).toInt)
-    def f0(f: Float): PackedFF
-    def f1(f: Float): PackedFF
-    def swapF: PackedFF
-  }
-  
-  sealed trait PackedD extends Any with HasLongRepr {
-    @inline def D = d0
-    def d0 = java.lang.Double.longBitsToDouble(L)
-    def d0(d: Double): PackedD
-  }
-  
-  final class LongAsBox(val L: Long) extends AnyVal with Packed64bits with PackedB8 with PackedSSSS with PackedCCCC with PackedII with PackedFF with PackedD {
-    def box = this
-    
     def bit0(b: Boolean)  = new LongAsBox(if (b) (L | 0x0000000000000001L) else (L & 0xFFFFFFFFFFFFFFFEL))
     def bit1(b: Boolean)  = new LongAsBox(if (b) (L | 0x0000000000000002L) else (L & 0xFFFFFFFFFFFFFFFDL))
     def bit2(b: Boolean)  = new LongAsBox(if (b) (L | 0x0000000000000004L) else (L & 0xFFFFFFFFFFFFFFFBL))
@@ -606,6 +332,15 @@ package packed {
       new LongAsBox( (L & (-1L - m)) | ((value << i) & m) )
     }
 
+    @inline def B = b0
+    def b0 =  (L & 0xFF)                     .toByte
+    def b1 = ((L & 0xFF00)            >>   8).toByte
+    def b2 = ((L & 0xFF0000)          >>  16).toByte
+    def b3 = ((L & 0xFF000000L)       >>  24).toByte
+    def b4 = ((L & 0xFF00000000L)     >>  32).toByte
+    def b5 = ((L & 0xFF0000000000L)   >>  40).toByte
+    def b6 = ((L & 0xFF000000000000L) >>  48).toByte
+    def b7 = ( L                      >>> 56).toByte
     def b0(b: Byte) = new LongAsBox((L&0xFFFFFFFFFFFFFF00L) |  (b&0xFF))
     def b1(b: Byte) = new LongAsBox((L&0xFFFFFFFFFFFF00FFL) | ((b&0xFF)<<8))
     def b2(b: Byte) = new LongAsBox((L&0xFFFFFFFFFF00FFFFL) | ((b&0xFF)<<16))
@@ -622,6 +357,11 @@ package packed {
       new LongAsBox((m>>>48) | ((m&0xFFFF00000000L)>>16) | ((m&0xFFFF0000L)<<16) | (m<<48))
     }
 
+    @inline def S = s0
+    def s0 =  (L & 0xFFFF)                 .toShort
+    def s1 = ((L & 0xFFFF0000L)     >>  16).toShort
+    def s2 = ((L & 0xFFFF00000000L) >>  32).toShort
+    def s3 = ( L                    >>> 48).toShort
     def s0(s: Short) = new LongAsBox((L & 0xFFFFFFFFFFFF0000L) | (s&0xFFFF))
     def s1(s: Short) = new LongAsBox((L & 0xFFFFFFFF0000FFFFL) | ((s&0xFFFF).toLong << 16))
     def s2(s: Short) = new LongAsBox((L & 0xFFFF0000FFFFFFFFL) | ((s&0xFFFF).toLong << 32))
@@ -631,6 +371,11 @@ package packed {
     def swapSS = new LongAsBox(((L&0xFFFF0000FFFF0000L)>>>16) | ((L&0x0000FFFF0000FFFFL)<<16))
     def reverseS = new LongAsBox((L>>>48) | ((L&0xFFFF00000000L)>>16) | ((L&0xFFFF0000L)<<16) | (L<<48))
     
+    @inline def C = c0
+    def c0 =  (L & 0xFFFF)                 .toChar
+    def c1 = ((L & 0xFFFF0000L)     >>  16).toChar
+    def c2 = ((L & 0xFFFF00000000L) >>  32).toChar
+    def c3 = ( L                    >>> 48).toChar
     def c0(c: Char) = new LongAsBox((L & 0xFFFFFFFFFFFF0000L) | c)
     def c1(c: Char) = new LongAsBox((L & 0xFFFFFFFF0000FFFFL) | (c.toLong << 16))
     def c2(c: Char) = new LongAsBox((L & 0xFFFF0000FFFFFFFFL) | (c.toLong << 32))
@@ -640,92 +385,79 @@ package packed {
     def swapCC = new LongAsBox(((L&0xFFFF0000FFFF0000L)>>>16) | ((L&0x0000FFFF0000FFFFL)<<16))
     def reverseC = new LongAsBox((L>>>48) | ((L&0xFFFF00000000L)>>16) | ((L&0xFFFF0000L)<<16) | (L<<48))
     
+    @inline def I = i0
+    def i0 = (L & 0xFFFFFFFFL).toInt
+    def i1 = (L >>> 32).toInt
     def i0(i: Int) = new LongAsBox((L&0xFFFFFFFF00000000L) | (L&0xFFFFFFFFL))
     def i1(i: Int) = new LongAsBox((L&0xFFFFFFFFL) | (i.toLong<<32))
     def swapI = new LongAsBox((L >>> 32) | (L << 32))
     
+    @inline def F = f0
+    def f0 = java.lang.Float.intBitsToFloat((L & 0xFFFFFFFFL).toInt)
+    def f1 = java.lang.Float.intBitsToFloat((L >>> 32).toInt)
     def f0(f: Float) = i0(java.lang.Float.floatToRawIntBits(f))
     def f1(f: Float) = i1(java.lang.Float.floatToRawIntBits(f))
     def swapF = swapI
     
+    @inline def D = d0
+    def d0 = java.lang.Double.longBitsToDouble(L)
     def d0(d: Double) = new LongAsBox(java.lang.Double.doubleToRawLongBits(d))
   }
 }
 
 package object packed {
-  implicit final class PackBooleanInByte(val z: Boolean) extends AnyVal {
+  implicit final class PackBooleanInPrimitives(private val z: Boolean) extends AnyVal {
     def inByte = new ByteAsBox(if (z) 1 else 0)
-  }
-  implicit final class PackByteInByte(val b: Byte) extends AnyVal {
-    def inByte = new ByteAsBox(b)
-  }
-  
-  implicit final class PackBooleanInShort(val z: Boolean) extends AnyVal {
     def inShort = new ShortAsBox(if (z) 1 else 0)
-  }
-  implicit final class PackBytesInShort(val b: Byte) extends AnyVal {
-    def packBB(c: Byte) = new ShortAsBox(((b&0xFF) | ((c&0xFF)<<8)).toShort)
-    def inShort = new ShortAsBox((b & 0xFF).toShort)
-  }
-  implicit final class PackCharInShort(val c: Char) extends AnyVal {
-    def inShort = new ShortAsBox(c.toShort)
-  }
-  implicit final class PackShortInShort(val s: Short) extends AnyVal {
-    def inShort = new ShortAsBox(s)
+    def inInt = new IntAsBox(if (z) 1 else 0)
+    def inLong = new LongAsBox(if (z) 1 else 0)
   }
   
-  implicit final class PackBooleanInInt(val z: Boolean) extends AnyVal {
-    def inInt = new IntAsBox(if (z) 1 else 0)
-  }
-  implicit final class PackBytesInInt(val b: Byte) extends AnyVal {
-    def packBBBB(c: Byte, d: Byte, e: Byte) = new IntAsBox((b&0xFF) | ((c&0xFF)<<8) | ((d&0xFF)<<16) | (e.toInt<<24))
+  implicit final class PackByteInPrimitives(private val b: Byte) extends AnyVal {
+    def inByte = new ByteAsBox(b)
+    def inShort = new ShortAsBox((b & 0xFF).toShort)
     def inInt = new IntAsBox((b & 0xFF))
-  }
-  implicit final class PackShortsInInt(val s: Short) extends AnyVal {
-    def packSS(t: Short) = new IntAsBox((s&0xFFFF) | (t.toInt << 16))
-    def inInt = new IntAsBox(s)
-  }
-  implicit final class PackCharsInInt(val c: Char) extends AnyVal {
-    def packCC(d: Char) = new IntAsBox(c | (d<<16))
-    def inInt = new IntAsBox(c)
-  }
-  implicit final class PackFloatInInt(val f: Float) extends AnyVal {
-    def inInt = new IntAsBox(java.lang.Float.floatToRawIntBits(f))
-  }
-  implicit final class PackIntInInt(val i: Int) extends AnyVal {
-    def inInt = new IntAsBox(i)
-  }
-
-
-  implicit final class PackBooleanInLong(val bool: Boolean) extends AnyVal {
-    def inLong = if (bool) 1 else 0
-  }
-  implicit final class PackBytesInLong(val b: Byte) extends AnyVal {
-    def packB8(c: Byte, d: Byte, e: Byte, f: Byte, g: Byte, h: Byte, i: Byte): PackedB8 = {
-      new LongAsBox((b&0xFFL) | ((c&0xFFL)<<8) | ((d&0xFFL)<<16) | ((e&0xFFL)<<24) | ((f&0xFFL)<<32) | ((g&0xFFL)<<40) | ((h&0xFFL)<<48) | (i.toLong<<56))
-    }
     def inLong = new LongAsBox(b)
+    def packBB(b2: Byte) = new ShortAsBox(((b&0xFF) | ((b2&0xFF)<<8)).toShort)
+    def packBBBB(b2: Byte, b3: Byte, b4: Byte) = new IntAsBox((b&0xFF) | ((b2&0xFF)<<8) | ((b3&0xFF)<<16) | (b4.toInt<<24))
+    def packB8(b2: Byte, b3: Byte, b4: Byte, b5: Byte, b6: Byte, b7: Byte, b8: Byte) = {
+      new LongAsBox((b&0xFFL) | ((b2&0xFFL)<<8) | ((b3&0xFFL)<<16) | ((b4&0xFFL)<<24) | ((b5&0xFFL)<<32) | ((b6&0xFFL)<<40) | ((b7&0xFFL)<<48) | (b8.toLong<<56))
+    }
   }
-  implicit final class PackShortsInLong(val s: Short) extends AnyVal {
-    def packSSSS(t: Short, u: Short, v: Short): PackedSSSS = new LongAsBox((s&0xFFFFL) | ((t&0xFFFFL)<<16) | ((u&0xFFFFL)<<32) | (v.toLong<<48))
-    def inLong = new LongAsBox(s)
-  }
-  implicit final class PackCharInLong(val c: Char) extends AnyVal {
-    def packCCCC(d: Char, e: Char, f: Char): PackedCCCC = new LongAsBox(c | (c.toLong<<16) | (c.toLong<<32) | (c.toLong<<48))
+  
+  implicit final class PackCharInPrimitives(private val c: Char) extends AnyVal {
+    def inShort = new ShortAsBox(c.toShort)
+    def inInt = new IntAsBox(c)
     def inLong = new LongAsBox(c)
+    def packCC(c2: Char) = new IntAsBox(c | (c2<<16))
+    def packCCCC(c2: Char, c3: Char, c4: Char) = new LongAsBox(c | (c2.toLong<<16) | (c3.toLong<<32) | (c4.toLong<<48))
   }
-  implicit final class PackIntsInLong(val i: Int) extends AnyVal {
-    def packII(j: Int) = new LongAsBox((i&0xFFFFFFFFL) | (j.toLong << 32))
+  
+  implicit final class PackShortInPrimitives(private val s: Short) extends AnyVal {
+    def inShort = new ShortAsBox(s)
+    def inInt = new IntAsBox(s)
+    def inLong = new LongAsBox(s)
+    def packSS(s2: Short) = new IntAsBox((s&0xFFFF) | (s2.toInt << 16))
+    def packSSSS(s2: Short, s3: Short, s4: Short) = new LongAsBox((s&0xFFFFL) | ((s2&0xFFFFL)<<16) | ((s3&0xFFFFL)<<32) | (s4.toLong<<48))
+  }
+  
+  implicit final class PackIntInPrimitives(private val i: Int) extends AnyVal {
+    def inInt = new IntAsBox(i)
     def inLong = new LongAsBox(i)
+    def packII(i2: Int) = new LongAsBox((i&0xFFFFFFFFL) | (i2.toLong << 32))
   }
-  implicit final class PackFloatsInLong(val f: Float) extends AnyVal {
-    def packFF(g: Float): PackedFF = new LongAsBox((java.lang.Float.floatToRawIntBits(f).toLong & 0xFFFFFFFFL) | (java.lang.Float.floatToRawIntBits(g).toLong << 32))
+  
+  implicit final class PackFloatInPrimitives(private val f: Float) extends AnyVal {
+    def inInt = new IntAsBox(java.lang.Float.floatToRawIntBits(f))
     def inLong = new LongAsBox(java.lang.Float.floatToRawIntBits(f))
+    def packFF(f2: Float) = new LongAsBox((java.lang.Float.floatToRawIntBits(f).toLong & 0xFFFFFFFFL) | (java.lang.Float.floatToRawIntBits(f2).toLong << 32))
   }
-  implicit final class PackDoubleInLong(val d: Double) extends AnyVal {
-    def inLong = new LongAsBox(java.lang.Double.doubleToRawLongBits(d))
-  }
-  implicit final class PackLongInLong(val l: Long) extends AnyVal {
+  
+  implicit final class PackLongInPrimitives(private val l: Long) extends AnyVal {
     def inLong = new LongAsBox(l)
+  }
+
+  implicit final class PackDoubleInPrimitives(private val d: Double) extends AnyVal {
+    def inLong = new LongAsBox(java.lang.Double.doubleToRawLongBits(d))
   }
 }

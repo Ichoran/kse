@@ -18,7 +18,7 @@ package flow {
 /** A nice tutorial should go here.  For now, just browse everything. */
 package object flow extends LowPriorityOkValidation {
   /** Allows `grab` as an alternative to `get` on `Option`: `grab` will throw an available `Oops` if the `Option` is empty. */
-  implicit class OptionCanHop[A](val underlying: Option[A]) extends AnyVal {
+  implicit class OptionCanHop[A](private val underlying: Option[A]) extends AnyVal {
     /** Retrieve the value from this option or throw an `Oops` otherwise. */
     def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops()
     /** Convert to [[Ok]] with `Unit` for the disfavored branch. */
@@ -26,7 +26,7 @@ package object flow extends LowPriorityOkValidation {
   }
 
   /** Allows alternatives to `get` on `Try`. */
-  implicit class TryCanHop[A](val underlying: scala.util.Try[A]) extends AnyVal {
+  implicit class TryCanHop[A](private val underlying: scala.util.Try[A]) extends AnyVal {
     /** Throws an available `Oops` if the `Try` is a `Failure`, gives the `Success` value otherwise. */
     def grab(implicit oops: Oops): A = underlying match {
       case scala.util.Success(a) => a
@@ -45,7 +45,7 @@ package object flow extends LowPriorityOkValidation {
   }
   
   /** Supplies a method on `Either` to convert it to an [[Ok]]. */
-  implicit class EitherCanBeOk[L,R](val underlying: scala.util.Either[L,R]) extends AnyVal {
+  implicit class EitherCanBeOk[L,R](private val underlying: scala.util.Either[L,R]) extends AnyVal {
     /** Convert to [[Ok]] with `Right` favored. */
     def toOk: Ok[L, R] = underlying match {
       case scala.util.Right(r) => Yes(r)
@@ -54,7 +54,7 @@ package object flow extends LowPriorityOkValidation {
   }
   
   /** Allows alternatives to `yes` on [[Ok]] */
-  implicit class OkCanHop[N,Y](val underlying: Ok[N,Y]) extends AnyVal {
+  implicit class OkCanHop[N,Y](private val underlying: Ok[N,Y]) extends AnyVal {
     /** Throws an available `Oops` if the [[Ok]] is a `No`, gives the `Yes` value otherwise. */
     def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops()
     /** Throws a `No` value with an available `Hop`; gives the `Yes` value otherwise. */
@@ -63,7 +63,7 @@ package object flow extends LowPriorityOkValidation {
   
   
   /** Provides standard control-flow methods that should exist on Object. */
-  implicit class EverythingCanTapAndSuch[A](val underlying: A) extends AnyVal {
+  implicit class EverythingCanTapAndSuch[A](private val underlying: A) extends AnyVal {
     /** Transforms self according to the function `f`. */
     def fn[Z](f: A => Z) = f(underlying)
     

@@ -41,6 +41,8 @@ package coll {
     def value_=(a: A): Unit
     def blank: this.type
     def copy: Mopt[A]
+    
+    protected def emptyHash: Int
 
     var ok: Boolean = false
     def off = { ok = false; this }
@@ -50,7 +52,7 @@ package coll {
     def grab(implicit oops: Oops) = if (ok) value else oops
     def getOr(a: => A) = if (ok) value else a
     def getOrSet(a: => A) = { if (!ok) { value = a }; value }
-    def apply() = if (ok) value else throw new java.util.NoSuchElementException("Vx")
+    def apply() = if (ok) value else throw new java.util.NoSuchElementException("Mopt")
 
     def :=(a: A): this.type = { ok = true; value = a; this }
     def xform(f: A => A): this.type = { if (ok) { value = f(value) }; this }
@@ -61,60 +63,96 @@ package coll {
     def toOption = if (ok) Some(value) else None
     def toOk: Ok[Unit, A] = if (ok) Yes(value) else Ok.UnitNo
     
-    override def equals(a: Any) = (a == value)
+    override def equals(a: Any) = if (ok) (a == value) else a match {
+      case m: Mopt[_] => !m.ok && m.emptyHash == emptyHash
+      case _ => false
+    }
     override def toString = if (ok) "<"+value.toString+">" else "<_>"
-    override def hashCode = value.##
+    override def hashCode = if (ok) value.## else emptyHash
   }
   object Mopt {
+    def unanimous(mopts: Mopt[_]*): Boolean = {
+      var successes = 0
+      var failures = 0
+      iFor(mopts.iterator){ m =>
+        if (failures > 0 || !m.ok) {
+          failures += 1
+          m.ok = false
+        }
+        else successes += 1
+      }
+      if (failures == 0) true
+      else if (successes == 0) false
+      else {
+        iFor(mopts.iterator){ m =>
+          if (m.ok) {
+            m.ok = false
+            successes -= 1
+            if (successes == 0) return false
+          }
+        }
+        false
+      }
+    }
     class MoptAny[A] extends Mopt[A] {
       var value: A = null.asInstanceOf[A]
       def blank = { ok = false; value = null.asInstanceOf[A]; this }
       def copy = { val m = new MoptAny[A]; m.ok = ok; m.value = value; m }
+      def emptyHash = 0x9BB1B7F8
     }
     class MoptUnit extends Mopt[Unit] {
       var value: Unit = ()
       def blank = { ok = false; this }
       def copy = { val m = new MoptUnit; m.ok = ok; m }
+      def emptyHash = 0x980D1F98
     }
     class MoptBoolean extends Mopt[Boolean] {
       var value: Boolean = false
       def blank = { ok = false; value = false; this }
       def copy = { val m = new MoptBoolean; m.ok = ok; m.value = value; m }
+      def emptyHash = 0x62BC6BE9
     }
     class MoptByte extends Mopt[Byte] {
       var value: Byte = 0
       def blank = { ok = false; value = 0; this }
       def copy = { val m = new MoptByte; m.ok = ok; m.value = value; m }
+      def emptyHash = 0x93D80D8B
     }
     class MoptShort extends Mopt[Short] {
       var value: Short = 0
       def blank = { ok = false; value = 0; this }
       def copy = { val m = new MoptShort; m.ok = ok; m.value = value; m }
+      def emptyHash = 0xD1E297D0
     }
     class MoptChar extends Mopt[Char] {
       var value: Char = 0
       def blank = { ok = false; value = 0; this }
       def copy = { val m = new MoptChar; m.ok = ok; m.value = value; m }
+      def emptyHash = 0xDC165BDF
     }
     class MoptInt extends Mopt[Int] {
       var value: Int = 0
       def blank = { ok = false; value = 0; this }
       def copy = { val m = new MoptInt; m.ok = ok; m.value = value; m }
+      def emptyHash = 0xE456E5B9
     }
     class MoptLong extends Mopt[Long] {
       var value: Long = 0
       def blank = { ok = false; value = 0; this }
       def copy = { val m = new MoptLong; m.ok = ok; m.value = value; m }
+      def emptyHash = 0x62080488
     }
     class MoptFloat extends Mopt[Float] {
       var value: Float = Float.NaN
       def blank = { ok = false; value = Float.NaN; this }
       def copy = { val m = new MoptFloat; m.ok = ok; m.value = value; m }
+      def emptyHash = 0x28976EA9
     }
     class MoptDouble extends Mopt[Double] {
       var value: Double = Double.NaN
       def blank = { ok = false; value = Double.NaN; this }
       def copy = { val m = new MoptDouble; m.ok = ok; m.value = value; m }
+      def emptyHash = 0x4A0FFD76
     }
     def apply(u: Unit) = (new MoptUnit).on
     def apply(z: Boolean) = (new MoptBoolean) := z
