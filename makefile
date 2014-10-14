@@ -80,12 +80,14 @@ test : \
   kse/tests/Test_Ok.class \
   kse/tests/Test_Hop.class \
   kse/tests/Test_Flow.class \
-  kse/tests/Test_Flow_Macros.class
+  kse/tests/Test_Flow_Macros.class \
+  kse/tests/Test_Lazy.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
 	scala kse.tests.Test_Hop
 	scala kse.tests.Test_Flow
 	scala kse.tests.Test_Flow_Macros
+	scala kse.tests.Test_Lazy
 
 kse/tests/Test_Typecheck.class : \
   kse/tests/Test_Kse.class \
@@ -124,6 +126,12 @@ kse/tests/Test_Flow_Macros.class : \
   kse/flow/ControlFlowMacroImpl.class \
   tests/Test_Flow_Macros.scala
 	${F} tests/Test_Flow_Macros.scala
+
+kse/tests/Test_Lazy.class : \
+  kse/tests/Test_Kse.class \
+  kse/coll/Lazy.class \
+  tests/Test_Lazy.scala
+	${F} tests/Test_Lazy.scala
 
 kse/tests/Test_Kse.class : \
   kse/typecheck/package.class \

@@ -11,7 +11,7 @@ package coll {
   class Lazy[A](gen: => A) {
     lazy val value = gen
     def map[B](f: A => B) = Lazy(f(value))
-    def flatMap[B](f: A => Lazy[B]) = f(value)
+    def flatMap[B](f: A => Lazy[B]) = Lazy(f(value).value)
     def foreach[B](f: A => B) { f(value) }
   }
   object Lazy {
