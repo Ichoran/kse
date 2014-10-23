@@ -36,39 +36,39 @@ package coll {
   
   
   /** Provides Option-like capabilities, but mutably. */
-  abstract class Mopt[@specialized A] {
+  sealed abstract class Mopt[@specialized A] {
     def value: A
     def value_=(a: A): Unit
-    def blank: this.type
+    def clear: this.type
     def copy: Mopt[A]
     
     protected def emptyHash: Int
 
-    var ok: Boolean = false
-    def off = { ok = false; this }
-    def on = { ok = true; this }
-    def value(a: A): this.type = { value = (a); this }
+    final var ok: Boolean = false
+    final def off = { ok = false; this }
+    final def on = { ok = true; this }
+    final def value(a: A): this.type = { value = (a); this }
+    final def :=(a: A): this.type = { ok = true; value = a; this }
 
-    def grab(implicit oops: Oops) = if (ok) value else oops
-    def getOr(a: => A) = if (ok) value else a
-    def getOrSet(a: => A) = { if (!ok) { value = a }; value }
-    def apply() = if (ok) value else throw new java.util.NoSuchElementException("Mopt")
+    final def grab(implicit oops: Oops) = if (ok) value else OOPS
+    final def getOr(a: => A) = if (ok) value else a
+    final def getOrSet(a: => A) = { if (!ok) { value = a; ok = true }; value }
+    final def get = if (ok) value else throw new java.util.NoSuchElementException("Mopt")
 
-    def :=(a: A): this.type = { ok = true; value = a; this }
-    def xform(f: A => A): this.type = { if (ok) { value = f(value) }; this }
-    def tap(f: A => Unit): this.type = { if (ok) { f(value) }; this }
-    def reject(p: A => Boolean): this.type = { if (ok && p(value)) ok = false; this }
-    def exists(p: A => Boolean) = ok && p(value)
+    final def xform(f: A => A): this.type = { if (ok) { value = f(value) }; this }
+    final def tap(f: A => Unit): this.type = { if (ok) { f(value) }; this }
+    final def reject(p: A => Boolean): this.type = { if (ok && p(value)) ok = false; this }
+    final def exists(p: A => Boolean) = ok && p(value)
 
-    def toOption = if (ok) Some(value) else None
-    def toOk: Ok[Unit, A] = if (ok) Yes(value) else Ok.UnitNo
+    final def toOption = if (ok) Some(value) else None
+    final def toOk: Ok[Unit, A] = if (ok) Yes(value) else Ok.UnitNo
     
-    override def equals(a: Any) = if (ok) (a == value) else a match {
+    final override def equals(a: Any) = if (ok) (a == value) else a match {
       case m: Mopt[_] => !m.ok && m.emptyHash == emptyHash
       case _ => false
     }
-    override def toString = if (ok) "<"+value.toString+">" else "<_>"
-    override def hashCode = if (ok) value.## else emptyHash
+    final override def toString = if (ok) "<"+value.toString+">" else "<_>"
+    final override def hashCode = if (ok) value.## else emptyHash
   }
   object Mopt {
     def unanimous(mopts: Mopt[_]*): Boolean = {
@@ -96,61 +96,61 @@ package coll {
     }
     class MoptAny[A] extends Mopt[A] {
       var value: A = null.asInstanceOf[A]
-      def blank = { ok = false; value = null.asInstanceOf[A]; this }
+      def clear = { ok = false; value = null.asInstanceOf[A]; this }
       def copy = { val m = new MoptAny[A]; m.ok = ok; m.value = value; m }
       def emptyHash = 0x9BB1B7F8
     }
     class MoptUnit extends Mopt[Unit] {
       var value: Unit = ()
-      def blank = { ok = false; this }
+      def clear = { ok = false; this }
       def copy = { val m = new MoptUnit; m.ok = ok; m }
       def emptyHash = 0x980D1F98
     }
     class MoptBoolean extends Mopt[Boolean] {
       var value: Boolean = false
-      def blank = { ok = false; value = false; this }
+      def clear = { ok = false; value = false; this }
       def copy = { val m = new MoptBoolean; m.ok = ok; m.value = value; m }
       def emptyHash = 0x62BC6BE9
     }
     class MoptByte extends Mopt[Byte] {
       var value: Byte = 0
-      def blank = { ok = false; value = 0; this }
+      def clear = { ok = false; value = 0; this }
       def copy = { val m = new MoptByte; m.ok = ok; m.value = value; m }
       def emptyHash = 0x93D80D8B
     }
     class MoptShort extends Mopt[Short] {
       var value: Short = 0
-      def blank = { ok = false; value = 0; this }
+      def clear = { ok = false; value = 0; this }
       def copy = { val m = new MoptShort; m.ok = ok; m.value = value; m }
       def emptyHash = 0xD1E297D0
     }
     class MoptChar extends Mopt[Char] {
       var value: Char = 0
-      def blank = { ok = false; value = 0; this }
+      def clear = { ok = false; value = 0; this }
       def copy = { val m = new MoptChar; m.ok = ok; m.value = value; m }
       def emptyHash = 0xDC165BDF
     }
     class MoptInt extends Mopt[Int] {
       var value: Int = 0
-      def blank = { ok = false; value = 0; this }
+      def clear = { ok = false; value = 0; this }
       def copy = { val m = new MoptInt; m.ok = ok; m.value = value; m }
       def emptyHash = 0xE456E5B9
     }
     class MoptLong extends Mopt[Long] {
       var value: Long = 0
-      def blank = { ok = false; value = 0; this }
+      def clear = { ok = false; value = 0; this }
       def copy = { val m = new MoptLong; m.ok = ok; m.value = value; m }
       def emptyHash = 0x62080488
     }
     class MoptFloat extends Mopt[Float] {
       var value: Float = Float.NaN
-      def blank = { ok = false; value = Float.NaN; this }
+      def clear = { ok = false; value = Float.NaN; this }
       def copy = { val m = new MoptFloat; m.ok = ok; m.value = value; m }
       def emptyHash = 0x28976EA9
     }
     class MoptDouble extends Mopt[Double] {
       var value: Double = Double.NaN
-      def blank = { ok = false; value = Double.NaN; this }
+      def clear = { ok = false; value = Double.NaN; this }
       def copy = { val m = new MoptDouble; m.ok = ok; m.value = value; m }
       def emptyHash = 0x4A0FFD76
     }
@@ -163,6 +163,7 @@ package coll {
     def apply(l: Long) = (new MoptLong) := l
     def apply(f: Float) = (new MoptFloat) := f
     def apply(d: Double) = (new MoptDouble) := d
+    def apply[A <: AnyRef](a: A) = (new MoptAny[A]) := a
     def apply(o: Option[Unit]) = { val m = new MoptUnit; if (o.isDefined) { m := o.get }; m }
     def apply(o: Option[Boolean]) = { val m = new MoptBoolean; if (o.isDefined) { m := o.get }; m }
     def apply(o: Option[Byte]) = { val m = new MoptByte; if (o.isDefined) { m := o.get }; m }
@@ -173,7 +174,6 @@ package coll {
     def apply(o: Option[Float]) = { val m = new MoptFloat; if (o.isDefined) { m := o.get }; m }
     def apply(o: Option[Double]) = { val m = new MoptDouble; if (o.isDefined) { m := o.get }; m }
     def apply[A <: AnyRef](oa: Option[A]) = { val m = new MoptAny[A]; if (oa.isDefined) { m := oa.get }; m }
-    def apply[A <: AnyRef](a: A) = (new MoptAny[A]) := a
     def empty[@specialized A](implicit iv: ImplicitValue[Mopt[A], Mopt.type]) = iv.value
   }
 }
@@ -190,6 +190,16 @@ package object coll {
   implicit val doubleMoptInstanceProvider = new ImplicitValue[Mopt[Double], Mopt.type] { def value = new Mopt.MoptDouble }
   private val genericMoptInstanceProvider = new ImplicitValue[Mopt[AnyRef], Mopt.type] { def value = new Mopt.MoptAny }
   implicit def anyrefMoptInstanceProvider[A <: AnyRef] = genericMoptInstanceProvider.asInstanceOf[ImplicitValue[Mopt[A], Mopt.type]]
+  
+  implicit class OptionConvertsToMoptUnit(private val underlying: Option[Unit]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptByte(private val underlying: Option[Byte]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptShort(private val underlying: Option[Short]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptChar(private val underlying: Option[Char]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptInt(private val underlying: Option[Int]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptLong(private val underlying: Option[Long]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptFloat(private val underlying: Option[Float]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptDouble(private val underlying: Option[Double]) extends AnyVal { def toMopt = Mopt(underlying) }
+  implicit class OptionConvertsToMoptAny[A <: AnyRef](private val underlying: Option[A]) extends AnyVal { def toMopt = Mopt(underlying) }
   
   trait Tuple1LowPriorityImplicits[A] extends Any {
     def underlying: A

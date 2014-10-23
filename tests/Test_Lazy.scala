@@ -3,7 +3,7 @@ package kse.tests
 import kse.coll._
 
 object Test_Lazy extends Test_Kse {
-  def test_basics = {
+  def test_basics: Boolean = {
     var count = 0
     val l = new Lazy[String]({ count += 1; "cat" })
     val test1 = l.value == "cat"
@@ -15,7 +15,7 @@ object Test_Lazy extends Test_Kse {
     test1 && test2 && count == 1 && test3 && test4 && count2 == 1
   }
 
-  def test_map = {
+  def test_map: Boolean = {
     var count, count2 = 0
     val l = Lazy{ count += 1; "fish" }
     val test1 = count == 0
@@ -25,7 +25,7 @@ object Test_Lazy extends Test_Kse {
     m.value == 4 && test1 && test2 && test3 && count == 1 && count2 == 1
   }
 
-  def test_flatMap = {
+  def test_flatMap: Boolean = {
     var count, count2 = 0
     val l = Lazy{ count += 1; "fish" }
     val test1 = count == 0
@@ -35,7 +35,7 @@ object Test_Lazy extends Test_Kse {
     m.value == 4 && test1 && test2 && test3 && count == 1 && count2 == 1
   }
   
-  def test_foreach = {
+  def test_foreach: Boolean = {
     var count = 0
     var fishlen = 0
     val l = Lazy{ count += 1; "fish" }

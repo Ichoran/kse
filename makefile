@@ -17,6 +17,9 @@ Kse.jar : \
   kse/flow/package.class \
   kse/coll/packed/package.class \
   kse/coll/package.class \
+  kse/coll/Lazy.class \
+  kse/coll/Soft.class \
+  kse/coll/Mopt.class \
   kse/eio/base64/Base64.class \
   kse/eio/Grok.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
@@ -50,7 +53,7 @@ kse/coll/packed/package.class : \
   coll/Packed.scala
 	${F} coll/Packed.scala
 
-kse/coll/package.class : \
+kse/coll/package.class kse/coll/Lazy.class kse/coll/Soft.class kse/coll/Mopt.class : \
   kse/typecheck/package.class \
   coll/Coll.scala
 	${F} coll/Coll.scala
@@ -81,13 +84,15 @@ test : \
   kse/tests/Test_Hop.class \
   kse/tests/Test_Flow.class \
   kse/tests/Test_Flow_Macros.class \
-  kse/tests/Test_Lazy.class
+  kse/tests/Test_Lazy.class \
+  kse/tests/Test_Mopt.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
 	scala kse.tests.Test_Hop
 	scala kse.tests.Test_Flow
 	scala kse.tests.Test_Flow_Macros
 	scala kse.tests.Test_Lazy
+	scala kse.tests.Test_Mopt
 
 kse/tests/Test_Typecheck.class : \
   kse/tests/Test_Kse.class \
@@ -132,6 +137,15 @@ kse/tests/Test_Lazy.class : \
   kse/coll/Lazy.class \
   tests/Test_Lazy.scala
 	${F} tests/Test_Lazy.scala
+
+kse/tests/Test_Mopt.class : \
+  kse/tests/Test_Kse.class \
+  kse/flow/Ok.class \
+  kse/flow/Hop.class \
+  kse/flow/package.class \
+  kse/coll/Mopt.class \
+  tests/Test_Mopt.scala
+	${F} tests/Test_Mopt.scala
 
 kse/tests/Test_Kse.class : \
   kse/typecheck/package.class \
