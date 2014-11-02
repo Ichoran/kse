@@ -11,7 +11,7 @@ package flow {
   /** Provides default behavior for validating an [[Ok]], namely to throw an exception if a disfavored value is found. */
   trait LowPriorityOkValidation {
     private[flow] val genericInvalidOkThrowsException = new Ok.ValidateOkay[Any] { def incorrect(any: Any) { throw new NotOkException(any) } }
-    implicit def defaultInvalidOkThrowsException[N]: Ok.ValidateOkay[N] = genericInvalidOkThrowsException.asInstanceOf[Ok.ValidateOkay[N]]
+    @inline implicit def defaultInvalidOkThrowsException[N]: Ok.ValidateOkay[N] = genericInvalidOkThrowsException.asInstanceOf[Ok.ValidateOkay[N]]
   }
 }
 
@@ -20,25 +20,25 @@ package object flow extends LowPriorityOkValidation {
   /** Allows `grab` as an alternative to `get` on `Option`: `grab` will throw an available `Oops` if the `Option` is empty. */
   implicit class OptionCanHop[A](private val underlying: Option[A]) extends AnyVal {
     /** Retrieve the value from this option or throw an `Oops` otherwise. */
-    def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops()
+    @inline def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops()
     /** Convert to [[Ok]] with `Unit` for the disfavored branch. */
-    def toOk: Ok[Unit, A] = underlying match { case Some(a) => Yes(a); case _ => Ok.UnitNo }
+    @inline def toOk: Ok[Unit, A] = underlying match { case Some(a) => Yes(a); case _ => Ok.UnitNo }
   }
 
   /** Allows alternatives to `get` on `Try`. */
   implicit class TryCanHop[A](private val underlying: scala.util.Try[A]) extends AnyVal {
     /** Throws an available `Oops` if the `Try` is a `Failure`, gives the `Success` value otherwise. */
-    def grab(implicit oops: Oops): A = underlying match {
+    @inline def grab(implicit oops: Oops): A = underlying match {
       case scala.util.Success(a) => a
       case _ => oops()
     }
     /** Throws a `Failure` value with an available `Hop`; gives the `Success` value otherwise. */
-    def orHop(implicit hop: HopWith[Throwable]): A = underlying match {
+    @inline def orHop(implicit hop: HopWith[Throwable]): A = underlying match {
       case scala.util.Success(a) => a
       case scala.util.Failure(t) => hop(t)
     }
     /** Convert to [[Ok]] with `Success` favored. */
-    def toOk: Ok[Throwable, A] = underlying match {
+    @inline def toOk: Ok[Throwable, A] = underlying match {
       case scala.util.Success(a) => Yes(a)
       case scala.util.Failure(t) => No(t)
     }
@@ -47,7 +47,7 @@ package object flow extends LowPriorityOkValidation {
   /** Supplies a method on `Either` to convert it to an [[Ok]]. */
   implicit class EitherCanBeOk[L,R](private val underlying: scala.util.Either[L,R]) extends AnyVal {
     /** Convert to [[Ok]] with `Right` favored. */
-    def toOk: Ok[L, R] = underlying match {
+    @inline def toOk: Ok[L, R] = underlying match {
       case scala.util.Right(r) => Yes(r)
       case scala.util.Left(l) => No(l)
     }
@@ -56,31 +56,31 @@ package object flow extends LowPriorityOkValidation {
   /** Allows alternatives to `yes` on [[Ok]] */
   implicit class OkCanHop[N,Y](private val underlying: Ok[N,Y]) extends AnyVal {
     /** Throws an available `Oops` if the [[Ok]] is a `No`, gives the `Yes` value otherwise. */
-    def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops()
+    @inline def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops()
     /** Throws a `No` value with an available `Hop`; gives the `Yes` value otherwise. */
-    def orHop(implicit hop: HopWith[N]): Y = if (underlying.isOk) underlying.yes else hop(underlying.no)
+    @inline def orHop(implicit hop: HopWith[N]): Y = if (underlying.isOk) underlying.yes else hop(underlying.no)
   }
   
   
   /** Provides standard control-flow methods that should exist on Object. */
   implicit class EverythingCanTapAndSuch[A](private val underlying: A) extends AnyVal {
     /** Transforms self according to the function `f`. */
-    def fn[Z](f: A => Z) = f(underlying)
+    @inline def fn[Z](f: A => Z) = f(underlying)
     
     /** Executes a side effect that depends on self, and returns self */
-    def tap(f: A => Any) = { f(underlying); underlying }
+    @inline def tap(f: A => Any) = { f(underlying); underlying }
 
     /** Transforms self according to `pf` only for those values where `pf` is defined. */
-    def partFn(pf: PartialFunction[A,A]) = if (pf.isDefinedAt(underlying)) pf(underlying) else underlying
+    @inline def partFn(pf: PartialFunction[A,A]) = if (pf.isDefinedAt(underlying)) pf(underlying) else underlying
     
     /** Transforms self according to `f` for those values where `p` is true. */
-    def pickFn(p: A => Boolean)(f: A => A) = if (p(underlying)) f(underlying) else underlying
+    @inline def pickFn(p: A => Boolean)(f: A => A) = if (p(underlying)) f(underlying) else underlying
     
     /** Wraps the value in an `Option`, discarding values where `p` is false. */
-    def optIf(p: A => Boolean) = if (p(underlying)) Some(underlying) else None
+    @inline def optIf(p: A => Boolean) = if (p(underlying)) Some(underlying) else None
     
     /** Wraps the value in an [[Ok]], in a `Yes` if `p` is true, otherwise in a `No`. */
-    def okIf(p: A => Boolean): Ok[A,A] = if (p(underlying)) Yes(underlying) else No(underlying)
+    @inline def okIf(p: A => Boolean): Ok[A,A] = if (p(underlying)) Yes(underlying) else No(underlying)
     
     /** Tries to cast (without numeric conversion), placing the value in a `Yes` if it succeeds, or leaving it in a `No` if it fails. */
     def okAs[Z](implicit tg: scala.reflect.ClassTag[Z]): Ok[A,Z] = {
@@ -102,19 +102,19 @@ package object flow extends LowPriorityOkValidation {
     }
     
     /** If `p` is true, replace the value with `default`. */
-    def defaultIf(p: A => Boolean)(default: => A) = if (p(underlying)) default else underlying
+    @inline def defaultIf(p: A => Boolean)(default: => A) = if (p(underlying)) default else underlying
     
     /** If `p` is true, continue, otherwise throw an Oops */
-    def must(p: A => Boolean)(implicit oops: Oops) = if (p(underlying)) underlying else oops()
+    @inline def must(p: A => Boolean)(implicit oops: Oops) = if (p(underlying)) underlying else oops()
 
     /** If `p` is true, send the value as an implicit `Hop`; otherwise return self */
-    def hopIf(p: A => Boolean)(implicit hop: HopWith[A]) = if (p(underlying)) hop(underlying) else underlying
+    @inline def hopIf(p: A => Boolean)(implicit hop: HopWith[A]) = if (p(underlying)) hop(underlying) else underlying
 
     /** Perform a side-effect `g`, typically to clean up a resource, after
       * transforming self according to `f`. 
       * Example: {{{ scala.io.Source.fromFile(file).tidy(_.close)( _.getLines.toVector ) }}}
       */
-    def tidy[Z](g: A => Any)(f: A => Z) = try { f(underlying) } finally { g(underlying) }
+    @inline def tidy[Z](g: A => Any)(f: A => Z) = try { f(underlying) } finally { g(underlying) }
   }
   
   
