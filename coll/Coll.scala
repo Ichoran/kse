@@ -201,73 +201,88 @@ package object coll {
   implicit class OptionConvertsToMoptDouble(private val underlying: Option[Double]) extends AnyVal { def toMopt = Mopt(underlying) }
   implicit class OptionConvertsToMoptAny[A <: AnyRef](private val underlying: Option[A]) extends AnyVal { def toMopt = Mopt(underlying) }
   
-  trait Tuple1LowPriorityImplicits[A] extends Any {
-    def underlying: A
-    def also[Z](f: A => Z) = underlying -> f(underlying)
+  implicit class Tuple1UtilityMethods[A](private val underlying: A) extends AnyVal {
+    @inline def also[Z](f: A => Z) = underlying -> f(underlying)    
   }
-  
-  implicit class Tuple1UtilityMethods[A](val underlying: A) extends AnyVal with Tuple1LowPriorityImplicits[A] {}
   
   implicit class Tuple2UtilityMethods[A,B](val underlying: (A,B)) extends AnyVal {
-    def _1(value: A) = (value, underlying._2)
-    def _2(value: B) = (underlying._1, value)
-    def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2)
-    def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2))
-    def eachFn[Y,Z](f: A => Y)(g: B => Z) = (f(underlying._1), g(underlying._2))
-    def fold[Z](f: (A,B) => Z) = f(underlying._1, underlying._2)
-    def also[Z](f: (A,B) => Z) = (underlying._1, underlying._2, f(underlying._1, underlying._2))
+    @inline def _1Is(value: A) = (value, underlying._2)
+    @inline def _2Is(value: B) = (underlying._1, value)
+    @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2)
+    @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2))
+    @inline def eachFn[Y,Z](f: A => Y)(g: B => Z) = (f(underlying._1), g(underlying._2))
+    @inline def fold[Z](f: (A,B) => Z) = f(underlying._1, underlying._2)
+    @inline def also[Z](f: (A,B) => Z) = (underlying._1, underlying._2, f(underlying._1, underlying._2))
+    @inline def _without1 = underlying._2
+    @inline def _without2 = underlying._1
   }
   implicit class Tuple2IdenticalUtilityMethods[A](val underlying: (A,A)) extends AnyVal {
-    def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2))
+    @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2))
+    @inline def reduce(f: (A,A) => A) = f(underlying._1, underlying._2)
   }
   
   implicit class Tuple3UtilityMethods[A,B,C](val underlying: (A,B,C)) extends AnyVal {
-    def _1(value: A) = (value, underlying._2, underlying._3)
-    def _2(value: B) = (underlying._1, value, underlying._3)
-    def _3(value: C) = (underlying._1, underlying._2, value)
-    def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3)
-    def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3)
-    def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3))
-    def eachFn[A1, B1, C1](f: A => A1)(g: B => B1)(h: C => C1) = (f(underlying._1), g(underlying._2), h(underlying._3))
-    def fold[Z](f: (A,B,C) => Z) = f(underlying._1, underlying._2, underlying._3)
-    def also[Z](f: (A,B,C) => Z) = (underlying._1, underlying._2, underlying._3, fold(f))
+    @inline def _1Is(value: A) = (value, underlying._2, underlying._3)
+    @inline def _2Is(value: B) = (underlying._1, value, underlying._3)
+    @inline def _3Is(value: C) = (underlying._1, underlying._2, value)
+    @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3)
+    @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3)
+    @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3))
+    @inline def eachFn[A1, B1, C1](f: A => A1)(g: B => B1)(h: C => C1) = (f(underlying._1), g(underlying._2), h(underlying._3))
+    @inline def fold[Z](f: (A,B,C) => Z) = f(underlying._1, underlying._2, underlying._3)
+    @inline def also[Z](f: (A,B,C) => Z) = (underlying._1, underlying._2, underlying._3, fold(f))
+    @inline def _without1 = (underlying._2, underlying._3)
+    @inline def _without2 = (underlying._1, underlying._3)
+    @inline def _without3 = (underlying._1, underlying._2)
   }
   implicit class Tuple3IdenticalUtilityMethods[A](val underlying: (A,A,A)) extends AnyVal {
-    def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3))
+    @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3))
+    @inline def reduce(f: (A,A) => A) = f( f(underlying._1, underlying._2), underlying._3 )
   }
     
   implicit class Tuple4UtilityMethods[A,B,C,D](val underlying: (A,B,C,D)) extends AnyVal {
-    def _1(value: A) = (value, underlying._2, underlying._3, underlying._4)
-    def _2(value: B) = (underlying._1, value, underlying._3, underlying._4)
-    def _3(value: C) = (underlying._1, underlying._2, value, underlying._4)
-    def _4(value: D) = (underlying._1, underlying._2, underlying._3, value)
-    def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3, underlying._4)
-    def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4)
-    def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4)
-    def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4))
-    def eachFn[A1, B1, C1, D1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4))
-    def fold[Z](f: (A,B,C,D) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4)
-    def also[Z](f: (A,B,C,D) => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, fold(f))
+    @inline def _1Is(value: A) = (value, underlying._2, underlying._3, underlying._4)
+    @inline def _2Is(value: B) = (underlying._1, value, underlying._3, underlying._4)
+    @inline def _3Is(value: C) = (underlying._1, underlying._2, value, underlying._4)
+    @inline def _4Is(value: D) = (underlying._1, underlying._2, underlying._3, value)
+    @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3, underlying._4)
+    @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4)
+    @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4)
+    @inline def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4))
+    @inline def eachFn[A1, B1, C1, D1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4))
+    @inline def fold[Z](f: (A,B,C,D) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4)
+    @inline def also[Z](f: (A,B,C,D) => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, fold(f))
+    @inline def _without1 = (underlying._2, underlying._3, underlying._4)
+    @inline def _without2 = (underlying._1, underlying._3, underlying._4)
+    @inline def _without3 = (underlying._1, underlying._2, underlying._4)
+    @inline def _without4 = (underlying._1, underlying._2, underlying._3)
   }
   implicit class Tuple4IdenticalUtilityMethods[A](val underlying: (A,A,A,A)) extends AnyVal {
-    def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4))
+    @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4))
+    @inline def reduce(f: (A,A) => A) = f( f(underlying._1, underlying._2), f(underlying._3, underlying._4) )
   }
   
   implicit class Tuple5UtilityMethods[A,B,C,D,E](val underlying: (A,B,C,D,E)) extends AnyVal {
-    def _1(value: A) = (value, underlying._2, underlying._3, underlying._4, underlying._5)
-    def _2(value: B) = (underlying._1, value, underlying._3, underlying._4, underlying._5)
-    def _3(value: C) = (underlying._1, underlying._2, value, underlying._4, underlying._5)
-    def _4(value: D) = (underlying._1, underlying._2, underlying._3, value, underlying._5)
-    def _5(value: E) = (underlying._1, underlying._2, underlying._3, underlying._4, value)
-    def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3, underlying._4, underlying._5)
-    def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4, underlying._5)
-    def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4, underlying._5)
-    def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4), underlying._5)
-    def _5Fn[Z](f: E => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, f(underlying._5))
-    def eachFn[A1, B1, C1, D1, E1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1)(j: E => E1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4), j(underlying._5))
-    def fold[Z](f: (A,B,C,D,E) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4, underlying._5)
+    @inline def _1Is(value: A) = (value, underlying._2, underlying._3, underlying._4, underlying._5)
+    @inline def _2Is(value: B) = (underlying._1, value, underlying._3, underlying._4, underlying._5)
+    @inline def _3Is(value: C) = (underlying._1, underlying._2, value, underlying._4, underlying._5)
+    @inline def _4Is(value: D) = (underlying._1, underlying._2, underlying._3, value, underlying._5)
+    @inline def _5Is(value: E) = (underlying._1, underlying._2, underlying._3, underlying._4, value)
+    @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3, underlying._4, underlying._5)
+    @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4, underlying._5)
+    @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4, underlying._5)
+    @inline def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4), underlying._5)
+    @inline def _5Fn[Z](f: E => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, f(underlying._5))
+    @inline def eachFn[A1, B1, C1, D1, E1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1)(j: E => E1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4), j(underlying._5))
+    @inline def fold[Z](f: (A,B,C,D,E) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4, underlying._5)
+    @inline def _without1 = (underlying._2, underlying._3, underlying._4, underlying._5)
+    @inline def _without2 = (underlying._1, underlying._3, underlying._4, underlying._5)
+    @inline def _without3 = (underlying._1, underlying._2, underlying._4, underlying._5)
+    @inline def _without4 = (underlying._1, underlying._2, underlying._3, underlying._5)
+    @inline def _without5 = (underlying._1, underlying._2, underlying._3, underlying._4)
   }
   implicit class Tuple5IdenticalUtilityMethods[A](val underlying: (A,A,A,A,A)) extends AnyVal {
-    def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4), f(underlying._5))
+    @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4), f(underlying._5))
+    @inline def reduce(f: (A,A) => A) = f( f( f(underlying._1, underlying._2), f(underlying._3, underlying._4) ), underlying._5 )
   }
 }
