@@ -59,6 +59,7 @@ kse/coll/package.class kse/coll/Lazy.class kse/coll/Soft.class kse/coll/Mopt.cla
 	${F} coll/Coll.scala
 
 kse/eio/base64/Base64.class : \
+  kse/flow/Hop.class \
   eio/Base64.scala
 	${F} eio/Base64.scala
 
@@ -87,7 +88,8 @@ test : \
   kse/tests/Test_Lazy.class \
   kse/tests/Test_Mopt.class \
   kse/tests/Test_TupleImplicits.class \
-  kse/tests/Test_Packed.class
+  kse/tests/Test_Packed.class \
+  kse/tests/Test_Base64.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
 	scala kse.tests.Test_Hop
@@ -97,6 +99,7 @@ test : \
 	scala kse.tests.Test_Mopt
 	scala kse.tests.Test_TupleImplicits
 	scala kse.tests.Test_Packed
+	scala kse.tests.Test_Base64
 
 kse/tests/Test_Typecheck.class : \
   kse/tests/Test_Kse.class \
@@ -169,3 +172,11 @@ kse/tests/Test_Kse.class : \
   kse/flow/package.class \
   tests/Test_Kse.scala
 	${F} tests/Test_Kse.scala
+
+kse/tests/Test_Base64.class : \
+  kse/tests/Test_Kse.class \
+  kse/flow/package.class \
+  kse/eio/base64/package.class \
+  kse/eio/base64/Base64.class \
+  tests/Test_Base64.scala
+	${F} tests/Test_Base64.scala

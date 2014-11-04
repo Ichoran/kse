@@ -34,7 +34,7 @@ trait Test_Kse { self =>
     val oks = ms.map{ m =>
       implicit val title = new ImplicitValue[String, Test_Kse] { def value = "In " + m.getName }
       safeOk(explainThrowable){ fail =>
-        val o: Any = m.invoke(self)
+        val o: Any = try { m.invoke(self) } catch { case ite: java.lang.reflect.InvocationTargetException => if (ite.getCause != null) throw ite.getCause else throw ite }
         o match {
           case b: Boolean if b == false => fail(Vector(m.getName + " returned false."))
           case Test_Kse.TestResult(Some(v)) => fail(v)

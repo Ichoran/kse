@@ -165,19 +165,22 @@ package base64 {
   }
 
   abstract class Base64(val pad: Boolean, val wrapAt: Int, charset: Array[Byte]) {
-    private val encoder = {
+    final val encoder = {
       val a = new Array[Byte](256)
       Array.copy(charset, 0, a, 0, 256 min charset.length)
       a
     }
-    private val decoder = {
+    final val decoder = {
       val a = Array.fill[Byte](256)(-1)
-      aFor(charset)( (c,i) => encoder(c & 0xFF) = (i min 64).toByte )
+      aFor(charset)( (c,i) => a(c & 0xFF) = (i min 64).toByte )
       a
     }
     val wrapAdds = charset.length - 65;
     
     def decode(s: String)(implicit oops: Oops) = decodeFromBase64(s.getBytes, decoder)
+    def encode(a: Array[Byte], start: Int = -1, end: Int = Int.MaxValue) =
+      if (start >= end) ""
+      else new String(encodeToBase64(a, math.max(0, start), math.min(a.length, end), pad, wrapAt, wrapAdds, charset))
   }
   
   object Mime64 extends Base64(true, 72, CommonBase64Encodings.Mime.getBytes) {}
