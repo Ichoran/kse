@@ -86,7 +86,8 @@ test : \
   kse/tests/Test_Flow_Macros.class \
   kse/tests/Test_Lazy.class \
   kse/tests/Test_Mopt.class \
-  kse/tests/Test_TupleImplicits.class
+  kse/tests/Test_TupleImplicits.class \
+  kse/tests/Test_Packed.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
 	scala kse.tests.Test_Hop
@@ -95,6 +96,7 @@ test : \
 	scala kse.tests.Test_Lazy
 	scala kse.tests.Test_Mopt
 	scala kse.tests.Test_TupleImplicits
+	scala kse.tests.Test_Packed
 
 kse/tests/Test_Typecheck.class : \
   kse/tests/Test_Kse.class \
@@ -154,6 +156,12 @@ kse/tests/Test_TupleImplicits.class : \
   kse/coll/package.class \
   tests/Test_TupleImplicits.scala
 	${F} tests/Test_TupleImplicits.scala
+
+kse/tests/Test_Packed.class : \
+  kse/tests/Test_Kse.class \
+  kse/coll/packed/package.class \
+  tests/Test_Packed.scala
+	${F} tests/Test_Packed.scala
 
 kse/tests/Test_Kse.class : \
   kse/typecheck/package.class \
