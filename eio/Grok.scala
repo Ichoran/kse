@@ -7,25 +7,25 @@ import scala.annotation.tailrec
 import scala.reflect.{ClassTag => Tag}
 import kse.flow._
 
-trait Delimiter { def apply(c: Char): Boolean }
+trait Delimiter { @inline def apply(c: Char): Boolean }
 object Delimiter {
-  val whiteDelimiter = new Delimiter { def apply(c: Char) = c.isWhitespace }
-  val spaceDelimiter = new Delimiter { def apply(c: Char) = c == ' ' }
-  val tabDelimiter = new Delimiter { def apply(c: Char) = c == '\t' }
-  val fileDelimiter = new Delimiter { def apply(c: Char) = c == java.io.File.separatorChar }
-  val pathDelimiter = new Delimiter { def apply(c: Char) = c == java.io.File.pathSeparatorChar }
-  val lineDelimiter = new Delimiter { def apply(c: Char) = c == '\n' || c == '\r' }
+  val whiteDelimiter = new Delimiter { @inline def apply(c: Char) = c.isWhitespace }
+  val spaceDelimiter = new Delimiter { @inline def apply(c: Char) = c == ' ' }
+  val tabDelimiter = new Delimiter { @inline def apply(c: Char) = c == '\t' }
+  val fileDelimiter = new Delimiter { @inline def apply(c: Char) = c == java.io.File.separatorChar }
+  val pathDelimiter = new Delimiter { @inline def apply(c: Char) = c == java.io.File.pathSeparatorChar }
+  val lineDelimiter = new Delimiter { @inline def apply(c: Char) = c == '\n' || c == '\r' }
 }
 
   
-trait DelimByte { def apply(b: Byte): Boolean }
+trait DelimByte { @inline def apply(b: Byte): Boolean }
 object DelimByte {
-  val whiteDelimByte = new DelimByte { def apply(b: Byte) = (b >= 9 && b <= 13) || (b >= 28 && b <= 32) }
-  val spaceDelimByte = new DelimByte { def apply(b: Byte) = b == ' ' }
-  val tabDelimByte = new DelimByte { def apply(b: Byte) = b == '\t' }
-  val fileDelimByte = new DelimByte { def apply(b: Byte) = b == java.io.File.separatorChar }
-  val pathDelimByte = new DelimByte { def apply(b: Byte) = b == java.io.File.pathSeparatorChar }
-  val lineDelimByte = new DelimByte { def apply(b: Byte) = b == '\n' || b == '\r' }
+  val whiteDelimByte = new DelimByte { @inline def apply(b: Byte) = (b >= 9 && b <= 13) || (b >= 28 && b <= 32) }
+  val spaceDelimByte = new DelimByte { @inline def apply(b: Byte) = b == ' ' }
+  val tabDelimByte = new DelimByte { @inline def apply(b: Byte) = b == '\t' }
+  val fileDelimByte = new DelimByte { @inline def apply(b: Byte) = b == java.io.File.separatorChar }
+  val pathDelimByte = new DelimByte { @inline def apply(b: Byte) = b == java.io.File.pathSeparatorChar }
+  val lineDelimByte = new DelimByte { @inline def apply(b: Byte) = b == '\n' || b == '\r' }
 }
   
 

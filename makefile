@@ -21,6 +21,7 @@ Kse.jar : \
   kse/coll/Soft.class \
   kse/coll/Mopt.class \
   kse/eio/base64/Base64.class \
+  kse/eio/base64/package.class \
   kse/eio/Grok.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
@@ -89,7 +90,8 @@ test : \
   kse/tests/Test_Mopt.class \
   kse/tests/Test_TupleImplicits.class \
   kse/tests/Test_Packed.class \
-  kse/tests/Test_Base64.class
+  kse/tests/Test_Base64.class \
+  kse/tests/Test_Grok.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
 	scala kse.tests.Test_Hop
@@ -100,6 +102,7 @@ test : \
 	scala kse.tests.Test_TupleImplicits
 	scala kse.tests.Test_Packed
 	scala kse.tests.Test_Base64
+	scala kse.tests.Test_Grok
 
 kse/tests/Test_Typecheck.class : \
   kse/tests/Test_Kse.class \
@@ -166,13 +169,6 @@ kse/tests/Test_Packed.class : \
   tests/Test_Packed.scala
 	${F} tests/Test_Packed.scala
 
-kse/tests/Test_Kse.class : \
-  kse/typecheck/package.class \
-  kse/flow/Ok.class \
-  kse/flow/package.class \
-  tests/Test_Kse.scala
-	${F} tests/Test_Kse.scala
-
 kse/tests/Test_Base64.class : \
   kse/tests/Test_Kse.class \
   kse/flow/package.class \
@@ -180,3 +176,20 @@ kse/tests/Test_Base64.class : \
   kse/eio/base64/Base64.class \
   tests/Test_Base64.scala
 	${F} tests/Test_Base64.scala
+
+kse/tests/Test_Grok.class : \
+  kse/tests/Test_Kse.class \
+  kse/flow/Ok.class \
+  kse/flow/package.class \
+  kse/eio/base64/package.class \
+  kse/eio/base64/Base64.class \
+  eio/Grok.scala \
+  tests/Test_Grok.scala
+	${F} tests/Test_Grok.scala
+
+kse/tests/Test_Kse.class : \
+  kse/typecheck/package.class \
+  kse/flow/Ok.class \
+  kse/flow/package.class \
+  tests/Test_Kse.scala
+	${F} tests/Test_Kse.scala

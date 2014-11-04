@@ -34,12 +34,14 @@ object Test_Base64 extends Test_Kse {
       })
     }
   }
+  
+  // Example strings from Wikipedia.
 
   def test_mime64: Boolean = one_encoding(Mime64, Array(("c3VyZS4=","sure.".getBytes), ("YXN1cmUu","asure.".getBytes), ("ZWFzdXJlLg==", "easure.".getBytes)))
 
   def test_url64: Boolean = one_encoding(Url64, Array(("bGVhcw","leas".getBytes), ("bGVhc3U","leasu".getBytes), ("bGVhc3Vy", "leasur".getBytes)))
 
-  def test_uucodeLine: Boolean = one_encoding(UucodeLine, Array(("0V%T", "Cat".getBytes) (":'1T<#HO+W=W=RYW:6MI<&5D:6$N;W)G#0H","http://www.wikipedia.org\r\n".getBytes)*/))
+  def test_uucodeLine: Boolean = one_encoding(UucodeLine, Array(("0V%T", "Cat".getBytes), (":'1T<#HO+W=W=RYW:6MI<&5D:6$N;W)G#0H","http://www.wikipedia.org\r\n".getBytes)))
 
   def test_binhexCore: Boolean = one_encoding(BinhexCore)
 
