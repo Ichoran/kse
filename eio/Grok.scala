@@ -1098,7 +1098,7 @@ abstract class GrokText extends GrokControl {
     }
   }
 
-  def atTokenEnd: Boolean
+  def inToken: Boolean
   def exact(target: String)(implicit oops: Oops): Unit
   def until(delim: Delimiter)(implicit oops: Oops): String
   def until(delim: DelimByte)(implicit oops: Oops): String
@@ -1107,7 +1107,7 @@ abstract class GrokText extends GrokControl {
 trait Grok {
   def hasNext: Boolean
   def hasPrev: Boolean
-  def atTokenEnd: Boolean
+  def inToken: Boolean
   def skip(implicit oops: Oops): this.type
   def skip(n: Int)(implicit oops: Oops): this.type = { var i = n; while (i>0) { skip; i -= 1}; this }
   def drop(n: Int): this.type = { var i = n; while (i>0 && hasNext) { skip(oopsThrowingRealException); i -= 1}; this }
@@ -1184,7 +1184,7 @@ trait GrokArrayBinaryControl extends GrokArrayControl {
 
 trait GrokArrayTextControl extends GrokArrayControl {
   def setDelimiter(delim: DelimByte): this.type  
-  def atTokenEnd: Boolean
+  def inToken: Boolean
   def until(delim: DelimByte)(implicit oops: Oops): String
   def exact(target: String)(implicit oops: Oops): Unit
 }
@@ -1217,7 +1217,7 @@ object Grok {
     }
     def setDelimiter(delim: Delimiter) = { myDelim = delim; this }
     
-    def atTokenEnd = index >= myLimit || myDelim(s(index))
+    def inToken = index < myLimit && !myDelim(s(index))
     def hasNext = {
       val i = index
       (i < myLimit) && (!myDelim(s(i)) || {
@@ -1229,15 +1229,14 @@ object Grok {
       val i = index-1
       (i > myZero) && (!myDelim(s(i))) || {
         var j = i-1
-        while (j > myZero) {
+        while (j >= myZero) {
           if (!myDelim(s(j))) {
             indexTo(j+1)
             return true
           }
           j -= 1
         }
-        indexTo(j+1)
-        !myDelim(s(j-1))
+        false
       }
     }
     def skip(implicit oops: Oops) = if (hasNext) { skipBlack(s)(myLimit, myDelim); this } else OOPS
@@ -1332,7 +1331,7 @@ object Grok {
       skipWhite(myString)(myLimit, myDelim)
       val ans = rawParseToken(myString)(myLimit, delim)
       if (errorLevel > 1) OOPS
-      if (!atTokenEnd) errorLevel = 1
+      if (inToken) errorLevel = 1
       if (error) OOPS
       ans
     }
@@ -1369,7 +1368,7 @@ object Grok {
     }
     def setDelimiter(delim: DelimByte) = { myDelim = delim; this }
     
-    def atTokenEnd = index >= myLimit || myDelim(s(index))
+    def inToken = index < myLimit && !myDelim(s(index))
     def hasNext = {
       val i = index
       (i < myLimit) && (!myDelim(s(i)) || {
@@ -1501,7 +1500,7 @@ object Grok {
       skipWhiteB(myBytes)(myLimit, myDelim)
       val ans = rawParseTokenB(myBytes)(myLimit, delim)
       if (errorLevel > 1) OOPS
-      if (!atTokenEnd) errorLevel = 1
+      if (inToken) errorLevel = 1
       if (error) OOPS
       new String(ans)
     }
@@ -1520,7 +1519,7 @@ object Grok {
     private[this] var j = start
     private[this] var myEndian = java.nio.ByteOrder.LITTLE_ENDIAN == java.nio.ByteOrder.nativeOrder
     private[this] lazy val myGrok = new GrokText {
-      def atTokenEnd = false
+      def inToken = false
       def exact(target: String)(implicit oops: Oops) { ??? }
       def until(delim: kse.eio.DelimByte)(implicit oops: kse.flow.Oops): String = ???
       def until(delim: kse.eio.Delimiter)(implicit oops: kse.flow.Oops): String = ???
@@ -1541,7 +1540,7 @@ object Grok {
     def indexTo(i: Int) = { j = math.max(myZero, math.min(i, myLimit)); this }
     def resume = this
     
-    def atTokenEnd =  j > myZero
+    def inToken =  j < myLimit
     def hasNext(n: Int) = (j+n) <= myLimit
     def hasPrev(n: Int) = (j-n) >= myZero
     def hasNext = hasNext(1)
