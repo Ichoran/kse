@@ -72,5 +72,19 @@ object Test_Grok extends Test_Kse {
     }
   }
 
+  def test_grok_primitives: Boolean = {
+    val g = Grok("false true a \u2141 \u0000 0 1 -1 127 -128 0 1 -1 32767 -32768 0 1 -1 2147483647 -2147483648 0 1 -1 9223372036854775807 -9223372036854775808 0 1 -1 0.12785183 2e4 2.4e4 Inf NaN 0 1 -1 0.12957135291875189 2e100 2.4e100 -Inf NaN")
+    probably{ implicit oops =>
+      !g.Z && g.Z &&
+      g.C == 'a' && g.C == '\u2141' && g.C == '\u0000' &&
+      g.B == 0 && g.B == 1 && g.B == -1 && g.B == Byte.MaxValue && g.B == Byte.MinValue &&
+      g.S == 0 && g.S == 1 && g.S == -1 && g.S == Short.MaxValue && g.S == Short.MinValue &&
+      g.I == 0 && g.I == 1 && g.I == -1 && g.I == Int.MaxValue && g.I == Int.MinValue &&
+      g.L == 0 && g.L == 1 && g.L == -1 && g.L == Long.MaxValue && g.L == Long.MinValue &&
+      g.F == 0f && g.F == 1f && g.F == -1f && g.F == 0.12785183f && g.F == 2e4 && g.F == 2.4e4 && g.F == Float.PositiveInfinity && g.F.isNaN  &&
+      g.D == 0d && g.D == 1d && g.D == -1d && g.D == 0.12957135291875189 && g.D == 2e100 && g.D == 2.4e100 && g.D == Double.NegativeInfinity && g.D.isNaN
+    }.exists(_ == true)
+  }
+
   def main(args: Array[String]) { typicalMain(args) }
 }

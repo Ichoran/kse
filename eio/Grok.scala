@@ -496,9 +496,9 @@ abstract class GrokText extends GrokControl {
 
   // Returns a Double from digits packed into digA and digB (ndig of them), with a decimal point at the position indicated
   def myDoubleConversion(neg: Boolean, digA: Long, digB: Int, ndig: Int, point: Int): Double = {
-    if (ndig == point && ndig <= 18) digA.toDouble
+    if (ndig == point && ndig <= 18) (if (neg) -digA else digA).toDouble
     else if (point > ndig && point <= 18) {
-      val v = digA * smallPowersOfTen(point - ndig)
+      val v = (if (neg) -digA else digA) * smallPowersOfTen(point - ndig)
       v.toDouble
     }
     else {
@@ -572,14 +572,14 @@ abstract class GrokText extends GrokControl {
     // Handle NaN and the infinities
     if ((s(j) & 0xFFDF) == 'N') {
       if (j+2 >= limit || !((s(j+1) & 0xFFDF) == 'A') || !((s(j+2) & 0xFFDF) == 'N')) { errorLevel = 2; return parseErrorNaN }
-      j += 2
+      j += 3
       if (j < limit && !delim(s(j))) errorLevel = 1
       return Double.NaN
     }
     if ((s(j) & 0xFFDF) == 'I') {
       j += 1
       var k = 1
-      while (j < limit && k < charsInInfinity.length && s(j) == charsInInfinity(k)) { j += 1; k += 1 }
+      while (j < limit && k < charsInInfinity.length && (s(j) & 0xFFDF) == charsInInfinity(k)) { j += 1; k += 1 }
       if (k != 3 && k != charsInInfinity.length) { errorLevel = 2; return parseErrorNaN }
       if (j < limit && !delim(s(j))) errorLevel = 1
       return if (negative) Double.NegativeInfinity else Double.PositiveInfinity
@@ -754,16 +754,16 @@ abstract class GrokText extends GrokControl {
     val j1 = j
     
     // Handle NaN and the infinities
-    if ((s(j) & 0xFFDF) == 'N') {
-      if (j+2 >= limit || !((s(j+1) & 0xFFDF) == 'A') || !((s(j+2) & 0xFFDF) == 'N')) { errorLevel = 2; return parseErrorNaN }
-      j += 2
+    if ((s(j) & 0xDF) == 'N') {
+      if (j+2 >= limit || !((s(j+1) & 0xDF) == 'A') || !((s(j+2) & 0xDF) == 'N')) { errorLevel = 2; return parseErrorNaN }
+      j += 3
       if (j < limit && !delim(s(j))) errorLevel = 1
       return Double.NaN
     }
-    if ((s(j) & 0xFFDF) == 'I') {
+    if ((s(j) & 0xDF) == 'I') {
       j += 1
       var k = 1
-      while (j < limit && k < charsInInfinity.length && s(j) == charsInInfinity(k)) { j += 1; k += 1 }
+      while (j < limit && k < charsInInfinity.length && (s(j) & 0xDF) == charsInInfinity(k)) { j += 1; k += 1 }
       if (k != 3 && k != charsInInfinity.length) { errorLevel = 2; return parseErrorNaN }
       if (j < limit && !delim(s(j))) errorLevel = 1
       return if (negative) Double.NegativeInfinity else Double.PositiveInfinity
@@ -1270,8 +1270,13 @@ object Grok {
       (ans&0xFFFF).toShort
     }
     def C(implicit oops: Oops): Char = {
+      skipWhite(myString)(myLimit, myDelim)
       val i = index
-      if (i < myLimit) myString(i) else OOPS
+      if (i >= myLimit) OOPS
+      else {
+        indexTo(i+1)
+        myString(i)
+      }
     }
     def I(implicit oops: Oops): Int = {
       skipWhite(myString)(myLimit, myDelim)
@@ -1438,6 +1443,7 @@ object Grok {
       (ans&0xFFFF).toShort
     }
     def C(implicit oops: Oops): Char = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
       val ans = rawParseCharB(myBytes)(myLimit)
       if (error) OOPS
       ans
