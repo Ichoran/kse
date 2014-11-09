@@ -539,13 +539,24 @@ abstract class GrokText extends GrokControl {
         v = (v0 >> 1) + (v0&1)
         v0 = (v0 >> 1)
       }
-      if ((w&0x7FFF) >= 0x7FFE) errorLevel = 1  // May not be exact
+      if (w == 0x8000 && (v&1) == 1) v -= 1    // Round to even
       val ex = (0x3FFL - tensToTwos(i-1) + 22 + nz)
+      
+      // Rounding may not agree with choice made by Java algorithm; allow deferral if accuracy is in doubt.
+      if ((w&0x7FFF) == 0x7FFF || (w&0x7FFF) == 0) errorLevel = 1
+        // Table should be accurate to about 25 decimal places
+        // If the binary representation can be stated exactly with 25 decimal places then we are okay.
+        // Otherwise, on close calls we may make the wrong choice and need to defer to the slower Java algorithm.
+        // 25 decimal places will get us numbers with exponents up to 1106 (binary)
+        // Need to think very carefully about how to detect exact binary fractions (and whether we compute them correctly anyway)
+        // Would be good to not defer to exact binary fractions in reasonable range.
+      //println(f"$w%x $v%x $v0%x $ex%x $vA%x $vB%x $vC%x")
+
       val top = (ex << 52) | (if (neg) 0x8000000000000000L else 0)
       if (ex >= 2047) {
         if (neg) Double.NegativeInfinity else Double.PositiveInfinity
       }
-      else if (ex < 0) {
+      else if (ex <= 0) {
         if (ex + 53 <= 0) { if (neg) -0.0 else 0.0 }
         else {
           v = (v0 >> (1-ex)) + ((v0 >> (-ex)) & 1)
@@ -735,7 +746,7 @@ abstract class GrokText extends GrokControl {
     val ans = myDoubleConversion(negative, digA, digB.toInt, ndig, point)
     if (errorLevel > 0) {
       errorLevel = 0
-      try { s.substring(j0,j).toDouble }
+      try { Grok.cumulativeFloatingPointDeferrals += 1; s.substring(j0,j).toDouble }
       catch { case _: NumberFormatException => errorLevel = 2; return parseErrorNaN }
     }
     else ans
@@ -919,7 +930,7 @@ abstract class GrokText extends GrokControl {
     val ans = myDoubleConversion(negative, digA, digB.toInt, ndig, point)
     if (errorLevel == 1) {
       errorLevel = 0
-      try { (new String(s, j0, j-j0)).toDouble }
+      try { Grok.cumulativeFloatingPointDeferrals += 1; (new String(s, j0, j-j0)).toDouble }
       catch { case _: NumberFormatException => errorLevel = 2; return parseErrorNaN }
     }
     else ans
@@ -1190,6 +1201,8 @@ trait GrokArrayTextControl extends GrokArrayControl {
 }
 
 object Grok {
+  var cumulativeFloatingPointDeferrals = 0L
+  
   def apply(s: String): GrokFullDelim = raw(s, 0, s.length, Delimiter.whiteDelimiter)
   def apply(s: String, delimiter: Delimiter): GrokFullDelim = raw(s, 0, s.length, delimiter)
   def apply(s: String, start: Int, limit: Int): GrokFullDelim = raw(s, start, limit, Delimiter.whiteDelimiter)
