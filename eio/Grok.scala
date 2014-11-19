@@ -534,7 +534,7 @@ abstract class GrokText extends GrokControl {
       var v0 = (vA >> nz)
       var v = v0 + ((w >> 15)&1)
       if ((v&0xFFE0000000000000L) != 0) {
-        nz -= 1
+        nz += 1
         w = (w >> 1) + ((v0&1)<<15)
         v = (v0 >> 1) + (v0&1)
         v0 = (v0 >> 1)
@@ -543,14 +543,30 @@ abstract class GrokText extends GrokControl {
       val ex = (0x3FFL - tensToTwos(i-1) + 22 + nz)
       
       // Rounding may not agree with choice made by Java algorithm; allow deferral if accuracy is in doubt.
-      if ((w&0x7FFF) == 0x7FFF || (w&0x7FFF) == 0) errorLevel = 1
-        // Table should be accurate to about 25 decimal places
-        // If the binary representation can be stated exactly with 25 decimal places then we are okay.
-        // Otherwise, on close calls we may make the wrong choice and need to defer to the slower Java algorithm.
-        // 25 decimal places will get us numbers with exponents up to 1106 (binary)
-        // Need to think very carefully about how to detect exact binary fractions (and whether we compute them correctly anyway)
-        // Would be good to not defer to exact binary fractions in reasonable range.
-      //println(f"$w%x $v%x $v0%x $ex%x $vA%x $vB%x $vC%x")
+      if ((w&0x7FFF) == 0x7FFF || (w&0x7FFF) == 0) {
+        var places = ndig - point
+        if (ndig > 13 || (digA%5) != 0 || places > 13 || places < 0) errorLevel = 1
+        else {
+          // Try to catch exact power-of-two fractions in modest ranges
+          // For every power of 2, you get one more digit.
+          // If the reverse is true (ends with N zeros on shl of N bits), it's exact.
+          // To fit the whole calculation in a Long, we need to be able
+          // to represent 20^N (so at most 14 digits).
+          var digX = digA
+          var tenth = digX/10
+          // Would be better to catch trailing zeros in parsing!
+          while (tenth*10 == digX && tenth != 0) {
+            digX = tenth
+            tenth /= 10
+            places -= 1
+          }
+          if (digX - tenth*10 != 5 || places < 0) errorLevel = 1
+          else {
+            val test = (digA << places) % smallPowersOfTen(places)
+            if (test != 0) errorLevel = 1
+          }
+        }
+      }
 
       val top = (ex << 52) | (if (neg) 0x8000000000000000L else 0)
       if (ex >= 2047) {
@@ -746,7 +762,7 @@ abstract class GrokText extends GrokControl {
     val ans = myDoubleConversion(negative, digA, digB.toInt, ndig, point)
     if (errorLevel > 0) {
       errorLevel = 0
-      try { Grok.cumulativeFloatingPointDeferrals += 1; s.substring(j0,j).toDouble }
+      try { s.substring(j0,j).toDouble }
       catch { case _: NumberFormatException => errorLevel = 2; return parseErrorNaN }
     }
     else ans
@@ -930,7 +946,7 @@ abstract class GrokText extends GrokControl {
     val ans = myDoubleConversion(negative, digA, digB.toInt, ndig, point)
     if (errorLevel == 1) {
       errorLevel = 0
-      try { Grok.cumulativeFloatingPointDeferrals += 1; (new String(s, j0, j-j0)).toDouble }
+      try { (new String(s, j0, j-j0)).toDouble }
       catch { case _: NumberFormatException => errorLevel = 2; return parseErrorNaN }
     }
     else ans
@@ -1201,8 +1217,6 @@ trait GrokArrayTextControl extends GrokArrayControl {
 }
 
 object Grok {
-  var cumulativeFloatingPointDeferrals = 0L
-  
   def apply(s: String): GrokFullDelim = raw(s, 0, s.length, Delimiter.whiteDelimiter)
   def apply(s: String, delimiter: Delimiter): GrokFullDelim = raw(s, 0, s.length, delimiter)
   def apply(s: String, start: Int, limit: Int): GrokFullDelim = raw(s, start, limit, Delimiter.whiteDelimiter)

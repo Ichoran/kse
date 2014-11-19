@@ -96,14 +96,15 @@ object Test_Grok extends Test_Kse {
     }
     val rng = new scala.util.Random(189516)
     probably{ implicit oops =>
-      (Double.MaxValue :: (-Double.MaxValue) :: Double.MinValue :: -Double.MinValue :: List.fill(200000)(math.pow(rng.nextDouble - 0.5,rng.nextInt(614)-307))).filter(x => !x.isNaN && !x.isInfinity).forall{ d =>
-        val s = if (rng.nextBoolean) f"$d%.8e" else f"$d%.16e"
+      (Double.MaxValue :: (-Double.MaxValue) :: Double.MinValue :: -Double.MinValue :: List.fill(2000)(math.pow(rng.nextDouble - 0.5,rng.nextInt(614)-307))).filter(x => !x.isNaN && !x.isInfinity).forall{ d =>
+        val s = if (rng.nextBoolean) f"$d%.10e" else f"$d%.20e"
         val pre = s.takeWhile(_ != 'e')
         val e = s.drop(pre.length)
         transitionally(pre, e, Nil, 20).map(x => (x._1+e, x._2+e)).reverse.forall{ case (a,b) =>
           (a.toDouble == Grok(a).D && b.toDouble == Grok(b).D).tap(x => if (!x) println(s"$a $b"))
         }
-      }
+      } &&
+      Iterator.continually(rng.nextDouble).take(10000).forall{ d => val s = "%.18f".format(d); (s.toDouble == Grok(s).D).tap(x => if (!x) println(s)) }
     }.exists(_ == true)
   }
 
