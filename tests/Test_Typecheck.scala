@@ -7,11 +7,11 @@ object Test_Typecheck extends Test_Kse {
   trait T {}
   trait U {}
 
-  def f2[T: Union2[Int, String]#Check](t: T) = t match { case i: Int => i; case s: String => s.length }
-  def f3[T: Union3[Int, String, Float]#Check](t: T) = t match { case i: Int => i; case s: String => s.length; case f: Float => math.ceil(f).toInt }
-  def f4[T: Union4[Int, String, Float, Char]#Check](t: T) =
+  def f2[T: Union2[Int, String]#Apply](t: T) = t match { case i: Int => i; case s: String => s.length }
+  def f3[T: Union3[Int, String, Float]#Apply](t: T) = t match { case i: Int => i; case s: String => s.length; case f: Float => math.ceil(f).toInt }
+  def f4[T: Union4[Int, String, Float, Char]#Apply](t: T) =
     t match { case i: Int => i; case s: String => s.length; case f: Float => math.ceil(f).toInt; case c: Char => if (c.isDigit) c-'0' else -1 }
-  def f5[T: Union5[Int, String, Float, Char, Unit]#Check](t: T) =
+  def f5[T: Union5[Int, String, Float, Char, Unit]#Apply](t: T) =
     t match { case i: Int => i; case s: String => s.length; case f: Float => math.ceil(f).toInt; case c: Char => if (c.isDigit) c-'0' else -1; case _: Unit => 0 }
 
   def test_Union2 = f2(1) == 1 && f2("fish") == 4
