@@ -22,7 +22,8 @@ Kse.jar : \
   kse/coll/Mopt.class \
   kse/eio/base64/Base64.class \
   kse/eio/base64/package.class \
-  kse/eio/Grok.class
+  kse/eio/Grok.class \
+  kse/eio/package.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
 kse/typecheck/package.class : \
@@ -70,13 +71,20 @@ kse/eio/Grok.class : \
   eio/Grok.scala
 	${F} eio/Grok.scala
 
+kse/eio/package.class : \
+  kse/flow/Ok.class \
+  kse/flow/Hop.class \
+  kse/flow/package.class \
+  eio/Eio.scala
+	${F} eio/Eio.scala
+
 clean :
 	${F} -shutdown
 	rm -r ${KSE_JAR_PATH} api
 
 docs :
 	mkdir -p api
-	${D} tpck/Typecheck.scala flow/Ok.scala flow/Hop.scala flow/Flow.scala coll/Packed.scala eio/Base64.scala eio/Grok.scala
+	${D} tpck/Typecheck.scala flow/Ok.scala flow/Hop.scala flow/Flow.scala coll/Packed.scala coll/Coll.scala eio/Base64.scala eio/Grok.scala eio/Eio.scala
 	tar czf kse-api.tar.gz api
 
 test : \
