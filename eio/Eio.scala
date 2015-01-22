@@ -1,12 +1,17 @@
 package kse
 
+import scala.annotation.tailrec
 import scala.util._
 import scala.util.control.NonFatal
+import scala.util.control.Breaks._
+
+import kse.typecheck._
 import kse.flow._
 
 package object eio {
   import java.io._
   import java.nio._
+  import java.util.zip._
   
   object \: {
     def unapply(f: File): Option[(File, File)] = {
@@ -49,6 +54,14 @@ package object eio {
     def \:(parent: File) = {
       if (underlying.isAbsolute) new File(parent, underlying.getName)
       else new File(parent, underlying.getPath)
+    }
+    
+    def parent = Option(underlying.getParentFile)
+    
+    def name = underlying.getName
+    def nameFn(f: String => String) = {
+      val p = underlying.getParentFile
+      if (p == null) new File(f(underlying.getName)) else new File(p, f(underlying.getName))
     }
     
     def ext = underlying match { case _ % x => x; case _ => "" }
@@ -99,5 +112,60 @@ package object eio {
       catch { case oome: OutOfMemoryError => fail(s"Out of memory reading ${underlying.getPath}") }
       finally { try { src.close } catch { case t if NonFatal(t) => } }
     }
+    
+    def walk[T: Union3[File => Unit, (File, Option[ZipEntry]) => Unit, (File, Option[ZipEntry], Array[Byte]) => Unit]#Apply](
+      act: T, pick: File => Boolean, deeper: (File, Boolean) => Boolean, canonize: Boolean, unzip: Option[(File, ZipEntry) => Boolean]
+    ) {
+      val seen = new collection.mutable.AnyRefMap[File, Unit]()
+      val unit: Unit = ()
+      var pending = underlying :: Nil
+      @tailrec def inner() {
+        pending match {
+          case f :: rest =>
+            pending = rest
+            val exists = try { f.exists } catch { case t if NonFatal(t) => false }
+            if (exists) safeOption(f.getCanonicalFile) match {
+              case Some(cf) if (!(seen contains cf)) =>
+                seen += cf -> unit
+                val g = if (canonize) cf else f
+                val p = try { pick(g) } catch { case t if NonFatal(t) => false }
+                if (p) (act: @unchecked) match {
+                  case op: Function1[File @unchecked, Unit @unchecked] => op(g)
+                  case op: Function2[File @unchecked, Option[ZipEntry @unchecked] @unchecked, Unit @unchecked] => op(g, None)
+                  case op: Function3[File @unchecked, Option[ZipEntry @unchecked] @unchecked, Array[Byte] @unchecked, Unit @unchecked] => (new FileShouldDoThis(g)).gulp match {
+                    case Yes(a) => op(g, None, a)
+                    case _ =>
+                  }
+                }
+                val dir = try { g.isDirectory } catch { case t if NonFatal(t) => false }
+                if (dir && { try { deeper(g,p) } catch { case t if NonFatal(t) => false } }) {
+                  val children = g.listFiles.sortBy(_.getName)
+                  var i = children.length
+                  while (i > 0) {
+                    i -= 1
+                    pending = children(i) :: pending
+                  }
+                }
+              case _ =>
+            }
+            inner()
+          case Nil =>
+        }
+      }
+      inner()
+    }
+    
+    def tree(
+      pick: File => Boolean = f => !f.isDirectory && !f.getName.startsWith("."),
+      deeper: (File, Boolean) => Boolean = (f,b) => !b && { val n = f.getName; !n.startsWith(".") || n == "." || n == ".." },
+      canonize: Boolean = false
+    ): Array[File] = {
+      val picked = Array.newBuilder[File]
+      walk((f: File) => { picked += f; () }, pick, deeper, canonize, None)
+      picked.result()
+    }
   }
+}
+
+package eio {
 }
