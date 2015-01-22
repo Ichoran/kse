@@ -176,6 +176,21 @@ package coll {
     def apply[A <: AnyRef](oa: Option[A]) = { val m = new MoptAny[A]; if (oa.isDefined) { m := oa.get }; m }
     def empty[@specialized A](implicit iv: ImplicitValue[Mopt[A], Mopt.type]) = iv.value
   }
+  
+  trait Stepper[@specialized A] { self =>
+    def step(f: A => Unit): Boolean
+    def foreach[U](f: A => U) {
+      while(step(a => { f(a); () })) {}
+    }
+    def filter(p: A => Boolean) = new Stepper[A] {
+      def step(f: A => Unit): Boolean = {
+        var good = false
+        while (self.step(a => if ({ good = p(a); good }) f(a)) && !good) {}
+        good
+      }
+    }
+    def withFilter(p: A => Boolean) = filter(p)
+  }
 }
 
 package object coll {
