@@ -113,8 +113,12 @@ package object eio {
       finally { try { src.close } catch { case t if NonFatal(t) => } }
     }
     
-    def walk[T: Union3[File => Unit, (File, Option[ZipEntry]) => Unit, (File, Option[ZipEntry], Array[Byte]) => Unit]#Apply](
-      act: T, pick: File => Boolean, deeper: (File, Boolean) => Boolean, canonize: Boolean, unzip: Option[(File, ZipEntry) => Boolean]
+    def walk(
+      act: Ok[(File, Option[ZipEntry]) => Unit, (File, Option[ZipEntry], Option[Array[Byte]]) => Unit],
+      pick: File => Boolean,
+      deeper: (File, Boolean) => Boolean,
+      canonize: Boolean,
+      unzip: Option[(File, ZipEntry) => Boolean]
     ) {
       val seen = new collection.mutable.AnyRefMap[File, Unit]()
       val unit: Unit = ()
@@ -129,15 +133,16 @@ package object eio {
                 seen += cf -> unit
                 val g = if (canonize) cf else f
                 val p = try { pick(g) } catch { case t if NonFatal(t) => false }
-                if (p) (act: @unchecked) match {
-                  case op: Function1[File @unchecked, Unit @unchecked] => op(g)
-                  case op: Function2[File @unchecked, Option[ZipEntry @unchecked] @unchecked, Unit @unchecked] => op(g, None)
-                  case op: Function3[File @unchecked, Option[ZipEntry @unchecked] @unchecked, Array[Byte] @unchecked, Unit @unchecked] => (new FileShouldDoThis(g)).gulp match {
-                    case Yes(a) => op(g, None, a)
+                val dir = try { g.isDirectory } catch { case t if NonFatal(t) => false }
+                if (p) act match {
+                  case No(op) => op(g, None)
+                  case Yes(op) => 
+                    if (!dir) op(g, None, None)
+                    else (new FileShouldDoThis(g)).gulp match {
+                    case Yes(a) => op(g, None, Some(a))
                     case _ =>
                   }
                 }
-                val dir = try { g.isDirectory } catch { case t if NonFatal(t) => false }
                 if (dir && { try { deeper(g,p) } catch { case t if NonFatal(t) => false } }) {
                   val children = g.listFiles.sortBy(_.getName)
                   var i = children.length
@@ -161,7 +166,7 @@ package object eio {
       canonize: Boolean = false
     ): Array[File] = {
       val picked = Array.newBuilder[File]
-      walk((f: File) => { picked += f; () }, pick, deeper, canonize, None)
+      walk(No((f,_) => { picked += f; () }), pick, deeper, canonize, None)
       picked.result()
     }
   }
