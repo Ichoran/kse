@@ -7,12 +7,84 @@ import scala.util.control.Breaks._
 
 import kse.typecheck._
 import kse.flow._
+import kse.coll._
 
 package object eio {
   import java.io._
   import java.nio._
   import java.util.zip._
   
+  implicit class ConvertSafelyFromByte(private val underlying: Byte) extends AnyVal {
+    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def inShort = underlying.toShort
+    def inUShort = (underlying & 0xFF).toShort
+    def inInt = underlying.toInt
+    def inUInt = (underlying & 0xFF)
+    def inLong = underlying.toLong
+    def inULong = (underlying & 0xFF).toLong
+    def inFloat = underlying.toFloat
+    def inDouble = underlying.toDouble
+  }
+  
+  implicit class ConvertSafelyFromShort(private val underlying: Short) extends AnyVal {
+    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def inByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
+    def inUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
+    def inInt = underlying.toInt
+    def inUInt = (underlying & 0xFFFF)
+    def inLong = underlying.toLong
+    def inULong = (underlying & 0xFFFF).toLong
+    def inFloat = underlying.toFloat
+    def inDouble = underlying.toDouble
+  }
+  
+  implicit class ConvertSafelyFromInt(private val underlying: Int) extends AnyVal {
+    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def inByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
+    def inUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
+    def inShort(implicit oops: Oops) = if (underlying < Short.MinValue || underlying > Short.MaxValue) OOPS else underlying.toShort
+    def inUShort(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFF) OOPS else underlying.toShort
+    def inLong = underlying.toLong
+    def inULong = (underlying & 0xFFFFFFFFL)
+    def inFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toInt != underlying) OOPS else f }
+    def inDouble = underlying.toDouble
+  }
+  
+  implicit class ConvertSafelyFromLong(private val underlying: Long) extends AnyVal {
+    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def inByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
+    def inUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
+    def inShort(implicit oops: Oops) = if (underlying < Short.MinValue || underlying > Short.MaxValue) OOPS else underlying.toShort
+    def inUShort(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFF) OOPS else underlying.toShort
+    def inInt(implicit oops: Oops) = if (underlying < Int.MinValue || underlying > Int.MaxValue) OOPS else underlying.toInt
+    def inUInt(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFFFFFFL) OOPS else underlying.toInt
+    def inFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toLong != underlying) OOPS else f }
+    def inDouble(implicit oops: Oops) = { val d = underlying.toDouble; if (d.toLong != underlying) OOPS else d }
+  }
+  
+  implicit class ConvertSafelyFromFloat(private val underlying: Float) extends AnyVal {
+    def inByte(implicit oops: Oops) = { val b = math.rint(underlying).toByte; if (b.toFloat != underlying) OOPS else b }
+    def inUByte(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFF) != underlying) OOPS else (i & 0xFF).toByte }
+    def inShort(implicit oops: Oops) = { val s = math.rint(underlying).toShort; if (s.toFloat != underlying) OOPS else s }
+    def inUShort(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFFFF) != underlying) OOPS else (i & 0xFFFF).toShort }
+    def inInt(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if (i.toFloat != underlying) OOPS else i }
+    def inUInt(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if ((l & 0xFFFFFFFFL) != underlying) OOPS else (l & 0xFFFFFFFFL).toInt }
+    def inLong(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if (l.toFloat != underlying) OOPS else l }
+    def inDouble = underlying.toDouble
+  }
+  
+  implicit class ConvertSafelyFromDouble(private val underlying: Double) extends AnyVal {
+    def inByte(implicit oops: Oops) = { val b = math.rint(underlying).toByte; if (b.toDouble != underlying) OOPS else b }
+    def inUByte(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFF) != underlying) OOPS else (i & 0xFF).toByte }
+    def inShort(implicit oops: Oops) = { val s = math.rint(underlying).toShort; if (s.toDouble != underlying) OOPS else s }
+    def inUShort(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFFFF) != underlying) OOPS else (i & 0xFFFF).toShort }
+    def inInt(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if (i.toDouble != underlying) OOPS else i }
+    def inUInt(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if ((l & 0xFFFFFFFFL) != underlying) OOPS else (l & 0xFFFFFFFFL).toInt }
+    def inLong(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if (l.toDouble != underlying) OOPS else l }
+    def inFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toDouble != underlying) OOPS else f }
+  }
+  
+
   object \: {
     def unapply(af: Array[File]): Option[(File, Array[File])] = {
       if (af.length == 0) None
@@ -130,6 +202,40 @@ package object eio {
       case _ => new File(f(underlying.getName))
     }
     
+    def relativize(absolutes: Array[File]): Ok[Vector[String], Array[File]] = {
+      val af = try { underlying.getAbsoluteFile } catch { case t if NonFatal(t) => return No(Vector("Could not find absolute form of root " + underlying.getPath)) }
+      val cf = try { af.getCanonicalFile } catch { case t if NonFatal(t) => return No(Vector("Could not find canonical form of root " + af.getPath)) }
+      val up = underlying.getPath
+      val ap = af.getPath
+      val cp = cf.getPath
+      val wrongs = Vector.newBuilder[String]
+      val rights = Array.newBuilder[File]
+      def clip(h: File, xp: String): Option[File] = {
+        val hp = h.getPath
+        if (hp startsWith xp) {
+          if (hp.length < xp.length + 2) None
+          else Some(new File(hp.substring(xp.length+1)))
+        }
+        else None
+      }
+      absolutes.foreach{ g =>
+        okay[String]{ fail =>
+          clip(g, up).getOrElse {
+            val ag = try { g.getAbsoluteFile } catch { case t if NonFatal(t) => fail("Could not find absolute form of " + g.getPath) }
+            clip(ag, ap).getOrElse {
+              val cg = try { ag.getCanonicalFile } catch { case t if NonFatal(t) => fail("Could not find canonical form of " + ag.getPath) }
+              clip(cg, cp).getOrElse{ fail(s"$cp is not a root for $cg") }
+            }
+          }
+        } match {
+          case Yes(x) => rights += x
+          case No(e) => wrongs += e
+        }
+      }
+      val w = wrongs.result()
+      if (w.nonEmpty) No(w) else Yes(rights.result())
+    }
+    
     def gulp: Ok[String, Array[Byte]] = okay[String]{ fail =>
       if (underlying.isDirectory) fail(s"${underlying.getPath} is a directory")
       val sz = try { underlying.length } catch { case t if NonFatal(t) => fail(s"Could not read length of ${underlying.getPath}") }
@@ -203,7 +309,7 @@ package object eio {
                       var i = 0
                       var zeros = 0
                       while (i < 8192 && zeros < 4 && k >= 0) {
-                        k = zis.read(bufi, i, buf.length - i)
+                        k = zis.read(bufi, i, bufi.length - i)
                         if (k > 0) {
                           zeros = 0
                           i += k
@@ -252,7 +358,7 @@ package object eio {
               catch {
                 case soe: StackOverflowError => log("Stack overflow while recursing into " + myName); false
                 case oome: OutOfMemoryError => log("Not enough memory to recurse into " + myName); false
-                case t if NonFatal(t) => log("Unable to extract zip entry " + myName); false
+                case t if NonFatal(t) => log("Unable to extract zip entry " + myName + " because " + exceptionAsString(t)); false
               }
             }
           }
@@ -348,6 +454,13 @@ package object eio {
     }
   }
   
+  implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
+    def toFile(f: File) {
+      val p = new java.io.PrintWriter(f)
+      try { underlying.foreach(p.println) } finally { p.close() }
+    }
+  }
+  
   private[eio] def exceptionAsString(t: Throwable) = t.getClass.getName + ": " + Option(t.getMessage).getOrElse("") + "; " + t.getStackTrace.take(2).mkString("; ")
 }
 
@@ -372,6 +485,38 @@ package eio {
     def apply(p: String => Boolean): File => Stance = f => files(f) match {
       case Select if (!p(f.getName)) => Reject
       case x => x
+    }
+  }
+  
+  object Args {
+    class OptionSource(val options: Array[String]) {
+      val ops = collection.mutable.AnyRefMap[String, List[String]]()
+      options.reverse.foreach(o => (if (o.startsWith("--")) o.drop(2) else o.drop(1)) fn { s =>
+        val i = s.indexOf('=')
+        if (i < 0) ops += s -> ("" :: ops.getOrElse(s, Nil))
+        else {
+          val k = s.take(i)
+          ops += k -> (s.drop(i+1) :: ops.getOrElse(k, Nil))
+        }
+      })
+      def has(s: String): Boolean = {
+        ops.get(s) match {
+          case Some(x :: more) => if (more.isEmpty) ops -= s else ops += s -> more; true
+          case _ => false
+        }
+      }
+      def get(s: String): Option[String] = {
+        ops.get(s).flatMap{ _ match {
+          case x :: more => if (more.isEmpty) ops -= s else ops += s -> more; Some(x)
+          case _ => None
+        }}
+      }
+    }
+    
+    def apply(args: Array[String]): (Array[String], OptionSource) = {
+      val i = args.indexWhere(_ == "--")
+      if (i < 0) args.partition(a => !a.startsWith("-")) _2Fn ( x => new OptionSource(x) )
+      else args.take(i).partition(a => !a.startsWith("-")) eachFn (_ ++ args.drop(i+1), x => new OptionSource(x))
     }
   }
 }

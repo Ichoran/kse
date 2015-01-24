@@ -5,7 +5,11 @@ import scala.util._
 import kse.flow._
 
 object Test_Flow extends Test_Kse {
-  def test_Flow_Option = probably{ implicit oops => Option("fish").grab } == Some("fish") && probably { implicit oops => Option[String](null).grab } == None
+  def test_Flow_Option =
+    probably { implicit oops => Option("fish").grab } == Some("fish") &&
+    probably { implicit oops => Option[String](null).grab } == None &&
+    okay[Boolean] { implicit hop => Option("fish").orHop(true) } == Yes("fish") &&
+    okay[Boolean] { implicit hop => Option[String](null).orHop(true) } == No(true)
 
   def test_Flow_Try = {
     val s = Try{ 1 / 1 }

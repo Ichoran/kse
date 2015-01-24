@@ -21,6 +21,8 @@ package object flow extends LowPriorityOkValidation {
   implicit class OptionCanHop[A](private val underlying: Option[A]) extends AnyVal {
     /** Retrieve the value from this option or throw an `Oops` otherwise. */
     @inline def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops()
+    /** Retrieve the value from this option or hop with specified value. */
+    @inline def orHop[B](default: => B)(implicit hop: HopWith[B]): A = underlying match { case Some(a) => a; case None => hop(default) }
     /** Convert to [[Ok]] with `Unit` for the disfavored branch. */
     @inline def toOk: Ok[Unit, A] = underlying match { case Some(a) => Yes(a); case _ => Ok.UnitNo }
   }
@@ -192,6 +194,7 @@ package object flow extends LowPriorityOkValidation {
   
   /** Do something with a side-effect, ignoring any `Oops` that is thrown (aside from it short-circuiting execution). */
   def oopslessDo[U](f: => U)(implicit oops: Oops): Unit = try { f; () } catch { case t if t eq oops => }
+  
 
   /** Get an `Oops` to use in a block of code.
     * It is your responsibility not to store the `Oops` or pass it to another thread.
@@ -367,6 +370,10 @@ package object flow extends LowPriorityOkValidation {
   
   /** Constructs an [[Ok]] by catching any uses of a pre-existing `Hop` for the `No` case. */
   def okayHere[N,Y](yes: Hop[N] => Y)(implicit hop: Hop[N]): Ok[N,Y] = try { Yes(yes(hop)) } catch { case t if t eq hop => No(hop.value) }
+  
+  def hopOops[N,Y](no: => N)(f: Oops => Y)(implicit hop: HopWith[N]): Y = probablyOr(hop(no))(f)
+  
+  def rehop[M, N, Y](no: M => N)(f: HopWith[M] => Y)(implicit hop: HopWith[N]): Y = f(new HopWith[M] { def apply(m: M) = hop(no(m)) })
   
   /** Assists with creating custom validators for [[Ok]]s. */
   trait ValidateDispatcher[N] { def apply[Y](f: HopView[Seq[N]] with Ok.ValidateOkay[N] => Y): Ok[Seq[N],Y] }

@@ -1007,6 +1007,19 @@ abstract class GrokText extends GrokControl {
   }
   
   
+  def rawParseTail(s: String)(limit: Int = s.length): String = {
+    errorLevel = if (j >= limit) 1 else 0
+    val i = j
+    j = limit
+    s.substring(i, limit)
+  }
+  def rawParseTailB(s: Array[Byte])(limit: Int = s.length): Array[Byte] = {
+    errorLevel = if (j >= limit) 1 else 0
+    val i = j
+    j = limit
+    java.util.Arrays.copyOfRange(s, i, limit)
+  }
+  
   def rawParseCodePoint(s: String)(limit: Int = s.length): Int = {
     if (j >= limit) { errorLevel = 2; return 0x80000000 }
     val c = s(j).toInt
@@ -1159,9 +1172,11 @@ trait Grok {
   def C(implicit oops: Oops): Char
   def I(implicit oops: Oops): Int
   def L(implicit oops: Oops): Long
+  def X(implicit oops: Oops): Long
   def F(implicit oops: Oops): Float
   def D(implicit oops: Oops): Double
   def tok(implicit oops: Oops): String
+  def tail(implicit oops: Oops): String
   def quoted(implicit oops: Oops): String
   def base64(coder: kse.eio.base64.Base64)(implicit oops: Oops): Array[Byte] = coder.decode(tok)
   def until(delim: Delimiter)(implicit oops: Oops): String
@@ -1175,6 +1190,7 @@ trait Grok {
   def tapC[A](f: Char => A)(implicit oops: Oops): this.type = { f(C); this }
   def tapI[A](f: Int => A)(implicit oops: Oops): this.type = { f(I); this }
   def tapL[A](f: Long => A)(implicit oops: Oops): this.type = { f(L); this }
+  def tapX[A](f: Long => A)(implicit oops: Oops): this.type = { f(X); this }
   def tapF[A](f: Float => A)(implicit oops: Oops): this.type = { f(F); this }
   def tapD[A](f: Double => A)(implicit oops: Oops): this.type = { f(D); this }
   def tapTok[A](f: String => A)(implicit oops: Oops): this.type = { f(tok); this }
@@ -1193,6 +1209,7 @@ trait GrokFullDelim extends Grok {
   def getCs(a: Array[Char], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = C; i += 1 }; this }
   def getIs(a: Array[Int], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = I; i += 1 }; this }
   def getLs(a: Array[Long], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = L; i += 1 }; this }
+  def getXs(a: Array[Long], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = X; i += 1 }; this }
   def getFs(a: Array[Float], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = F; i += 1 }; this }
   def getDs(a: Array[Double], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = D; i += 1 }; this }
   def getToks(a: Array[String], offset: Int, count: Int)(implicit oops: Oops): this.type = { var i=offset; val n = offset+count; while (i<n) { a(i) = tok; i += 1 }; this }
@@ -1328,6 +1345,12 @@ object Grok {
       if (error) OOPS
       ans
     }
+    def X(implicit oops: Oops): Long = {
+      skipWhite(myString)(myLimit, myDelim)
+      val ans = rawParseULong(myString, 16)(myLimit, myDelim)
+      if (error) OOPS
+      ans
+    }
     def F(implicit oops: Oops): Float = {
       skipWhite(myString)(myLimit, myDelim)
       val ans = rawParseDouble(myString)(myLimit, myDelim)
@@ -1343,6 +1366,12 @@ object Grok {
     def tok(implicit oops: Oops): String = {
       skipWhite(myString)(myLimit, myDelim)
       val ans = rawParseToken(myString)(myLimit, myDelim)
+      if (error) OOPS
+      ans
+    }
+    def tail(implicit oops: Oops): String = {
+      skipWhite(myString)(myLimit, myDelim)
+      val ans = rawParseTail(myString)(myLimit)
       if (error) OOPS
       ans
     }
@@ -1498,6 +1527,12 @@ object Grok {
       if (error) OOPS
       ans
     }
+    def X(implicit oops: Oops): Long = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseULongB(myBytes, 16)(myLimit, myDelim)
+      if (error) OOPS
+      ans
+    }
     def F(implicit oops: Oops): Float = {
       skipWhiteB(myBytes)(myLimit, myDelim)
       val ans = rawParseDoubleB(myBytes)(myLimit, myDelim)
@@ -1513,6 +1548,12 @@ object Grok {
     def tok(implicit oops: Oops): String = {
       skipWhiteB(myBytes)(myLimit, myDelim)
       val ans = rawParseTokenB(myBytes)(myLimit, myDelim)
+      if (error) OOPS
+      new String(ans)
+    }
+    def tail(implicit oops: Oops): String = {
+      skipWhiteB(myBytes)(myLimit, myDelim)
+      val ans = rawParseTailB(myBytes)(myLimit)
       if (error) OOPS
       new String(ans)
     }
@@ -1620,6 +1661,7 @@ object Grok {
       j += 8
       ans
     }
+    @inline def X(implicit oops: Oops) = L
     @inline def F(implicit oops: Oops) = java.lang.Float.intBitsToFloat(I(oops))
     @inline def D(implicit oops: Oops) = java.lang.Double.longBitsToDouble(L(oops))
     def tok(implicit oops: Oops) = {
@@ -1629,6 +1671,7 @@ object Grok {
       j = math.min(myLimit, k+1)
       ans
     }
+    def tail(implicit oops: Oops) = tok
     def quoted(implicit oops: Oops) = {
       val ans = myGrok.resume.indexTo(j).rawParseStringB(myBytes)(myLimit)
       if (myGrok.error) OOPS

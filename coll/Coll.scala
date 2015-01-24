@@ -3,6 +3,8 @@
 
 package kse
 
+import scala.language.implicitConversions
+
 import kse.typecheck._
 import kse.flow._
 
@@ -34,6 +36,19 @@ package coll {
     def apply[T,U](t: T)(gen: T => U) = new Soft(t)(gen)
   }
   
+  /** Hides data from case classes */
+  class Mute[A](val value: A) {
+    override def toString = "..."
+    override def hashCode = 1239182
+    override def equals(a: Any) = a match {
+      case _: Mute[_] => true
+      case _ => false
+    }
+  }
+  object Mute {
+    def apply[A](a: A) = new Mute(a)
+  }
+  
   
   /** Provides Option-like capabilities, but mutably. */
   sealed abstract class Mopt[@specialized A] {
@@ -53,7 +68,7 @@ package coll {
     final def grab(implicit oops: Oops) = if (ok) value else OOPS
     final def getOr(a: => A) = if (ok) value else a
     final def getOrSet(a: => A) = { if (!ok) { value = a; ok = true }; value }
-    final def get = if (ok) value else throw new java.util.NoSuchElementException("Mopt")
+    final def get = if (ok) value else throw new NoSuchElementException("Mopt")
 
     final def xform(f: A => A): this.type = { if (ok) { value = f(value) }; this }
     final def tap(f: A => Unit): this.type = { if (ok) { f(value) }; this }
@@ -194,6 +209,8 @@ package coll {
 }
 
 package object coll {
+  implicit def unmuteAnythingMuted[A](mute: Mute[A]) = mute.value
+  
   implicit val unitMoptInstanceProvider = new ImplicitValue[Mopt[Unit], Mopt.type] { def value = new Mopt.MoptUnit }
   implicit val booleanMoptInstanceProvider = new ImplicitValue[Mopt[Boolean], Mopt.type] { def value = new Mopt.MoptBoolean }
   implicit val byteMoptInstanceProvider = new ImplicitValue[Mopt[Byte], Mopt.type] { def value = new Mopt.MoptByte }
@@ -225,7 +242,7 @@ package object coll {
     @inline def _2Is(value: B) = (underlying._1, value)
     @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2)
     @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2))
-    @inline def eachFn[Y,Z](f: A => Y)(g: B => Z) = (f(underlying._1), g(underlying._2))
+    @inline def eachFn[Y,Z](f: A => Y, g: B => Z) = (f(underlying._1), g(underlying._2))
     @inline def fold[Z](f: (A,B) => Z) = f(underlying._1, underlying._2)
     @inline def also[Z](f: (A,B) => Z) = (underlying._1, underlying._2, f(underlying._1, underlying._2))
     @inline def _without1 = underlying._2
@@ -243,7 +260,7 @@ package object coll {
     @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3)
     @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3)
     @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3))
-    @inline def eachFn[A1, B1, C1](f: A => A1)(g: B => B1)(h: C => C1) = (f(underlying._1), g(underlying._2), h(underlying._3))
+    @inline def eachFn[A1, B1, C1](f: A => A1, g: B => B1, h: C => C1) = (f(underlying._1), g(underlying._2), h(underlying._3))
     @inline def fold[Z](f: (A,B,C) => Z) = f(underlying._1, underlying._2, underlying._3)
     @inline def also[Z](f: (A,B,C) => Z) = (underlying._1, underlying._2, underlying._3, fold(f))
     @inline def _without1 = (underlying._2, underlying._3)
@@ -264,7 +281,7 @@ package object coll {
     @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4)
     @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4)
     @inline def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4))
-    @inline def eachFn[A1, B1, C1, D1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4))
+    @inline def eachFn[A1, B1, C1, D1](f: A => A1, g: B => B1, h: C => C1, i: D => D1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4))
     @inline def fold[Z](f: (A,B,C,D) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4)
     @inline def also[Z](f: (A,B,C,D) => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, fold(f))
     @inline def _without1 = (underlying._2, underlying._3, underlying._4)
@@ -288,7 +305,7 @@ package object coll {
     @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4, underlying._5)
     @inline def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4), underlying._5)
     @inline def _5Fn[Z](f: E => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, f(underlying._5))
-    @inline def eachFn[A1, B1, C1, D1, E1](f: A => A1)(g: B => B1)(h: C => C1)(i: D => D1)(j: E => E1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4), j(underlying._5))
+    @inline def eachFn[A1, B1, C1, D1, E1](f: A => A1, g: B => B1, h: C => C1, i: D => D1, j: E => E1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4), j(underlying._5))
     @inline def fold[Z](f: (A,B,C,D,E) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4, underlying._5)
     @inline def _without1 = (underlying._2, underlying._3, underlying._4, underlying._5)
     @inline def _without2 = (underlying._1, underlying._3, underlying._4, underlying._5)
