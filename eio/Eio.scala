@@ -153,9 +153,12 @@ package object eio {
         case fi % _ => fi
         case _ => underlying
       }
-      val p0 = f0.getParentFile
-      val name = f0.getName + "." + ext
-      if (p0 == null) new File(name) else new File(p0, name)
+      if (ext == null) f0
+      else {
+        val p0 = f0.getParentFile
+        val name = f0.getName + "." + ext
+        if (p0 == null) new File(name) else new File(p0, name)
+      }
     }
     
     def \:(parent: File) = {
@@ -163,6 +166,7 @@ package object eio {
       else new File(parent, underlying.getPath)
     }
     
+    def canon = underlying.getCanonicalFile
     def parent = Option(underlying.getParentFile)
     
     def path = underlying.getPath
@@ -452,7 +456,27 @@ package object eio {
       val v = log.result()
       if (v.nonEmpty) No(v) else Yes(picked.result())
     }
+
+    def createParents() {
+      var p = canon.getParentFile
+      var ps = List.empty[File]
+      while (p != null && !p.exists) { ps = p :: ps; p = p.getParentFile }
+      ps.foreach(pi =>
+        if (!pi.mkdir) throw new IOException("Unable to create parent directory " + pi.getPath)
+      )
+    }
+    
+    def copyTo(target: File) {
+      val fis = new java.io.FileInputStream(underlying)
+      try {
+        val fos = new java.io.FileOutputStream(target)
+        try { fos.getChannel.transferFrom(fis.getChannel, 0, Long.MaxValue ) }
+        finally { fos.close }
+      }
+      finally { fis.close }
+    }
   }
+  
   
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
     def toFile(f: File) {
@@ -511,6 +535,8 @@ package eio {
           case _ => None
         }}
       }
+      def peek = ops.toArray.flatMap{ case (k,v) => v.map(x => if (x.nonEmpty) "-" + k + "=" + x else "-" + k) }.sorted
+      def isEmpty = ops.forall{ case (k,v) => v.isEmpty }
     }
     
     def apply(args: Array[String]): (Array[String], OptionSource) = {
