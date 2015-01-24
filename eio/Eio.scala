@@ -248,13 +248,16 @@ package object eio {
         val buf = try { new Array[Byte](sz.toInt) } catch { case oome: OutOfMemoryError => fail(s"Not enough memory to read ${underlying.getPath}") }
         val fis = new FileInputStream(underlying)
         try {
-          val fc = fis.getChannel
-          val bb = java.nio.ByteBuffer.wrap(buf)
+          var i = 0
           var ret = 0
           var zeros = 0
-          while (bb.hasRemaining && ret != -1 && zeros < 4) {
-            ret = fc.read(bb)
-            if (ret > 0) zeros = 0 else zeros += 1
+          while (i < buf.length && ret != -1 && zeros < 4) {
+            ret = fis.read(buf, i, math.min(262144, buf.length - i))
+            if (ret > 0) zeros = 0
+            else {
+              zeros += 1
+              i += ret
+            }
           }
           buf
         }
@@ -405,7 +408,7 @@ package object eio {
                 val g = if (canonize) cf else f
                 val p = try { pick(g) } catch { case t if NonFatal(t) => log("Error when considering "+g.getPath); Reject }
                 val dir = try { g.isDirectory } catch { case t if NonFatal(t) => false }
-                if (p.selected) act match {
+                if (p.selected || ((f eq underlying) && (p eq RejectHidden))) act match {
                   case No(op) => op(g, Nil)
                   case Yes(op) => 
                     if (dir) op(g, Nil, None)
@@ -414,7 +417,7 @@ package object eio {
                       case _ => log("Failed to read file " + g.getPath)
                   }
                 }
-                if (dir && p.recursed) {
+                if (dir && (p.recursed || ((f eq underlying) && (p eq RejectHidden)))) {
                   val children = try { g.listFiles.sortBy(_.getName) } catch { case t if NonFatal(t) => log("Could not read files in "+g.getName); Array[File]() }
                   var i = children.length
                   while (i > 0) {
@@ -493,6 +496,7 @@ package eio {
   sealed trait Recursed extends Stance { override def recursed = true }
   sealed trait Selected extends Stance { override def selected = true }
   case object Reject extends Stance
+  case object RejectHidden extends Stance
   case object Recurse extends Recursed { def &(s: Select.type) = RecurseSelect }
   case object Select extends Selected { def &(r: Recurse.type) = RecurseSelect }
   case object RecurseSelect extends Recursed with Selected {}
@@ -501,9 +505,9 @@ package eio {
     import java.io._
     
     val files: File => Stance = f => {
-      val n = f.getName
-      if (f.isDirectory) { if (n.startsWith(".") && !{ val p = f.getPath; p == "." || p == ".." }) Reject else Recurse }
-      else { if (n.startsWith(".")) Reject else Select }
+      if (f.isHidden) RejectHidden
+      else if (f.isDirectory) Recurse
+      else Select
     }
     
     def apply(p: String => Boolean): File => Stance = f => files(f) match {
