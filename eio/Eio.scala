@@ -275,113 +275,86 @@ package object eio {
       finally { try { src.close } catch { case t if NonFatal(t) => } }
     }
     
-    def walk(
-      act: Ok[(File, List[ZipEntry]) => Unit, (File, List[ZipEntry], Option[Array[Byte]]) => Unit],
-      log: String => Unit,
-      pick: File => Stance,
-      canonize: Boolean,
-      unzip: Option[(File, List[ZipEntry]) => Stance]
-    ) {
+    def walk(act: FileWalker, log: String => Unit, sizeLimit: Int = Int.MaxValue) {
+      val fw = act.asInstanceOf[FileWalkImpl]
+      
       val seen = new collection.mutable.AnyRefMap[File, Unit]()
       val unit: Unit = ()
       var pending = underlying :: Nil
       
       def isZip(s: String) = s == ".zip" || s == ".jar"
-          
-      def ziply(zis: ZipInputStream, pze: (File, List[ZipEntry]) => Stance, inf: File, inze: List[ZipEntry] = Nil) {
+      
+      def ziply(zis: ZipInputStream, inzes: List[ZipEntry]) {
         var ze = zis.getNextEntry
         while (ze != null) {
-          val where = ze :: inze
-          val stance = pze(inf, where)
-          val myName = inf.getPath + "//" + where.map(_.getName).mkString("//")
+          val zes = ze :: inzes
+          fw.zes = zes
+          val stance = fw.picker
+          val myName = fw.file.getPath + "//" + zes.map(_.getName).mkString("//")
           var buf: Array[Byte] = null
-          
-          def zebuf(): Boolean = {
-            if (buf != null) true
-            else {
-              try {
-                val sz = ze.getSize
-                if (sz >= Int.MaxValue) {
-                  log("Zip entry too big: " + myName)
-                  false
-                }
-                else {
-                  if (sz < 0) {
-                    val bufs = Vector.newBuilder[Array[Byte]]
-                    var n,k = 0
-                    while (n >= 0 && k >= 0) {
-                      val bufi = new Array[Byte](8192)
-                      var i = 0
-                      var zeros = 0
-                      while (i < 8192 && zeros < 4 && k >= 0) {
-                        k = zis.read(bufi, i, bufi.length - i)
-                        if (k > 0) {
-                          zeros = 0
-                          i += k
-                        }
-                        else zeros += 1
-                      }
-                      n += i
-                      if (k < 0 && i < 8192) bufs += java.util.Arrays.copyOf(bufi, i)
-                      else if (zeros >= 4) n = -1
-                      else bufs += bufi
-                    }
-                    if (n < 0) buf = null
-                    else {
-                      buf = new Array[Byte](n)
-                      var i = 0
-                      bufs.result().foreach{ a => 
-                        java.lang.System.arraycopy(a, 0, buf, i, a.length)
-                        i += a.length
-                      }
-                    }
-                  }
-                  else { 
-                    buf = new Array[Byte](sz.toInt)
-                    var i = 0
-                    var zeros = 0
-                    while (i < buf.length && zeros < 4) {
-                      val k = zis.read(buf, i, buf.length - i)
-                      if (k > 0) {
-                        zeros = 0
-                        i += k
-                      }
-                      else zeros += 1
-                    }
-                    if (zeros >= 4) buf = null
-                  }
-                  if (buf == null) {
-                    log("Could not read zip entry: " + myName)
-                    false
-                  }
-                  else {
-                    zis.closeEntry
-                    true
-                  }
-                }
-              }
-              catch {
-                case soe: StackOverflowError => log("Stack overflow while recursing into " + myName); false
-                case oome: OutOfMemoryError => log("Not enough memory to recurse into " + myName); false
-                case t if NonFatal(t) => log("Unable to extract zip entry " + myName + " because " + exceptionAsString(t)); false
-              }
-            }
-          }
+          var consumed = false
           
           stance match {
             case _: Selected =>
-              act match {
-                case No(op) => op(inf, where)
-                case Yes(op) => if (zebuf()) op(inf, where, Some(buf))
+              val sz = ze.getSize
+              if (sz < 0) {
+                consumed = true
+                val bufs = Vector.newBuilder[Array[Byte]]
+                var n = 0
+                (new InputStreamChunkStepper(zis, 8192)).foreach{ b => n += b.length; bufs += b }
+                buf = new Array[Byte](n)
+                var i = 0
+                bufs.result().foreach{ a => 
+                  java.lang.System.arraycopy(a, 0, buf, i, a.length)
+                  i += a.length
+                }
+              }
+              else if (sz < sizeLimit) {
+                consumed = true
+                buf = new Array[Byte](sz.toInt)
+                var i = 0
+                var zeros = 0
+                while (i < buf.length && zeros < 4) {
+                  val k = zis.read(buf, i, buf.length - i)
+                  if (k > 0) {
+                    zeros = 0
+                    i += k
+                  }
+                  else zeros += 1
+                }
+                if (zeros >= 4) buf = null
+              }
+              fw match {
+                case fsw: FileWalkOnStreams if sz > sizeLimit =>
+                  consumed = true
+                  fsw.stream = zis
+                  fsw.streamOp
+                case fbw: FileWalkOnBuffers if buf != null =>
+                  fbw.buffer = buf
+                  fbw.bufOp
+                case fsw: FileWalkOnStreams if !consumed =>
+                  consumed = true
+                  fsw.stream = zis
+                  fsw.streamOp
+                case fbw: FileWalkOnBuffers =>
+                  log("Could not read zip entry into buffer: " + myName)
+                case fsw: FileWalkOnStreams =>
+                  log("Could not read zip entry into stream: " + myName)
+                case _ =>
+                  fw.listOp
               }
             case _ =>
           }
           stance match {
-            case _: Recursed if isZip(ze.getName.takeRight(4).toLowerCase) && zebuf() =>
+            case _: Recursed if isZip(ze.getName.takeRight(4).toLowerCase) =>
               try {
-                val bais = new ByteArrayInputStream(buf)
-                val zis2 = new ZipInputStream(bais)
-                ziply(zis2, pze, inf, where)
+                if (buf == null && consumed) log("Was unable to buffer entry for both reading and recursing into " + myName)
+                else if (buf != null) {
+                  val bais = new ByteArrayInputStream(buf)
+                  val zis2 = new ZipInputStream(bais)
+                  ziply(zis2, zes)
+                }
+                else try { ziply(new ZipInputStream(zis), zes) } finally { zis.closeEntry }
               }
               catch { 
                 case soe: StackOverflowError => log("Stack overflow while recursing into " + myName)
@@ -403,39 +376,64 @@ package object eio {
             if (exists) safeOption(f.getCanonicalFile) match {
               case Some(cf) if (!(seen contains cf)) =>
                 seen += cf -> unit
-                val g = if (canonize) cf else f
-                val p = try { pick(g) } catch { case t if NonFatal(t) => log("Error when considering "+g.getPath); Reject }
-                val dir = try { g.isDirectory } catch { case t if NonFatal(t) => false }
-                if (p.selected) act match {
-                  case No(op) => op(g, Nil)
-                  case Yes(op) => 
-                    if (dir) op(g, Nil, None)
-                    else (new FileShouldDoThis(g)).gulp match {
-                      case Yes(a) => op(g, Nil, Some(a))
-                      case _ => log("Failed to read file " + g.getPath)
+                fw.file = if (fw.canonized) cf else f
+                fw.zes = Nil
+                val p = try { fw.picker } catch { case t if NonFatal(t) => log("Error when considering "+fw.file.getPath); Reject }
+                val dir = try { fw.file.isDirectory } catch { case t if NonFatal(t) => false }
+                if (p.selected) {
+                  if (dir) fw.listOp
+                  else {
+                    fw match {
+                      case fbsw: FileWalkOnBuffers with FileWalkOnStreams =>
+                        if (fw.file.length < sizeLimit) {
+                          (new FileShouldDoThis(fw.file)).gulp match {
+                            case Yes(b) => fbsw.buffer = b; fbsw.bufOp; fbsw.buffer = null
+                            case _ => log("Failed to read file " + fw.file.getPath)
+                          }
+                        }
+                        else {
+                          val fis = new FileInputStream(fw.file)
+                          try { fbsw.stream = fis; fbsw.streamOp }
+                          catch { case t if NonFatal(t) => log("Failed to read file " + fw.file.getPath + " because " + exceptionAsString(t)) }
+                          finally { fis.close; fbsw.stream = null }
+                        }
+                      case fsw: FileWalkOnStreams =>
+                        val fis = new FileInputStream(fw.file)
+                        try { fsw.stream = fis; fsw.streamOp }
+                        catch { case t if NonFatal(t) => log("Failed to read file " + fw.file.getPath + " because " + exceptionAsString(t)) }
+                        finally { fis.close; fsw.stream = null }
+                      case fbw: FileWalkOnBuffers =>
+                        (new FileShouldDoThis(fw.file)).gulp match {
+                          case Yes(b) => fbw.buffer = b; fbw.bufOp; fbw.buffer = null
+                          case _ => log("Failed to read file " + fw.file.getPath)
+                        }
+                      case _ => fw.listOp
+                    }
                   }
                 }
-                if (dir && p.recursed) {
-                  val children = try { g.listFiles.sortBy(_.getName) } catch { case t if NonFatal(t) => log("Could not read files in "+g.getName); Array[File]() }
-                  var i = children.length
-                  while (i > 0) {
-                    i -= 1
-                    pending = children(i) :: pending
+                if (p.recursed) {
+                  if (dir) {
+                    val children = try { fw.file.listFiles.sortBy(_.getName) } catch { case t if NonFatal(t) => log("Could not read files in "+fw.file.getName); Array[File]() }
+                    var i = children.length
+                    while (i > 0) {
+                      i -= 1
+                      pending = children(i) :: pending
+                    }
                   }
-                }
-                else if (p.recursed) unzip match {
-                  case Some(q) if isZip(g.getName.takeRight(4).toLowerCase) =>
+                  else if (isZip(fw.file.getName.takeRight(4).toLowerCase)) {
                     try {
-                      val fis = new FileInputStream(g)
+                      val fis = new FileInputStream(fw.file)
                       try {
                         val zis = new ZipInputStream(fis)
-                        ziply(zis, q, g)
+                        ziply(zis, Nil)
+                        zis.close
                       }
-                      catch { case t if NonFatal(t) => log("Could not recurse into file "+g.getPath+" because "+exceptionAsString(t)) }
+                      catch { case t if NonFatal(t) => log("Could not recurse into file "+fw.file.getPath+" because "+exceptionAsString(t)) }
                       finally { fis.close }
                     }
-                    catch { case t if NonFatal(t) => log("Could not recurse into file "+g.getPath+" because "+exceptionAsString(t)) }
-                  case _ =>
+                    catch { case t if NonFatal(t) => log("Could not recurse into file "+fw.file.getPath+" because "+exceptionAsString(t)) }
+                  }
+                  else log("Do not know how to recurse into " + fw.file.getPath)
                 }
               case _ =>
             }
@@ -448,12 +446,12 @@ package object eio {
     }
     
     def tree(
-      pick: File => Stance = Pick.files,
+      pick: FileWalk => Stance = Pick.files,
       canonize: Boolean = false
     ): Ok[Vector[String], Array[File]] = {
       val picked = Array.newBuilder[File]
       val log = Vector.newBuilder[String]
-      walk(No((f,_) => { picked += f; () }), s => { log += s; () }, pick, canonize, None)
+      walk(FileWalk.listed(pick, canonize)(picked += _.file), s => { log += s; () })
       val v = log.result()
       if (v.nonEmpty) No(v) else Yes(picked.result())
     }
@@ -478,6 +476,9 @@ package object eio {
     }
   }
   
+  implicit class InputStreamsShouldDoThis(private val underlying: InputStream) extends AnyVal {
+    def stepper(size: Int = 8192): Stepper[Array[Byte]] = new InputStreamChunkStepper(underlying, size)
+  }
   
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
     def toFile(f: File) {
@@ -490,6 +491,36 @@ package object eio {
 }
 
 package eio {
+  import java.io._
+  import java.util.zip._
+  
+  private[eio] class InputStreamChunkStepper(is: InputStream, size: Int) extends Stepper[Array[Byte]] {
+    private var buf = new Array[Byte](math.max(256, size))
+    private var isEmpty = false
+    def step(f: Array[Byte] => Unit) = {
+      if (isEmpty) false
+      else {
+        var i, k = 0
+        var zeros = 0
+        while (i < buf.length && zeros < 4 && k >= 0) {
+          k = is.read(buf, i, buf.length - i)
+          if (k > 0) {
+            zeros = 0
+            i += k
+          }
+          else zeros += 1
+        }
+        if (k < 0) isEmpty = true
+        if (i <= 0) false
+        else {
+          f(java.util.Arrays.copyOf(buf,i))
+          true
+        }
+      }
+    }
+  }
+  
+  
   sealed trait Stance { def selected: Boolean = false; def recursed: Boolean = false }
   sealed trait Recursed extends Stance { override def recursed = true }
   sealed trait Selected extends Stance { override def selected = true }
@@ -499,21 +530,104 @@ package eio {
   case object RecurseSelect extends Recursed with Selected {}
   
   object Pick {
-    import java.io._
-    
-    val files: File => Stance = f => {
-      // Windows has an infuriating habit of making root directories hidden.  Ugly hack to fix this.
-      if (f.isHidden && (File.separatorChar != '\\' || { val af = f.getAbsoluteFile; !File.listRoots.exists(_ == af) })) Reject
-      else if (f.isDirectory) Recurse
-      else Select
+    val files: FileWalk => Stance = fw => {
+      if (fw.zes.nonEmpty) Reject
+      else {
+        // (Some versions of?) Windows has an infuriating habit of making root directories hidden.  Ugly hack to fix this.
+        if (fw.file.isHidden && (File.separatorChar != '\\' || { val af = fw.file.getAbsoluteFile; af.getParentFile != null })) Reject
+        else if (fw.file.isDirectory) Recurse
+        else Select
+      }
     }
     
-    def apply(p: String => Boolean): File => Stance = f => files(f) match {
-      case Select if (!p(f.getName)) => Reject
+    val leaves: FileWalk => Stance = fw => fw.zes match {
+      case Nil =>
+        files(fw) match {
+          case Select if fw.file.getName.toLowerCase.endsWith("zip") => Recurse
+          case x => x
+        }
+        case ze :: more =>
+          if (ze.isDirectory) Reject
+          else if (ze.getName.toLowerCase.endsWith("zip")) Recurse
+          else Select
+    }
+    
+    def toDepth(depth: Int): FileWalk => Stance = fw => leaves(fw) match {
+      case Recurse if fw.zes.lengthCompare(depth) <= 0 && fw.zes.headOption.exists(_.getName.toLowerCase.endsWith("zip")) => Select
+      case x => x
+    }
+    
+    def filesNamed(p: String => Boolean): FileWalk => Stance = fw => files(fw) match {
+      case Select if (!p(fw.file.getName)) => Reject
+      case x => x
+    }
+    def leavesNamed(p: String => Boolean): FileWalk => Stance = fw => leaves(fw) match {
+      case Select if (!p(fw.zes.headOption.map(_.getName).getOrElse(fw.file.getName))) => Reject
+      case x => x
+    }
+    
+    def filesFiltered(p: File => Boolean): FileWalk => Stance = fw => files(fw) match {
+      case Select if (!p(fw.file)) => Reject
       case x => x
     }
   }
   
+  sealed trait FileWalker {}
+  sealed abstract class FileWalk extends FileWalker {
+    def file: File
+    def zes: List[ZipEntry]
+  }
+  sealed trait FileBufferWalk extends FileWalk {
+    def buffer: Array[Byte]
+  }
+  sealed trait FileStreamWalk extends FileWalk {
+    def stream: InputStream
+  }
+  private[eio] sealed abstract class FileWalkImpl extends FileWalk {
+    var file: File = null
+    var zes: List[ZipEntry] = Nil
+    def picker: Stance
+    def canonized: Boolean
+    def listOp: Unit
+  }
+  private[eio] sealed trait FileWalkOnBuffers extends FileWalkImpl with FileBufferWalk {
+    var buffer: Array[Byte] = null
+    def bufOp: Unit
+  }
+  private [eio] sealed trait FileWalkOnStreams extends FileWalkImpl with FileStreamWalk {
+    var stream: InputStream = null
+    def streamOp: Unit
+  }
+  object FileWalk {
+    def listed(pick: FileWalk => Stance, canonize: Boolean = false)(f: FileWalk => Unit): FileWalker = new FileWalkImpl {
+      def picker = pick(this)
+      def canonized = canonize
+      def listOp { f(this) }
+    }
+      
+    def blocked(pick: FileWalk => Stance, canonize: Boolean = false)(fdir: FileWalk => Unit)(fbuf: FileBufferWalk => Unit): FileWalker = new FileWalkOnBuffers {
+      def picker = pick(this)
+      def canonized = canonize
+      def listOp { fdir(this) }
+      def bufOp { fbuf(this) }
+    }
+    
+    def streamed(pick: FileWalk => Stance, canonize: Boolean = false)(fdir: FileWalk => Unit)(fis: FileStreamWalk => Unit): FileWalker = new FileWalkOnStreams {
+      def picker = pick(this)
+      def canonized = canonize
+      def listOp { fdir(this) }
+      def streamOp{ fis(this) }
+    }
+    
+    def apply(pick: FileWalk => Stance, canonize: Boolean = false)(fdir: FileWalk => Unit)(fbuf: FileBufferWalk => Unit)(fis: FileStreamWalk => Unit): FileWalker = new FileWalkOnBuffers with FileWalkOnStreams {
+      def picker = pick(this)
+      def canonized = canonize
+      def listOp { fdir(this) }
+      def bufOp { fbuf(this) }
+      def streamOp { fis(this) }
+    }
+  }
+
   object Args {
     class OptionSource(val options: Array[String]) {
       val ops = collection.mutable.AnyRefMap[String, List[String]]()
