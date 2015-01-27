@@ -102,7 +102,7 @@ package object eio {
         }
         if (fid == 0) None
         else {
-          val k = p0.lastIndexOf('/',fid)
+          val k = p0.lastIndexOf(File.separatorChar,fid)
           if (k < 0) None
           else Some( (new File(p0.substring(0, k+1)), af.map(f => new File(f.getPath.substring(k+1)))) )
         }
@@ -209,7 +209,6 @@ package object eio {
     def relativize(absolutes: Array[File]): Ok[Vector[String], Array[File]] = {
       val af = try { underlying.getAbsoluteFile } catch { case t if NonFatal(t) => return No(Vector("Could not find absolute form of root " + underlying.getPath)) }
       val cf = try { af.getCanonicalFile } catch { case t if NonFatal(t) => return No(Vector("Could not find canonical form of root " + af.getPath)) }
-      val up = underlying.getPath
       val ap = af.getPath
       val cp = cf.getPath
       val wrongs = Vector.newBuilder[String]
@@ -217,19 +216,18 @@ package object eio {
       def clip(h: File, xp: String): Option[File] = {
         val hp = h.getPath
         if (hp startsWith xp) {
-          if (hp.length < xp.length + 2) None
-          else Some(new File(hp.substring(xp.length+1)))
+          val n = if (xp.length < hp.length && hp(xp.length) == File.separatorChar) xp.length+1 else xp.length
+          if (hp.length < n+1) None
+          else Some(new File(hp.substring(n)))
         }
         else None
       }
       absolutes.foreach{ g =>
         okay[String]{ fail =>
-          clip(g, up).getOrElse {
-            val ag = try { g.getAbsoluteFile } catch { case t if NonFatal(t) => fail("Could not find absolute form of " + g.getPath) }
-            clip(ag, ap).getOrElse {
-              val cg = try { ag.getCanonicalFile } catch { case t if NonFatal(t) => fail("Could not find canonical form of " + ag.getPath) }
-              clip(cg, cp).getOrElse{ fail(s"$cp is not a root for $cg") }
-            }
+          val ag = try { g.getAbsoluteFile } catch { case t if NonFatal(t) => fail("Could not find absolute form of " + g.getPath) }
+          clip(ag, ap).getOrElse {
+            val cg = try { ag.getCanonicalFile } catch { case t if NonFatal(t) => fail("Could not find canonical form of " + ag.getPath) }
+            clip(cg, cp).getOrElse{ fail(s"$cp is not a root for $cg") }
           }
         } match {
           case Yes(x) => rights += x
@@ -253,9 +251,9 @@ package object eio {
           var zeros = 0
           while (i < buf.length && ret != -1 && zeros < 4) {
             ret = fis.read(buf, i, math.min(262144, buf.length - i))
-            if (ret > 0) zeros = 0
+            if (ret < 0) zeros += 1
             else {
-              zeros += 1
+              zeros = 0
               i += ret
             }
           }
@@ -408,7 +406,7 @@ package object eio {
                 val g = if (canonize) cf else f
                 val p = try { pick(g) } catch { case t if NonFatal(t) => log("Error when considering "+g.getPath); Reject }
                 val dir = try { g.isDirectory } catch { case t if NonFatal(t) => false }
-                if (p.selected || ((f eq underlying) && (p eq RejectHidden))) act match {
+                if (p.selected) act match {
                   case No(op) => op(g, Nil)
                   case Yes(op) => 
                     if (dir) op(g, Nil, None)
@@ -417,7 +415,7 @@ package object eio {
                       case _ => log("Failed to read file " + g.getPath)
                   }
                 }
-                if (dir && (p.recursed || ((f eq underlying) && (p eq RejectHidden)))) {
+                if (dir && p.recursed) {
                   val children = try { g.listFiles.sortBy(_.getName) } catch { case t if NonFatal(t) => log("Could not read files in "+g.getName); Array[File]() }
                   var i = children.length
                   while (i > 0) {
@@ -496,7 +494,6 @@ package eio {
   sealed trait Recursed extends Stance { override def recursed = true }
   sealed trait Selected extends Stance { override def selected = true }
   case object Reject extends Stance
-  case object RejectHidden extends Stance
   case object Recurse extends Recursed { def &(s: Select.type) = RecurseSelect }
   case object Select extends Selected { def &(r: Recurse.type) = RecurseSelect }
   case object RecurseSelect extends Recursed with Selected {}
@@ -505,7 +502,8 @@ package eio {
     import java.io._
     
     val files: File => Stance = f => {
-      if (f.isHidden) RejectHidden
+      // Windows has an infuriating habit of making root directories hidden.  Ugly hack to fix this.
+      if (f.isHidden && (File.separatorChar != '\\' || { val af = f.getAbsoluteFile; !File.listRoots.exists(_ == af) })) Reject
       else if (f.isDirectory) Recurse
       else Select
     }
