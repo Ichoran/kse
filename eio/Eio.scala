@@ -276,7 +276,7 @@ package object eio {
     }
     
     def walk(act: FileWalker, log: String => Unit, sizeLimit: Int = Int.MaxValue) {
-      val fw = act.asInstanceOf[FileWalkImpl]
+      val fw = act match { case fwi: FileWalkImpl => fwi }
       
       val seen = new collection.mutable.AnyRefMap[File, Unit]()
       val unit: Unit = ()
@@ -292,21 +292,34 @@ package object eio {
           val stance = fw.picker
           val myName = fw.file.getPath + "//" + zes.map(_.getName).mkString("//")
           var buf: Array[Byte] = null
+          var stp: Stepper[Array[Byte]] = null
           var consumed = false
           
           stance match {
             case _: Selected =>
               val sz = ze.getSize
+              var oversize = sz > sizeLimit
               if (sz < 0) {
                 consumed = true
                 val bufs = Vector.newBuilder[Array[Byte]]
                 var n = 0
-                (new InputStreamChunkStepper(zis, 8192)).foreach{ b => n += b.length; bufs += b }
-                buf = new Array[Byte](n)
-                var i = 0
-                bufs.result().foreach{ a => 
-                  java.lang.System.arraycopy(a, 0, buf, i, a.length)
-                  i += a.length
+                var go = true
+                stp = new InputStreamChunkStepper(zis, 8192)
+                while (n < sizeLimit && go) {
+                  go = stp.step{ b => n += b.length; bufs += b }
+                }
+                if (!go) {
+                  stp = null
+                  buf = new Array[Byte](n)
+                  var i = 0
+                  bufs.result().foreach{ a => 
+                    java.lang.System.arraycopy(a, 0, buf, i, a.length)
+                    i += a.length
+                  }
+                }
+                else {
+                  oversize = true
+                  stp = bufs.result().iterator.stepper ++ stp
                 }
               }
               else if (sz < sizeLimit) {
@@ -325,17 +338,19 @@ package object eio {
                 if (zeros >= 4) buf = null
               }
               fw match {
-                case fsw: FileWalkOnStreams if sz > sizeLimit =>
+                case fsw: FileWalkOnStreams if oversize =>
                   consumed = true
-                  fsw.stream = zis
+                  fsw.stream = if (stp == null) zis else (new SteppedByteArrayInputStream(stp))
                   fsw.streamOp
+                  if (stp != null) stp = null
                 case fbw: FileWalkOnBuffers if buf != null =>
                   fbw.buffer = buf
                   fbw.bufOp
-                case fsw: FileWalkOnStreams if !consumed =>
+                case fsw: FileWalkOnStreams if (!consumed || buf != null || stp != null) =>
+                  fsw.stream = if (!consumed) zis else if (buf == null) new ByteArrayInputStream(buf) else new SteppedByteArrayInputStream(stp)
                   consumed = true
-                  fsw.stream = zis
                   fsw.streamOp
+                  if (stp != null) stp = null
                 case fbw: FileWalkOnBuffers =>
                   log("Could not read zip entry into buffer: " + myName)
                 case fsw: FileWalkOnStreams =>
@@ -494,8 +509,9 @@ package eio {
   import java.io._
   import java.util.zip._
   
-  private[eio] class InputStreamChunkStepper(is: InputStream, size: Int) extends Stepper[Array[Byte]] {
-    private var buf = new Array[Byte](math.max(256, size))
+  /** Note: the minimum chunk size is 256 */
+  class InputStreamStepper(is: InputStream, chunkSize: Int) extends Stepper[Array[Byte]] {
+    private var buf = new Array[Byte](math.max(256, chunkSize))
     private var isEmpty = false
     def step(f: Array[Byte] => Unit) = {
       if (isEmpty) false
@@ -517,6 +533,54 @@ package eio {
           true
         }
       }
+    }
+  }
+  
+  class SteppedByteArrayInputStream(stepper: Stepper[Array[Byte]]) extends InputStream {
+    private[this] var working: Array[Byte] = null
+    private[this] var taken: Int = 0
+    private[this] var exhausted = false
+    private[this] def prepared(): Boolean = {
+      if (!exhausted) {
+        if (working == null || taken >= working.length) {
+          taken = 0
+          exhausted = !stepper.step(working = _)
+          prepared()
+        }
+        else true
+      }
+      else { working = null; false }
+    }
+    override def available() = if (exhausted || working == null) 0 else (working.length - taken)
+    override def close() {}
+    override def mark(readlimit: Int) {}
+    override def markSupported = false
+    override def read(): Int = { if (prepared()) { var ans = working(taken) & 0xFF; taken += 1; ans } else -1 }
+    override def read(b: Array[Byte]): Int = read(b, 0, b.length)
+    override def read(b: Array[Byte], off: Int, len: Int): Int = if (exhausted) -1 else if (len <= 0) 0 else {
+      var m = len
+      var o = off
+      while (prepared()) {
+        val k = math.min(working.length - taken, m)
+        System.arraycopy(working, taken, b, o, k)
+        o += k
+        taken += k
+        m -= k
+        if (m <= 0) return len
+      }
+      if (len == m) -1 else len - m
+    }
+    override def reset() {}
+    override def skip(n: Long): Long = if (exhausted) -1 else if (n <= 0) 0 else {
+      var m = n
+      while (prepared()) {
+        if (m < working.length - taken) {
+          taken = m.toInt
+          return n
+        }
+        else m -= (working.length - taken)
+      }
+      if (m >= n) -1 else n - m
     }
   }
   

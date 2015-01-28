@@ -194,6 +194,9 @@ package coll {
   
   trait Stepper[@specialized A] { self =>
     def step(f: A => Unit): Boolean
+    def peek(g: A => Unit) = new Stepper[A] {
+      def step(f: A => Unit): Boolean = self.step{ a => g(a); f(a) }
+    }
     def foreach[U](f: A => U) {
       while(step(a => { f(a); () })) {}
     }
@@ -205,6 +208,17 @@ package coll {
       }
     }
     def withFilter(p: A => Boolean) = filter(p)
+    def ++(s: Stepper[A]): Stepper[A] = new Stepper[A] {
+      private[this] var current = self
+      def step(f: A => Unit): Boolean = {
+        val ans = current.step(f)
+        if (!ans && (current ne s)) {
+          current = s
+          current.step(f)
+        }
+        else ans
+      }
+    }
   }
 }
 
@@ -318,4 +332,9 @@ package object coll {
     @inline def reduce(f: (A,A) => A) = f( f( f(underlying._1, underlying._2), f(underlying._3, underlying._4) ), underlying._5 )
   }
   
+  implicit class KseRichIterator[A](underlying: Iterator[A]) {
+    def stepper = new Stepper[A] {
+      def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
+    }
+  } 
 }
