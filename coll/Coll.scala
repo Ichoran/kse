@@ -22,12 +22,12 @@ package coll {
   
   /** Caches expensive computations that are cleared when memory gets especially tight (via SoftReference); not thread-safe */
   class Soft[T,U](t: T)(gen: T => U) {
-    private[this] var cache = new java.lang.ref.SoftReference(gen(t))
+    private[this] var myCache = new java.lang.ref.SoftReference(gen(t))
     def apply(): U = {
-      var u = cache.get()
+      var u = myCache.get()
       if (u==null) {
         u = gen(t)
-        cache = new java.lang.ref.SoftReference(u)
+        myCache = new java.lang.ref.SoftReference(u)
       }
       u
     }
@@ -62,7 +62,7 @@ package coll {
     final var ok: Boolean = false
     final def off = { ok = false; this }
     final def on = { ok = true; this }
-    final def value(a: A): this.type = { value = (a); this }
+    final def value_(a: A): this.type = { value = (a); this }
     final def :=(a: A): this.type = { ok = true; value = a; this }
 
     final def grab(implicit oops: Oops) = if (ok) value else OOPS
@@ -70,8 +70,8 @@ package coll {
     final def getOrSet(a: => A) = { if (!ok) { value = a; ok = true }; value }
     final def get = if (ok) value else throw new NoSuchElementException("Mopt")
 
-    final def xform(f: A => A): this.type = { if (ok) { value = f(value) }; this }
-    final def tap(f: A => Unit): this.type = { if (ok) { f(value) }; this }
+    final def mop(f: A => A): this.type = { if (ok) { value = f(value) }; this }
+    final def peek(f: A => Unit): this.type = { if (ok) { f(value) }; this }
     final def reject(p: A => Boolean): this.type = { if (ok && p(value)) ok = false; this }
     final def exists(p: A => Boolean) = ok && p(value)
 
@@ -252,8 +252,8 @@ package object coll {
   }
   
   implicit class Tuple2UtilityMethods[A,B](val underlying: (A,B)) extends AnyVal {
-    @inline def _1Is(value: A) = (value, underlying._2)
-    @inline def _2Is(value: B) = (underlying._1, value)
+    @inline def _1To(value: A) = (value, underlying._2)
+    @inline def _2To(value: B) = (underlying._1, value)
     @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2)
     @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2))
     @inline def eachFn[Y,Z](f: A => Y, g: B => Z) = (f(underlying._1), g(underlying._2))
@@ -268,9 +268,9 @@ package object coll {
   }
   
   implicit class Tuple3UtilityMethods[A,B,C](val underlying: (A,B,C)) extends AnyVal {
-    @inline def _1Is(value: A) = (value, underlying._2, underlying._3)
-    @inline def _2Is(value: B) = (underlying._1, value, underlying._3)
-    @inline def _3Is(value: C) = (underlying._1, underlying._2, value)
+    @inline def _1To(value: A) = (value, underlying._2, underlying._3)
+    @inline def _2To(value: B) = (underlying._1, value, underlying._3)
+    @inline def _3To(value: C) = (underlying._1, underlying._2, value)
     @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3)
     @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3)
     @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3))
@@ -287,10 +287,10 @@ package object coll {
   }
     
   implicit class Tuple4UtilityMethods[A,B,C,D](val underlying: (A,B,C,D)) extends AnyVal {
-    @inline def _1Is(value: A) = (value, underlying._2, underlying._3, underlying._4)
-    @inline def _2Is(value: B) = (underlying._1, value, underlying._3, underlying._4)
-    @inline def _3Is(value: C) = (underlying._1, underlying._2, value, underlying._4)
-    @inline def _4Is(value: D) = (underlying._1, underlying._2, underlying._3, value)
+    @inline def _1To(value: A) = (value, underlying._2, underlying._3, underlying._4)
+    @inline def _2To(value: B) = (underlying._1, value, underlying._3, underlying._4)
+    @inline def _3To(value: C) = (underlying._1, underlying._2, value, underlying._4)
+    @inline def _4To(value: D) = (underlying._1, underlying._2, underlying._3, value)
     @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3, underlying._4)
     @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4)
     @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4)
@@ -309,11 +309,11 @@ package object coll {
   }
   
   implicit class Tuple5UtilityMethods[A,B,C,D,E](val underlying: (A,B,C,D,E)) extends AnyVal {
-    @inline def _1Is(value: A) = (value, underlying._2, underlying._3, underlying._4, underlying._5)
-    @inline def _2Is(value: B) = (underlying._1, value, underlying._3, underlying._4, underlying._5)
-    @inline def _3Is(value: C) = (underlying._1, underlying._2, value, underlying._4, underlying._5)
-    @inline def _4Is(value: D) = (underlying._1, underlying._2, underlying._3, value, underlying._5)
-    @inline def _5Is(value: E) = (underlying._1, underlying._2, underlying._3, underlying._4, value)
+    @inline def _1To(value: A) = (value, underlying._2, underlying._3, underlying._4, underlying._5)
+    @inline def _2To(value: B) = (underlying._1, value, underlying._3, underlying._4, underlying._5)
+    @inline def _3To(value: C) = (underlying._1, underlying._2, value, underlying._4, underlying._5)
+    @inline def _4To(value: D) = (underlying._1, underlying._2, underlying._3, value, underlying._5)
+    @inline def _5To(value: E) = (underlying._1, underlying._2, underlying._3, underlying._4, value)
     @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3, underlying._4, underlying._5)
     @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4, underlying._5)
     @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4, underlying._5)

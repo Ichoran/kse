@@ -74,9 +74,9 @@ trait HopView[@specialized(Int, Long) A] extends Hopper with HopHasValue[A] {
   */
 trait Hop[@specialized(Int, Long) A] extends HopView[A] with HopWith[A] with Hopper {
   /** Sets the value to be carried when an exception is thrown. */
-  def valueTo(a: A): this.type
+  def value_(a: A): this.type
   /** Alters the value to be carried according to the function `f`. */
-  def valueFn(f: A => A): this.type
+  def valueOp(f: A => A): this.type
 }
 
 /** A trait specifically to handle errors that have no information.
@@ -90,7 +90,7 @@ trait Hop[@specialized(Int, Long) A] extends HopView[A] with HopWith[A] with Hop
   * where the overall computation is not highly certain to complete, and when there
   * is no useful information to return aside from the fact that something went wrong.
   */
-trait Oops extends Hop[Unit] {}
+trait Oops extends Hopper {}
 
 /** Thrown by special Oops instance that will throw real exceptions instead of itself. */
 class OopsException extends RuntimeException("Uncaught Oops.") {}

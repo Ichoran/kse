@@ -15,73 +15,73 @@ package object eio {
   import java.util.zip._
   
   implicit class ConvertSafelyFromByte(private val underlying: Byte) extends AnyVal {
-    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
-    def inShort = underlying.toShort
-    def inUShort = (underlying & 0xFF).toShort
-    def inInt = underlying.toInt
-    def inUInt = (underlying & 0xFF)
-    def inLong = underlying.toLong
-    def inULong = (underlying & 0xFF).toLong
-    def inFloat = underlying.toFloat
-    def inDouble = underlying.toDouble
+    def asU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def asShort = underlying.toShort
+    def asUShort = (underlying & 0xFF).toShort
+    def asInt = underlying.toInt
+    def asUInt = (underlying & 0xFF)
+    def asLong = underlying.toLong
+    def asULong = (underlying & 0xFF).toLong
+    def asFloat = underlying.toFloat
+    def asDouble = underlying.toDouble
   }
   
   implicit class ConvertSafelyFromShort(private val underlying: Short) extends AnyVal {
-    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
-    def inByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
-    def inUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
-    def inInt = underlying.toInt
-    def inUInt = (underlying & 0xFFFF)
-    def inLong = underlying.toLong
-    def inULong = (underlying & 0xFFFF).toLong
-    def inFloat = underlying.toFloat
-    def inDouble = underlying.toDouble
+    def asU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def asByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
+    def asUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
+    def asInt = underlying.toInt
+    def asUInt = (underlying & 0xFFFF)
+    def asLong = underlying.toLong
+    def asULong = (underlying & 0xFFFF).toLong
+    def asFloat = underlying.toFloat
+    def asDouble = underlying.toDouble
   }
   
   implicit class ConvertSafelyFromInt(private val underlying: Int) extends AnyVal {
-    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
-    def inByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
-    def inUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
-    def inShort(implicit oops: Oops) = if (underlying < Short.MinValue || underlying > Short.MaxValue) OOPS else underlying.toShort
-    def inUShort(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFF) OOPS else underlying.toShort
-    def inLong = underlying.toLong
-    def inULong = (underlying & 0xFFFFFFFFL)
-    def inFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toInt != underlying) OOPS else f }
-    def inDouble = underlying.toDouble
+    def asU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def asByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
+    def asUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
+    def asShort(implicit oops: Oops) = if (underlying < Short.MinValue || underlying > Short.MaxValue) OOPS else underlying.toShort
+    def asUShort(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFF) OOPS else underlying.toShort
+    def asLong = underlying.toLong
+    def asULong = (underlying & 0xFFFFFFFFL)
+    def asFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toInt != underlying) OOPS else f }
+    def asDouble = underlying.toDouble
   }
   
   implicit class ConvertSafelyFromLong(private val underlying: Long) extends AnyVal {
-    def inU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
-    def inByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
-    def inUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
-    def inShort(implicit oops: Oops) = if (underlying < Short.MinValue || underlying > Short.MaxValue) OOPS else underlying.toShort
-    def inUShort(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFF) OOPS else underlying.toShort
-    def inInt(implicit oops: Oops) = if (underlying < Int.MinValue || underlying > Int.MaxValue) OOPS else underlying.toInt
-    def inUInt(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFFFFFFL) OOPS else underlying.toInt
-    def inFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toLong != underlying) OOPS else f }
-    def inDouble(implicit oops: Oops) = { val d = underlying.toDouble; if (d.toLong != underlying) OOPS else d }
+    def asU(implicit oops: Oops) = if (underlying < 0) OOPS else underlying
+    def asByte(implicit oops: Oops) = if (underlying < Byte.MinValue || underlying > Byte.MaxValue) OOPS else underlying.toByte
+    def asUByte(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFF) OOPS else underlying.toByte
+    def asShort(implicit oops: Oops) = if (underlying < Short.MinValue || underlying > Short.MaxValue) OOPS else underlying.toShort
+    def asUShort(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFF) OOPS else underlying.toShort
+    def asInt(implicit oops: Oops) = if (underlying < Int.MinValue || underlying > Int.MaxValue) OOPS else underlying.toInt
+    def asUInt(implicit oops: Oops) = if (underlying < 0 || underlying > 0xFFFFFFFFL) OOPS else underlying.toInt
+    def asFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toLong != underlying) OOPS else f }
+    def asDouble(implicit oops: Oops) = { val d = underlying.toDouble; if (d.toLong != underlying) OOPS else d }
   }
   
   implicit class ConvertSafelyFromFloat(private val underlying: Float) extends AnyVal {
-    def inByte(implicit oops: Oops) = { val b = math.rint(underlying).toByte; if (b.toFloat != underlying) OOPS else b }
-    def inUByte(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFF) != underlying) OOPS else (i & 0xFF).toByte }
-    def inShort(implicit oops: Oops) = { val s = math.rint(underlying).toShort; if (s.toFloat != underlying) OOPS else s }
-    def inUShort(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFFFF) != underlying) OOPS else (i & 0xFFFF).toShort }
-    def inInt(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if (i.toFloat != underlying) OOPS else i }
-    def inUInt(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if ((l & 0xFFFFFFFFL) != underlying) OOPS else (l & 0xFFFFFFFFL).toInt }
-    def inLong(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if (l.toFloat != underlying) OOPS else l }
-    def inDouble = underlying.toDouble
+    def asByte(implicit oops: Oops) = { val b = math.rint(underlying).toByte; if (b.toFloat != underlying) OOPS else b }
+    def asUByte(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFF) != underlying) OOPS else (i & 0xFF).toByte }
+    def asShort(implicit oops: Oops) = { val s = math.rint(underlying).toShort; if (s.toFloat != underlying) OOPS else s }
+    def asUShort(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFFFF) != underlying) OOPS else (i & 0xFFFF).toShort }
+    def asInt(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if (i.toFloat != underlying) OOPS else i }
+    def asUInt(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if ((l & 0xFFFFFFFFL) != underlying) OOPS else (l & 0xFFFFFFFFL).toInt }
+    def asLong(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if (l.toFloat != underlying) OOPS else l }
+    def asDouble = underlying.toDouble
   }
   
   implicit class ConvertSafelyFromDouble(private val underlying: Double) extends AnyVal {
-    def inByte(implicit oops: Oops) = { val b = math.rint(underlying).toByte; if (b.toDouble != underlying) OOPS else b }
-    def inUByte(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFF) != underlying) OOPS else (i & 0xFF).toByte }
-    def inShort(implicit oops: Oops) = { val s = math.rint(underlying).toShort; if (s.toDouble != underlying) OOPS else s }
-    def inUShort(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFFFF) != underlying) OOPS else (i & 0xFFFF).toShort }
-    def inInt(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if (i.toDouble != underlying) OOPS else i }
-    def inUInt(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if ((l & 0xFFFFFFFFL) != underlying) OOPS else (l & 0xFFFFFFFFL).toInt }
-    def inLong(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if (l.toDouble != underlying) OOPS else l }
-    def inFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toDouble != underlying) OOPS else f }
+    def asByte(implicit oops: Oops) = { val b = math.rint(underlying).toByte; if (b.toDouble != underlying) OOPS else b }
+    def asUByte(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFF) != underlying) OOPS else (i & 0xFF).toByte }
+    def asShort(implicit oops: Oops) = { val s = math.rint(underlying).toShort; if (s.toDouble != underlying) OOPS else s }
+    def asUShort(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if ((i & 0xFFFF) != underlying) OOPS else (i & 0xFFFF).toShort }
+    def asInt(implicit oops: Oops) = { val i = math.rint(underlying).toInt; if (i.toDouble != underlying) OOPS else i }
+    def asUInt(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if ((l & 0xFFFFFFFFL) != underlying) OOPS else (l & 0xFFFFFFFFL).toInt }
+    def asLong(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if (l.toDouble != underlying) OOPS else l }
+    def asFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toDouble != underlying) OOPS else f }
   }
   
 
@@ -304,7 +304,7 @@ package object eio {
                 val bufs = Vector.newBuilder[Array[Byte]]
                 var n = 0
                 var go = true
-                stp = new InputStreamChunkStepper(zis, 8192)
+                stp = new InputStreamStepper(zis, 8192)
                 while (n < sizeLimit && go) {
                   go = stp.step{ b => n += b.length; bufs += b }
                 }
@@ -492,7 +492,7 @@ package object eio {
   }
   
   implicit class InputStreamsShouldDoThis(private val underlying: InputStream) extends AnyVal {
-    def stepper(size: Int = 8192): Stepper[Array[Byte]] = new InputStreamChunkStepper(underlying, size)
+    def stepper(size: Int = 8192): Stepper[Array[Byte]] = new InputStreamStepper(underlying, size)
   }
   
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {

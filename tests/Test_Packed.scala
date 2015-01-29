@@ -10,14 +10,15 @@ object Test_Packed extends Test_Kse {
       x.Z == x.bit0 && x.B == b &&
       x.bit0 == x.bit(0) && x.bit1 == x.bit(1) && x.bit2 == x.bit(2) && x.bit3 == x.bit(3) && x.bit4 == x.bit(4) && x.bit5 == x.bit(5) && x.bit6 == x.bit(6) && x.bit7 == x.bit(7) &&
       x.bit0 == (x.bits(0,1) != 0) && x.bit1 == (x.bits(1,1) != 0) && x.bit2 == (x.bits(2,1) != 0) && x.bit3 == (x.bits(3,1) != 0) && x.bit4 == (x.bits(4,1) != 0) && x.bit5 == (x.bits(5,1) != 0) && x.bit6 == (x.bits(6,1) != 0) && x.bit7 == (x.bits(7,1) != 0) &&
-      (x.bits(0,8) & 0xFF) == ((b & 0xFF) >> 0) && (x.bits(1,7) & 0xFF) == ((b & 0xFF) >> 1) && (x.bits(2,6) & 0xFF) == ((b & 0xFF) >> 2) && (x.bits(3,5) & 0xFF) == ((b & 0xFF) >> 3) && (x.bits(4,4) & 0xFF) == ((b & 0xFF) >> 4) && (x.bits(5,3) & 0xFF) == ((b & 0xFF) >> 5) && (x.bits(6,2) & 0xFF) == ((b & 0xFF) >> 6) && (x.bits(7,1) & 0xFF) == ((b & 0xFF) >> 7) &&      x.bit0Is(true).B == (b | 1) && x.bit1Is(true).B == (b | 2) && x.bit2Is(true).B == (b | 4) && x.bit3Is(true).B == (b | 8) && x.bit4Is(true).B == (b | 16) && x.bit5Is(true).B == (b | 32) && x.bit6Is(true).B == (b | 64) && (x.bit7Is(true).B & 0xFF) == ((b & 0xFF) | 128) &&
-      (x.bit0Is(false).B & 0xFF) == (b & 254) && (x.bit1Is(false).B & 0xFF) == (b & 253) && (x.bit2Is(false).B & 0xFF) == (b & 251) && (x.bit3Is(false).B & 0xFF) == (b & 247) && (x.bit4Is(false).B & 0xFF) == (b & 239) && (x.bit5Is(false).B & 0xFF) == (b & 223) && (x.bit6Is(false).B & 0xFF) == (b & 191) && (x.bit7Is(false).B & 0xFF) == (b & 127) &&
-      x.bit0Is(true).B == x.bitIs(0)(true).B && x.bit1Is(true).B == x.bitIs(1)(true).B && x.bit2Is(true).B == x.bitIs(2)(true).B && x.bit3Is(true).B == x.bitIs(3)(true).B && x.bit4Is(true).B == x.bitIs(4)(true).B && x.bit5Is(true).B == x.bitIs(5)(true).B && x.bit6Is(true).B == x.bitIs(6)(true).B && x.bit7Is(true).B == x.bitIs(7)(true).B &&
-      x.bit0Is(false).B == x.bitIs(0)(false).B && x.bit1Is(false).B == x.bitIs(1)(false).B && x.bit2Is(false).B == x.bitIs(2)(false).B && x.bit3Is(false).B == x.bitIs(3)(false).B && x.bit4Is(false).B == x.bitIs(4)(false).B && x.bit5Is(false).B == x.bitIs(5)(false).B && x.bit6Is(false).B == x.bitIs(6)(false).B && x.bit7Is(false).B == x.bitIs(7)(false).B &&
+      (x.bits(0,8) & 0xFF) == ((b & 0xFF) >> 0) && (x.bits(1,7) & 0xFF) == ((b & 0xFF) >> 1) && (x.bits(2,6) & 0xFF) == ((b & 0xFF) >> 2) && (x.bits(3,5) & 0xFF) == ((b & 0xFF) >> 3) && (x.bits(4,4) & 0xFF) == ((b & 0xFF) >> 4) && (x.bits(5,3) & 0xFF) == ((b & 0xFF) >> 5) && (x.bits(6,2) & 0xFF) == ((b & 0xFF) >> 6) && (x.bits(7,1) & 0xFF) == ((b & 0xFF) >> 7) &&
+      x.bit0To(true).B == (b | 1) && x.bit1To(true).B == (b | 2) && x.bit2To(true).B == (b | 4) && x.bit3To(true).B == (b | 8) && x.bit4To(true).B == (b | 16) && x.bit5To(true).B == (b | 32) && x.bit6To(true).B == (b | 64) && (x.bit7To(true).B & 0xFF) == ((b & 0xFF) | 128) &&
+      (x.bit0To(false).B & 0xFF) == (b & 254) && (x.bit1To(false).B & 0xFF) == (b & 253) && (x.bit2To(false).B & 0xFF) == (b & 251) && (x.bit3To(false).B & 0xFF) == (b & 247) && (x.bit4To(false).B & 0xFF) == (b & 239) && (x.bit5To(false).B & 0xFF) == (b & 223) && (x.bit6To(false).B & 0xFF) == (b & 191) && (x.bit7To(false).B & 0xFF) == (b & 127) &&
+      x.bit0To(true).B == x.bitTo(0)(true).B && x.bit1To(true).B == x.bitTo(1)(true).B && x.bit2To(true).B == x.bitTo(2)(true).B && x.bit3To(true).B == x.bitTo(3)(true).B && x.bit4To(true).B == x.bitTo(4)(true).B && x.bit5To(true).B == x.bitTo(5)(true).B && x.bit6To(true).B == x.bitTo(6)(true).B && x.bit7To(true).B == x.bitTo(7)(true).B &&
+      x.bit0To(false).B == x.bitTo(0)(false).B && x.bit1To(false).B == x.bitTo(1)(false).B && x.bit2To(false).B == x.bitTo(2)(false).B && x.bit3To(false).B == x.bitTo(3)(false).B && x.bit4To(false).B == x.bitTo(4)(false).B && x.bit5To(false).B == x.bitTo(5)(false).B && x.bit6To(false).B == x.bitTo(6)(false).B && x.bit7To(false).B == x.bitTo(7)(false).B &&
       (0 to 15).forall{ y =>
-        x.bit0Is((y&1) != 0).bit1Is((y&2) != 0).bit2Is((y&4) != 0).bit3Is((y&8) != 0).B == x.bitsAre(0, 4)(y.toByte).B &&
-        x.bit2Is((y&1) != 0).bit3Is((y&2) != 0).bit4Is((y&4) != 0).bit5Is((y&8) != 0).B == x.bitsAre(2, 4)(y.toByte).B &&
-        x.bit4Is((y&1) != 0).bit5Is((y&2) != 0).bit6Is((y&4) != 0).bit7Is((y&8) != 0).B == x.bitsAre(4, 4)(y.toByte).B
+        x.bit0To((y&1) != 0).bit1To((y&2) != 0).bit2To((y&4) != 0).bit3To((y&8) != 0).B == x.bitsTo(0, 4)(y.toByte).B &&
+        x.bit2To((y&1) != 0).bit3To((y&2) != 0).bit4To((y&4) != 0).bit5To((y&8) != 0).B == x.bitsTo(2, 4)(y.toByte).B &&
+        x.bit4To((y&1) != 0).bit5To((y&2) != 0).bit6To((y&4) != 0).bit7To((y&8) != 0).B == x.bitsTo(4, 4)(y.toByte).B
       }
     }
   }
@@ -39,17 +40,17 @@ object Test_Packed extends Test_Kse {
       List(false, true).forall{ c =>
         val line = Array.tabulate(16){ i => 1 << i }
         val notch = Array.tabulate(16){ i => 0xFFFF - (1 << i) }
-        x.bit0Is(c).S == x.bitIs(0)(c).S && x.bit1Is(c).S == x.bitIs(1)(c).S && x.bit2Is(c).S == x.bitIs(2)(c).S && x.bit3Is(c).S == x.bitIs(3)(c).S &&
-        x.bit4Is(c).S == x.bitIs(4)(c).S && x.bit5Is(c).S == x.bitIs(5)(c).S && x.bit6Is(c).S == x.bitIs(6)(c).S && x.bit7Is(c).S == x.bitIs(7)(c).S &&
-        x.bit8Is(c).S == x.bitIs(8)(c).S && x.bit9Is(c).S == x.bitIs(9)(c).S && x.bit10Is(c).S == x.bitIs(10)(c).S && x.bit11Is(c).S == x.bitIs(11)(c).S &&
-        x.bit12Is(c).S == x.bitIs(12)(c).S && x.bit13Is(c).S == x.bitIs(13)(c).S && x.bit14Is(c).S == x.bitIs(14)(c).S && x.bit15Is(c).S == x.bitIs(15)(c).S &&
+        x.bit0To(c).S == x.bitTo(0)(c).S && x.bit1To(c).S == x.bitTo(1)(c).S && x.bit2To(c).S == x.bitTo(2)(c).S && x.bit3To(c).S == x.bitTo(3)(c).S &&
+        x.bit4To(c).S == x.bitTo(4)(c).S && x.bit5To(c).S == x.bitTo(5)(c).S && x.bit6To(c).S == x.bitTo(6)(c).S && x.bit7To(c).S == x.bitTo(7)(c).S &&
+        x.bit8To(c).S == x.bitTo(8)(c).S && x.bit9To(c).S == x.bitTo(9)(c).S && x.bit10To(c).S == x.bitTo(10)(c).S && x.bit11To(c).S == x.bitTo(11)(c).S &&
+        x.bit12To(c).S == x.bitTo(12)(c).S && x.bit13To(c).S == x.bitTo(13)(c).S && x.bit14To(c).S == x.bitTo(14)(c).S && x.bit15To(c).S == x.bitTo(15)(c).S &&
         (0 to 15).forall{ i => 
-          (x.bitIs(i)(c).S & 0xFFFF) == (if (c) ((s & 0xFFFF) | line(i)) else (s & notch(i))) &&
-          x.bitIs(i)(c).S == x.bitsAre(i,1)(if (c) 1 else 0).S
+          (x.bitTo(i)(c).S & 0xFFFF) == (if (c) ((s & 0xFFFF) | line(i)) else (s & notch(i))) &&
+          x.bitTo(i)(c).S == x.bitsTo(i,1)(if (c) 1 else 0).S
         }
       } &&
       (0 to 15).forall{ y => (0 to 12 by 2).forall{ k =>
-        x.bitIs(k)((y&1) != 0).bitIs(k+1)((y&2) != 0).bitIs(k+2)((y&4) != 0).bitIs(k+3)((y&8) != 0).S == x.bitsAre(k, 4)(y.toShort).S
+        x.bitTo(k)((y&1) != 0).bitTo(k+1)((y&2) != 0).bitTo(k+2)((y&4) != 0).bitTo(k+3)((y&8) != 0).S == x.bitsTo(k, 4)(y.toShort).S
       }}
     }
   }
@@ -90,21 +91,21 @@ object Test_Packed extends Test_Kse {
       List(false, true).forall{ c =>
         val line = Array.tabulate(32){ i => 1 << i }
         val notch = Array.tabulate(32){ i => 0xFFFFFFFF - (1 << i) }
-        x.bit0Is(c).I == x.bitIs(0)(c).I && x.bit1Is(c).I == x.bitIs(1)(c).I && x.bit2Is(c).I == x.bitIs(2)(c).I && x.bit3Is(c).I == x.bitIs(3)(c).I &&
-        x.bit4Is(c).I == x.bitIs(4)(c).I && x.bit5Is(c).I == x.bitIs(5)(c).I && x.bit6Is(c).I == x.bitIs(6)(c).I && x.bit7Is(c).I == x.bitIs(7)(c).I &&
-        x.bit8Is(c).I == x.bitIs(8)(c).I && x.bit9Is(c).I == x.bitIs(9)(c).I && x.bit10Is(c).I == x.bitIs(10)(c).I && x.bit11Is(c).I == x.bitIs(11)(c).I &&
-        x.bit12Is(c).I == x.bitIs(12)(c).I && x.bit13Is(c).I == x.bitIs(13)(c).I && x.bit14Is(c).I == x.bitIs(14)(c).I && x.bit15Is(c).I == x.bitIs(15)(c).I &&
-        x.bit16Is(c).I == x.bitIs(16)(c).I && x.bit17Is(c).I == x.bitIs(17)(c).I && x.bit18Is(c).I == x.bitIs(18)(c).I && x.bit19Is(c).I == x.bitIs(19)(c).I &&
-        x.bit20Is(c).I == x.bitIs(20)(c).I && x.bit21Is(c).I == x.bitIs(21)(c).I && x.bit22Is(c).I == x.bitIs(22)(c).I && x.bit23Is(c).I == x.bitIs(23)(c).I &&
-        x.bit24Is(c).I == x.bitIs(24)(c).I && x.bit25Is(c).I == x.bitIs(25)(c).I && x.bit26Is(c).I == x.bitIs(26)(c).I && x.bit27Is(c).I == x.bitIs(27)(c).I &&
-        x.bit28Is(c).I == x.bitIs(28)(c).I && x.bit29Is(c).I == x.bitIs(29)(c).I && x.bit30Is(c).I == x.bitIs(30)(c).I && x.bit31Is(c).I == x.bitIs(31)(c).I &&
+        x.bit0To(c).I == x.bitTo(0)(c).I && x.bit1To(c).I == x.bitTo(1)(c).I && x.bit2To(c).I == x.bitTo(2)(c).I && x.bit3To(c).I == x.bitTo(3)(c).I &&
+        x.bit4To(c).I == x.bitTo(4)(c).I && x.bit5To(c).I == x.bitTo(5)(c).I && x.bit6To(c).I == x.bitTo(6)(c).I && x.bit7To(c).I == x.bitTo(7)(c).I &&
+        x.bit8To(c).I == x.bitTo(8)(c).I && x.bit9To(c).I == x.bitTo(9)(c).I && x.bit10To(c).I == x.bitTo(10)(c).I && x.bit11To(c).I == x.bitTo(11)(c).I &&
+        x.bit12To(c).I == x.bitTo(12)(c).I && x.bit13To(c).I == x.bitTo(13)(c).I && x.bit14To(c).I == x.bitTo(14)(c).I && x.bit15To(c).I == x.bitTo(15)(c).I &&
+        x.bit16To(c).I == x.bitTo(16)(c).I && x.bit17To(c).I == x.bitTo(17)(c).I && x.bit18To(c).I == x.bitTo(18)(c).I && x.bit19To(c).I == x.bitTo(19)(c).I &&
+        x.bit20To(c).I == x.bitTo(20)(c).I && x.bit21To(c).I == x.bitTo(21)(c).I && x.bit22To(c).I == x.bitTo(22)(c).I && x.bit23To(c).I == x.bitTo(23)(c).I &&
+        x.bit24To(c).I == x.bitTo(24)(c).I && x.bit25To(c).I == x.bitTo(25)(c).I && x.bit26To(c).I == x.bitTo(26)(c).I && x.bit27To(c).I == x.bitTo(27)(c).I &&
+        x.bit28To(c).I == x.bitTo(28)(c).I && x.bit29To(c).I == x.bitTo(29)(c).I && x.bit30To(c).I == x.bitTo(30)(c).I && x.bit31To(c).I == x.bitTo(31)(c).I &&
         (0 to 31).forall{ j =>
-          x.bitIs(j)(c).I == (if (c) i | line(j) else i & notch(j)) &&
-          x.bitIs(j)(c).I == x.bitsAre(j,1)(if (c) 1 else 0).I
+          x.bitTo(j)(c).I == (if (c) i | line(j) else i & notch(j)) &&
+          x.bitTo(j)(c).I == x.bitsTo(j,1)(if (c) 1 else 0).I
         }
       } &&
       (0 to 15).forall{ y => (0 to 28 by 2).forall{ k =>
-        x.bitIs(k)((y&1) != 0).bitIs(k+1)((y&2) != 0).bitIs(k+2)((y&4) != 0).bitIs(k+3)((y&8) != 0).I == x.bitsAre(k, 4)(y).I
+        x.bitTo(k)((y&1) != 0).bitTo(k+1)((y&2) != 0).bitTo(k+2)((y&4) != 0).bitTo(k+3)((y&8) != 0).I == x.bitsTo(k, 4)(y).I
       }}
     } &&
     List.fill(2048)(rng.nextFloat).forall{ f => if (f.isNaN) { f.inInt.F.isNaN && 0.inInt.f0(f).f0.isNaN } else { f.inInt.F == f && 0.inInt.f0(f).f0 == f } }
@@ -164,29 +165,29 @@ object Test_Packed extends Test_Kse {
       List(false, true).forall{ c =>
         val line = Array.tabulate(64){ i => 1L << i }
         val notch = Array.tabulate(64){ i => 0xFFFFFFFFFFFFFFFFL - (1L << i) }
-        x.bit0Is(c).L == x.bitIs(0)(c).L && x.bit1Is(c).L == x.bitIs(1)(c).L && x.bit2Is(c).L == x.bitIs(2)(c).L && x.bit3Is(c).L == x.bitIs(3)(c).L &&
-        x.bit4Is(c).L == x.bitIs(4)(c).L && x.bit5Is(c).L == x.bitIs(5)(c).L && x.bit6Is(c).L == x.bitIs(6)(c).L && x.bit7Is(c).L == x.bitIs(7)(c).L &&
-        x.bit8Is(c).L == x.bitIs(8)(c).L && x.bit9Is(c).L == x.bitIs(9)(c).L && x.bit10Is(c).L == x.bitIs(10)(c).L && x.bit11Is(c).L == x.bitIs(11)(c).L &&
-        x.bit12Is(c).L == x.bitIs(12)(c).L && x.bit13Is(c).L == x.bitIs(13)(c).L && x.bit14Is(c).L == x.bitIs(14)(c).L && x.bit15Is(c).L == x.bitIs(15)(c).L &&
-        x.bit16Is(c).L == x.bitIs(16)(c).L && x.bit17Is(c).L == x.bitIs(17)(c).L && x.bit18Is(c).L == x.bitIs(18)(c).L && x.bit19Is(c).L == x.bitIs(19)(c).L &&
-        x.bit20Is(c).L == x.bitIs(20)(c).L && x.bit21Is(c).L == x.bitIs(21)(c).L && x.bit22Is(c).L == x.bitIs(22)(c).L && x.bit23Is(c).L == x.bitIs(23)(c).L &&
-        x.bit24Is(c).L == x.bitIs(24)(c).L && x.bit25Is(c).L == x.bitIs(25)(c).L && x.bit26Is(c).L == x.bitIs(26)(c).L && x.bit27Is(c).L == x.bitIs(27)(c).L &&
-        x.bit28Is(c).L == x.bitIs(28)(c).L && x.bit29Is(c).L == x.bitIs(29)(c).L && x.bit30Is(c).L == x.bitIs(30)(c).L && x.bit31Is(c).L == x.bitIs(31)(c).L &&
-        x.bit32Is(c).L == x.bitIs(32)(c).L && x.bit33Is(c).L == x.bitIs(33)(c).L && x.bit34Is(c).L == x.bitIs(34)(c).L && x.bit35Is(c).L == x.bitIs(35)(c).L &&
-        x.bit36Is(c).L == x.bitIs(36)(c).L && x.bit37Is(c).L == x.bitIs(37)(c).L && x.bit38Is(c).L == x.bitIs(38)(c).L && x.bit39Is(c).L == x.bitIs(39)(c).L &&
-        x.bit40Is(c).L == x.bitIs(40)(c).L && x.bit41Is(c).L == x.bitIs(41)(c).L && x.bit42Is(c).L == x.bitIs(42)(c).L && x.bit43Is(c).L == x.bitIs(43)(c).L &&
-        x.bit44Is(c).L == x.bitIs(44)(c).L && x.bit45Is(c).L == x.bitIs(45)(c).L && x.bit46Is(c).L == x.bitIs(46)(c).L && x.bit47Is(c).L == x.bitIs(47)(c).L &&
-        x.bit48Is(c).L == x.bitIs(48)(c).L && x.bit49Is(c).L == x.bitIs(49)(c).L && x.bit50Is(c).L == x.bitIs(50)(c).L && x.bit51Is(c).L == x.bitIs(51)(c).L &&
-        x.bit52Is(c).L == x.bitIs(52)(c).L && x.bit53Is(c).L == x.bitIs(53)(c).L && x.bit54Is(c).L == x.bitIs(54)(c).L && x.bit55Is(c).L == x.bitIs(55)(c).L &&
-        x.bit56Is(c).L == x.bitIs(56)(c).L && x.bit57Is(c).L == x.bitIs(57)(c).L && x.bit58Is(c).L == x.bitIs(58)(c).L && x.bit59Is(c).L == x.bitIs(59)(c).L &&
-        x.bit60Is(c).L == x.bitIs(60)(c).L && x.bit61Is(c).L == x.bitIs(61)(c).L && x.bit62Is(c).L == x.bitIs(62)(c).L && x.bit63Is(c).L == x.bitIs(63)(c).L &&
+        x.bit0To(c).L == x.bitTo(0)(c).L && x.bit1To(c).L == x.bitTo(1)(c).L && x.bit2To(c).L == x.bitTo(2)(c).L && x.bit3To(c).L == x.bitTo(3)(c).L &&
+        x.bit4To(c).L == x.bitTo(4)(c).L && x.bit5To(c).L == x.bitTo(5)(c).L && x.bit6To(c).L == x.bitTo(6)(c).L && x.bit7To(c).L == x.bitTo(7)(c).L &&
+        x.bit8To(c).L == x.bitTo(8)(c).L && x.bit9To(c).L == x.bitTo(9)(c).L && x.bit10To(c).L == x.bitTo(10)(c).L && x.bit11To(c).L == x.bitTo(11)(c).L &&
+        x.bit12To(c).L == x.bitTo(12)(c).L && x.bit13To(c).L == x.bitTo(13)(c).L && x.bit14To(c).L == x.bitTo(14)(c).L && x.bit15To(c).L == x.bitTo(15)(c).L &&
+        x.bit16To(c).L == x.bitTo(16)(c).L && x.bit17To(c).L == x.bitTo(17)(c).L && x.bit18To(c).L == x.bitTo(18)(c).L && x.bit19To(c).L == x.bitTo(19)(c).L &&
+        x.bit20To(c).L == x.bitTo(20)(c).L && x.bit21To(c).L == x.bitTo(21)(c).L && x.bit22To(c).L == x.bitTo(22)(c).L && x.bit23To(c).L == x.bitTo(23)(c).L &&
+        x.bit24To(c).L == x.bitTo(24)(c).L && x.bit25To(c).L == x.bitTo(25)(c).L && x.bit26To(c).L == x.bitTo(26)(c).L && x.bit27To(c).L == x.bitTo(27)(c).L &&
+        x.bit28To(c).L == x.bitTo(28)(c).L && x.bit29To(c).L == x.bitTo(29)(c).L && x.bit30To(c).L == x.bitTo(30)(c).L && x.bit31To(c).L == x.bitTo(31)(c).L &&
+        x.bit32To(c).L == x.bitTo(32)(c).L && x.bit33To(c).L == x.bitTo(33)(c).L && x.bit34To(c).L == x.bitTo(34)(c).L && x.bit35To(c).L == x.bitTo(35)(c).L &&
+        x.bit36To(c).L == x.bitTo(36)(c).L && x.bit37To(c).L == x.bitTo(37)(c).L && x.bit38To(c).L == x.bitTo(38)(c).L && x.bit39To(c).L == x.bitTo(39)(c).L &&
+        x.bit40To(c).L == x.bitTo(40)(c).L && x.bit41To(c).L == x.bitTo(41)(c).L && x.bit42To(c).L == x.bitTo(42)(c).L && x.bit43To(c).L == x.bitTo(43)(c).L &&
+        x.bit44To(c).L == x.bitTo(44)(c).L && x.bit45To(c).L == x.bitTo(45)(c).L && x.bit46To(c).L == x.bitTo(46)(c).L && x.bit47To(c).L == x.bitTo(47)(c).L &&
+        x.bit48To(c).L == x.bitTo(48)(c).L && x.bit49To(c).L == x.bitTo(49)(c).L && x.bit50To(c).L == x.bitTo(50)(c).L && x.bit51To(c).L == x.bitTo(51)(c).L &&
+        x.bit52To(c).L == x.bitTo(52)(c).L && x.bit53To(c).L == x.bitTo(53)(c).L && x.bit54To(c).L == x.bitTo(54)(c).L && x.bit55To(c).L == x.bitTo(55)(c).L &&
+        x.bit56To(c).L == x.bitTo(56)(c).L && x.bit57To(c).L == x.bitTo(57)(c).L && x.bit58To(c).L == x.bitTo(58)(c).L && x.bit59To(c).L == x.bitTo(59)(c).L &&
+        x.bit60To(c).L == x.bitTo(60)(c).L && x.bit61To(c).L == x.bitTo(61)(c).L && x.bit62To(c).L == x.bitTo(62)(c).L && x.bit63To(c).L == x.bitTo(63)(c).L &&
         (0 to 63).forall{ j =>
-          x.bitIs(j)(c).L == (if (c) l | line(j) else l & notch(j)) &&
-          x.bitIs(j)(c).L == x.bitsAre(j,1)(if (c) 1 else 0).L
+          x.bitTo(j)(c).L == (if (c) l | line(j) else l & notch(j)) &&
+          x.bitTo(j)(c).L == x.bitsTo(j,1)(if (c) 1 else 0).L
         }
       } &&
       (0 to 15).forall{ y => (0 to 60 by 2).forall{ k =>
-        x.bitIs(k)((y&1) != 0).bitIs(k+1)((y&2) != 0).bitIs(k+2)((y&4) != 0).bitIs(k+3)((y&8) != 0).L == x.bitsAre(k, 4)(y).L
+        x.bitTo(k)((y&1) != 0).bitTo(k+1)((y&2) != 0).bitTo(k+2)((y&4) != 0).bitTo(k+3)((y&8) != 0).L == x.bitsTo(k, 4)(y).L
       }}
     } &&
     List.fill(4096)(rng.nextFloat).forall{ f => 

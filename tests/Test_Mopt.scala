@@ -7,7 +7,7 @@ object Test_Mopt extends Test_Kse {
   def test_lowlevel = {
     val m = Mopt.empty[Boolean]
     !m.ok && m.copy.on.ok && !m.off.ok && m.on.ok && (m := true).value &&
-    !m.copy.value(false).value && m.copy.ok && m.value &&
+    !m.copy.value_(false).value && m.copy.ok && m.value &&
     !{ m.value = false; m }.value && !m.clear.ok
   }
 
@@ -20,23 +20,23 @@ object Test_Mopt extends Test_Kse {
   }
 
   def test_highlevel = {
-    val m = Mopt.empty[Float].value(1f)
+    val m = Mopt.empty[Float].value_(1f)
     var i = 0
-    m.xform(_ * 2).value == 1f && { m.tap(_ => i += 1).value == i+1 } && !m.exists(_ < 10) &&
-    m.on.xform(_ * 2).value == 2f && { m.tap(_ => i += 1).value == i+1 } && m.exists(_ < 10) &&
+    m.mop(_ * 2).value == 1f && { m.peek(_ => i += 1).value == i+1 } && !m.exists(_ < 10) &&
+    m.on.mop(_ * 2).value == 2f && { m.peek(_ => i += 1).value == i+1 } && m.exists(_ < 10) &&
     m.reject(_ > 10).ok && !m.reject(_ < 10).ok && m.getOr(0f) == 0
   }
 
   def test_object = {
-    val m = Mopt.empty[Char].value('m')
-    m.toString == "<_>" && m.hashCode == m.copy.value('x').hashCode &&
-    m == m.copy.value('x') && m.copy != m.on &&
+    val m = Mopt.empty[Char].value_('m')
+    m.toString == "<_>" && m.hashCode == m.copy.value_('x').hashCode &&
+    m == m.copy.value_('x') && m.copy != m.on &&
     m.toString == "<m>" && m.hashCode == m.value.hashCode &&
-    m == m.copy && m != m.copy.value('x') && m != m.copy.off
+    m == m.copy && m != m.copy.value_('x') && m != m.copy.off
   }
 
   def test_conversion = {
-    val m = Mopt.empty[Long].value(1)
+    val m = Mopt.empty[Long].value_(1)
     m.toOption == None && m.toOk == Ok.UnitNo &&
     m.on.toOption == Some(1L) && m.toOk == Yes(1L) && m == Mopt(Option(1L)) &&
     Option(1L).toMopt == m

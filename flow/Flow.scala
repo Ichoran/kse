@@ -7,6 +7,27 @@ import scala.language.experimental.macros
 
 import scala.util.control.NonFatal
 
+/**
+  * Control flow abstractions for Scala.
+  * 
+  * Style guide: naming schemes for methods and variables.
+  *   toX  --  converts to a new object X
+  *   asX  --  converts losslessly (possibly just by casting) to a new object X
+  *   inX  --  creates a box of type X around object
+  *   x    --  getter for x
+  *   xTo  --  create a new object with a newly supplied value for x
+  *   xFn  --  create a new object with an updated value for x
+  *   x_   --  setter (chainable) for x
+  *   xOp  --  mutate x with a given operation
+  * 
+  *   myX  --  private storage for x
+  *   xi   --  i'th value of x in a loop
+  *   i0   --  start index (inclusive)
+  *   i1   --  end index (inclusive!)
+  *   iN   --  end index (exclusive)
+  *   x0   --  initial or default value
+  *   xs   --  more than one x  
+  */
 package flow {
   /** Provides default behavior for validating an [[Ok]], namely to throw an exception if a disfavored value is found. */
   trait LowPriorityOkValidation {
@@ -147,12 +168,9 @@ package object flow extends LowPriorityOkValidation {
   def iFor[A](iterator: Iterator[A])(f: A => Unit): Unit = macro ControlFlowMacroImpl.iFor[A]
    
   
-  private val myOops: Hopped[Unit] with Oops = new Hopped[Unit] with Oops {
+  private val myOops: Oops = new Hopped[Unit] with Oops {
     def apply(): Nothing = throw this
-    def apply(a: Unit): Nothing = throw this
     def value = ()
-    def valueTo(a: Unit) = this
-    def valueFn(f: Unit => Unit) = { f(value); this }
   }
   
   /** Use this when you want an [[Oops]] that will throw an
@@ -161,10 +179,6 @@ package object flow extends LowPriorityOkValidation {
     */
   val oopsThrowingRealException = new Oops {
     def apply(): Nothing = throw new OopsException
-    def apply(a: Unit): Nothing = throw new OopsException
-    def value = ()
-    def valueTo(a: Unit) = this
-    def valueFn(f: Unit => Unit) = { f(value); this }
   }
 
 
@@ -273,22 +287,22 @@ package object flow extends LowPriorityOkValidation {
   private sealed class HopImplRef[A <: AnyRef](var value: A) extends Hopped[A] with Hop[A] {
     def apply() = throw this
     def apply(a: A) = { value = a; throw this }
-    def valueTo(a: A) = { value = a; this }
-    def valueFn(f: A => A) = { value = f(value); this }
+    def value_(a: A) = { value = a; this }
+    def valueOp(f: A => A) = { value = f(value); this }
   }
 
   private sealed class HopImplInt(var value: Int) extends Hopped[Int] with Hop[Int] {
     def apply() = throw this
     def apply(a: Int) = { value = a; throw this }
-    def valueTo(a: Int) = { value = a; this }
-    def valueFn(f: Int => Int) = { value = f(value); this }
+    def value_(a: Int) = { value = a; this }
+    def valueOp(f: Int => Int) = { value = f(value); this }
   }
 
   private sealed class HopImplLong(var value: Long) extends Hopped[Long] with Hop[Long] {
     def apply() = throw this
     def apply(a: Long) = { value = a; throw this }
-    def valueTo(a: Long) = { value = a; this }
-    def valueFn(f: Long => Long) = { value = f(value); this }
+    def value_(a: Long) = { value = a; this }
+    def valueOp(f: Long => Long) = { value = f(value); this }
   }
 
 

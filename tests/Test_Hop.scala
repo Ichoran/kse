@@ -14,10 +14,7 @@ object Test_Hop extends Test_Kse {
 
   private val myOops = new Hopped[Unit] with Oops {
     def value = ()
-    def valueTo(u: Unit) = this
-    def valueFn(f: Unit => Unit) = { f(()); this }
     def apply()  = { throw this }
-    def apply(u: Unit) = { throw this }
   }
 
   def test_tapOops = {
@@ -33,8 +30,8 @@ object Test_Hop extends Test_Kse {
   private val myHop = new Hopped[String] with Hop[String] {
     private[this] var myValue: String = null
     def value = myValue
-    def valueTo(v: String): this.type = { myValue = value; this }
-    def valueFn(f: String => String): this.type = { myValue = f(myValue); this }
+    def value_(v: String): this.type = { myValue = value; this }
+    def valueOp(f: String => String): this.type = { myValue = f(myValue); this }
     def apply() = { throw this }
     def apply(s: String) = { myValue = s; throw this }
   }
