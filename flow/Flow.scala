@@ -18,6 +18,7 @@ import scala.util.control.NonFatal
   *   xTo  --  create a new object with a newly supplied value for x
   *   xFn  --  create a new object with an updated value for x
   *   x_   --  setter (chainable) for x
+  *   x_=  --  setter for x that returns unit
   *   xOp  --  mutate x with a given operation
   * 
   *   myX  --  private storage for x
@@ -27,6 +28,12 @@ import scala.util.control.NonFatal
   *   iN   --  end index (exclusive)
   *   x0   --  initial or default value
   *   xs   --  more than one x  
+  * 
+  * tap and fn _never_ apply to the contents of an object, _always_ the object.  They will
+  * be called peek (if returning self) or foreach (if not) instead of tap, and map (if returning
+  * a new object) or mop (for mutable Op, if mutating in place) instead of fn.  Collections with
+  * single named variables should prefer the collections names (map, mop, etc.) instead of the
+  * decorated variable names (valueFn, valueOp, etc.).
   */
 package flow {
   /** Provides default behavior for validating an [[Ok]], namely to throw an exception if a disfavored value is found. */

@@ -1,3 +1,6 @@
+// This file is distributed under the BSD 3-clause license.  See file LICENSE.
+// Copyright (c) 2014-2015 Rex Kerr and UCSF
+
 package kse
 
 import scala.annotation.tailrec
@@ -275,7 +278,7 @@ package object eio {
       finally { try { src.close } catch { case t if NonFatal(t) => } }
     }
     
-    def walk(act: FileWalker, log: String => Unit, sizeLimit: Int = Int.MaxValue) {
+    def walk(act: FileWalker, log: FileLogger, sizeLimit: Int = Int.MaxValue) {
       val fw = act match { case fwi: FileWalkImpl => fwi }
       
       val seen = new collection.mutable.AnyRefMap[File, Unit]()
@@ -352,9 +355,9 @@ package object eio {
                   fsw.streamOp
                   if (stp != null) stp = null
                 case fbw: FileWalkOnBuffers =>
-                  log("Could not read zip entry into buffer: " + myName)
+                  log(myName, "Could not read zip entry into buffer", "buffer missing")
                 case fsw: FileWalkOnStreams =>
-                  log("Could not read zip entry into stream: " + myName)
+                  log(myName, "Could not read zip entry into stream", "already consumed")
                 case _ =>
                   fw.listOp
               }
@@ -363,7 +366,7 @@ package object eio {
           stance match {
             case _: Recursed if isZip(ze.getName.takeRight(4).toLowerCase) =>
               try {
-                if (buf == null && consumed) log("Was unable to buffer entry for both reading and recursing into " + myName)
+                if (buf == null && consumed) log(myName, "Unable to buffer entry for both reading and recursing", "both recursing into and processing archive raw without adequate buffering")
                 else if (buf != null) {
                   val bais = new ByteArrayInputStream(buf)
                   val zis2 = new ZipInputStream(bais)
@@ -372,9 +375,9 @@ package object eio {
                 else try { ziply(new ZipInputStream(zis), zes) } finally { zis.closeEntry }
               }
               catch { 
-                case soe: StackOverflowError => log("Stack overflow while recursing into " + myName)
-                case oome: OutOfMemoryError => log("Not enough memory to recurse into " + myName)
-                case t if NonFatal(t) => log("Could not recurse into " + myName)
+                case soe: StackOverflowError => log(myName, "Stack overflow while recursing", exceptionAsString(soe))
+                case oome: OutOfMemoryError => log(myName, "Not enough memory to recurse", exceptionAsString(oome))
+                case t if NonFatal(t) => log(myName, "Could not recurse", exceptionAsString(t))
               }
             case _ =>
           }
@@ -393,7 +396,7 @@ package object eio {
                 seen += cf -> unit
                 fw.file = if (fw.canonized) cf else f
                 fw.zes = Nil
-                val p = try { fw.picker } catch { case t if NonFatal(t) => log("Error when considering "+fw.file.getPath); Reject }
+                val p = try { fw.picker } catch { case t if NonFatal(t) => log(fw.file.getPath, "Error selecting during walk", exceptionAsString(t)); Reject }
                 val dir = try { fw.file.isDirectory } catch { case t if NonFatal(t) => false }
                 if (p.selected) {
                   if (dir) fw.listOp
@@ -403,24 +406,24 @@ package object eio {
                         if (fw.file.length < sizeLimit) {
                           (new FileShouldDoThis(fw.file)).gulp match {
                             case Yes(b) => fbsw.buffer = b; fbsw.bufOp; fbsw.buffer = null
-                            case _ => log("Failed to read file " + fw.file.getPath)
+                            case No(n) => log(fw.file.getPath, "Failed to buffer file", n)
                           }
                         }
                         else {
                           val fis = new FileInputStream(fw.file)
                           try { fbsw.stream = fis; fbsw.streamOp }
-                          catch { case t if NonFatal(t) => log("Failed to read file " + fw.file.getPath + " because " + exceptionAsString(t)) }
+                          catch { case t if NonFatal(t) => log(fw.file.getPath, "Failed to stream file", exceptionAsString(t)) }
                           finally { fis.close; fbsw.stream = null }
                         }
                       case fsw: FileWalkOnStreams =>
                         val fis = new FileInputStream(fw.file)
                         try { fsw.stream = fis; fsw.streamOp }
-                        catch { case t if NonFatal(t) => log("Failed to read file " + fw.file.getPath + " because " + exceptionAsString(t)) }
+                        catch { case t if NonFatal(t) => log(fw.file.getPath, "Failed to stream file", exceptionAsString(t)) }
                         finally { fis.close; fsw.stream = null }
                       case fbw: FileWalkOnBuffers =>
                         (new FileShouldDoThis(fw.file)).gulp match {
                           case Yes(b) => fbw.buffer = b; fbw.bufOp; fbw.buffer = null
-                          case _ => log("Failed to read file " + fw.file.getPath)
+                          case No(n) => log(fw.file.getPath, "Failed to buffer file", n)
                         }
                       case _ => fw.listOp
                     }
@@ -465,8 +468,8 @@ package object eio {
       canonize: Boolean = false
     ): Ok[Vector[String], Array[File]] = {
       val picked = Array.newBuilder[File]
-      val log = Vector.newBuilder[String]
-      walk(FileWalk.listed(pick, canonize)(picked += _.file), s => { log += s; () })
+      val log = FileLogger.vector
+      walk(FileWalk.listed(pick, canonize)(picked += _.file), log)
       val v = log.result()
       if (v.nonEmpty) No(v) else Yes(picked.result())
     }
@@ -488,6 +491,34 @@ package object eio {
         finally { fos.close }
       }
       finally { fis.close }
+    }
+    
+    def slurpAll(p: String => Boolean, inZip: Boolean = false): Ok[Ok[Throwable,(Map[String,Vector[String]], Map[String,Vector[String]])], Map[String, Vector[String]]] = {
+      val slurped = Vector.newBuilder[(String, Vector[String])]
+      val errors = FileLogger.map
+      safe{
+        val pickAll = if (inZip) Pick.leaves else Pick.files
+        val select: (FileWalk => Stance) = (fw) => pickAll(fw) match {
+          case sel: Selected =>
+            val keep = if (fw.zes.isEmpty) p(fw.file.getPath) else p(fw.file.getPath + fw.zes.mkString("//","//",""))
+            if (keep) sel else Reject // No select + recurse allowed in this API
+          case x => x
+        }
+        walk(FileWalk(select, true)(_ => ()){ fb =>
+            slurped += ((fb.name, scala.io.Source.fromInputStream(new ByteArrayInputStream(fb.buffer)).getLines.toVector))
+          }{ fis =>
+            slurped += ((fis.name, scala.io.Source.fromInputStream(fis.stream).getLines.toVector))
+          },
+          errors,
+          1048576 // 1M buffer should be plenty for efficiently grabbing small files
+        )
+        val em = errors.result
+        if (em.isEmpty) Yes(slurped.result.toMap) else No((em, slurped.result.toMap))
+      } match {
+        case No(t) => No(No(t))
+        case Yes(No(x)) => No(Yes(x))
+        case Yes(Yes(y)) => Yes(y)
+      }
     }
   }
   
@@ -636,10 +667,39 @@ package eio {
     }
   }
   
-  sealed trait FileWalker {}
+  trait FileLogger extends (String => Unit) {
+    protected def explain(where: String, what: String, reason: String) = s"$what in $where because $reason"
+    def apply(where: String, what: String, reason: String) { apply(explain(where, what, reason)) }
+    def apply(s: String): Unit
+  }
+  trait FileLogsTo[A] extends FileLogger {
+    def result(): A
+  }
+  object FileLogger {
+    def vector: FileLogsTo[Vector[String]] = new FileLogsTo[Vector[String]] {
+      private[this] val myLog = Vector.newBuilder[String]
+      def apply(s: String) { myLog += s }
+      def result() = myLog.result()
+    }
+    def map: FileLogsTo[Map[String, Vector[String]]] = new FileLogsTo[Map[String, Vector[String]]] {
+      private type Vb = collection.mutable.Builder[String, Vector[String]]
+      private[this] val myLog = new collection.mutable.AnyRefMap[String, Vb]
+      def apply(s: String) { myLog.getOrElseUpdate("", Vector.newBuilder[String]) += s }
+      override def apply(where: String, what: String, reason: String) { myLog.getOrElseUpdate(where, Vector.newBuilder[String]) += explain(where, what, reason) }
+      def result() = {
+        val mb = Map.newBuilder[String, Vector[String]]
+        myLog.foreach{ case (k,v) => mb += ((k, v.result())) }
+        myLog.clear()
+        mb.result()
+      }
+    }
+  }
+  
+  sealed trait FileWalker { def name: String }
   sealed abstract class FileWalk extends FileWalker {
     def file: File
     def zes: List[ZipEntry]
+    def name: String = if (zes.isEmpty) file.getPath else file.getPath + zes.mkString("//","//","")
   }
   sealed trait FileBufferWalk extends FileWalk {
     def buffer: Array[Byte]
@@ -689,7 +749,7 @@ package eio {
       def listOp { fdir(this) }
       def bufOp { fbuf(this) }
       def streamOp { fis(this) }
-    }
+    }    
   }
 
   object Args {

@@ -1166,6 +1166,8 @@ trait Grok {
   def back(n: Int)(implicit oops: Oops): this.type = { var i = n; while (i>0) { back; i -= 1}; this }
   def undrop(n: Int): this.type = { var i = n; while (i>0 && hasPrev) { back(oopsThrowingRealException); i -= 1}; this }
   
+  def peek: Int
+  
   def Z(implicit oops: Oops): Boolean
   def B(implicit oops: Oops): Byte
   def S(implicit oops: Oops): Short
@@ -1178,6 +1180,8 @@ trait Grok {
   def tok(implicit oops: Oops): String
   def tail(implicit oops: Oops): String
   def quoted(implicit oops: Oops): String
+  def quotok(implicit oops: Oops): String = if (peek == '"') quoted else tok
+  def alternates[A](first: Grok => A, fallbacks: (Grok => A)*)(implicit oops: Oops): A
   def base64(coder: kse.eio.base64.Base64)(implicit oops: Oops): Array[Byte] = coder.decode(tok)
   def until(delim: Delimiter)(implicit oops: Oops): String
   def until(delim: DelimByte)(implicit oops: Oops): String
@@ -1246,6 +1250,7 @@ trait GrokArrayTextControl extends GrokArrayControl {
 
 object Grok {
   def apply(s: String): GrokFullDelim = raw(s, 0, s.length, Delimiter.whiteDelimiter)
+  def apply(s: String, delimChar: Char): GrokFullDelim = raw(s, 0, s.length, new Delimiter { @inline def apply(c: Char) = c == delimChar })
   def apply(s: String, delimiter: Delimiter): GrokFullDelim = raw(s, 0, s.length, delimiter)
   def apply(s: String, start: Int, limit: Int): GrokFullDelim = raw(s, start, limit, Delimiter.whiteDelimiter)
   def apply(s: String, start: Int, limit: Int, delimiter: Delimiter): GrokFullDelim = raw(s, start, limit, delimiter)
@@ -1301,6 +1306,8 @@ object Grok {
       indexTo(i)
       this
     } else OOPS
+      
+    def peek = if (hasNext) s(index) else -1
     
     def Z(implicit oops: Oops): Boolean = {
       skipWhite(myString)(myLimit, myDelim)
@@ -1380,6 +1387,20 @@ object Grok {
       val ans = rawParseString(myString)(myLimit)
       if (error) OOPS
       ans
+    }
+    def alternates[A](first: Grok => A, fallbacks: (Grok => A)*)(implicit oops: Oops): A = {
+      val i0 = index
+      try { first(this) }
+      catch { case t if t eq oops =>
+        indexTo(i0)
+        val fi = fallbacks.iterator
+        while (fi.hasNext) {
+          try { return fi.next.apply(this) }
+          catch { case t if t eq oops => }
+        }
+        indexTo(i0)
+        OOPS
+      }
     }
     def exact(target: String)(implicit oops: Oops) {
       skipWhite(myString)(myLimit, myDelim)
@@ -1470,6 +1491,8 @@ object Grok {
       indexTo(i)
       this
     } else OOPS
+      
+    def peek = if (hasNext) s(index)&0xFF else -1
     
     def Z(implicit oops: Oops): Boolean = {
       skipWhiteB(myBytes)(myLimit, myDelim)
@@ -1563,6 +1586,20 @@ object Grok {
       if (error) OOPS
       ans
     }
+    def alternates[A](first: Grok => A, fallbacks: (Grok => A)*)(implicit oops: Oops): A = {
+      val i0 = index
+      try { first(this) }
+      catch { case t if t eq oops =>
+        indexTo(i0)
+        val fi = fallbacks.iterator
+        while (fi.hasNext) {
+          try { return fi.next.apply(this) }
+          catch { case t if t eq oops => }
+        }
+        indexTo(i0)
+        OOPS
+      }
+    }
     def exact(target: String)(implicit oops: Oops) {
       skipWhiteB(myBytes)(myLimit, myDelim)
       rawParseExactB(myBytes, target)(myLimit, myDelim)
@@ -1637,6 +1674,8 @@ object Grok {
     def back(implicit oops: Oops) = back(1)(oops)
     override def undrop(n: Int) = { j = math.min(myLimit, j+n); this }
     
+    def peek = if (j >= myLimit) -1 else myBytes(j)
+    
     def Z(implicit oops: Oops) = if (j >= myLimit) OOPS else { val ans = myBytes(j) != 0; j += 1; ans }
     def B(implicit oops: Oops) = if (j >= myLimit) OOPS else { val ans = myBytes(j); j += 1; ans }
     def S(implicit oops: Oops) = if (j+1 >= myLimit) OOPS else {
@@ -1677,6 +1716,20 @@ object Grok {
       if (myGrok.error) OOPS
       j = myGrok.index
       ans
+    }
+    def alternates[A](first: Grok => A, fallbacks: (Grok => A)*)(implicit oops: Oops): A = {
+      val i0 = j
+      try { first(this) }
+      catch { case t if t eq oops =>
+        j = i0
+        val fi = fallbacks.iterator
+        while (fi.hasNext) {
+          try { return fi.next.apply(this) }
+          catch { case t if t eq oops => }
+        }
+        j = i0
+        OOPS
+      }
     }
     override def getBs(a: Array[Byte], offset: Int, count: Int)(implicit oops: Oops): this.type = {
       val n = math.min(myLimit - j, count)

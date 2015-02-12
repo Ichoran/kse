@@ -332,7 +332,17 @@ package object coll {
     @inline def reduce(f: (A,A) => A) = f( f( f(underlying._1, underlying._2), f(underlying._3, underlying._4) ), underlying._5 )
   }
   
-  implicit class KseRichIterator[A](underlying: Iterator[A]) {
+  implicit class KseRichIterator[A](private val underlying: Iterator[A]) extends AnyVal {
+    def takeTo(p: A => Boolean): Iterator[A] = new collection.AbstractIterator[A] {
+      private[this] var foundLast = false
+      def hasNext = !foundLast && underlying.hasNext
+      def next = {
+        if (foundLast) throw new NoSuchElementException("next on empty iterator")
+        val ans = underlying.next
+        foundLast = p(ans)
+      ans
+      }
+    }
     def stepper = new Stepper[A] {
       def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
     }
