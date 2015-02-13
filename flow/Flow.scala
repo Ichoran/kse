@@ -126,7 +126,7 @@ package object flow extends LowPriorityOkValidation {
         case d: Double => if (tg.runtimeClass == classOf[Double]) Yes(d).asInstanceOf[Yes[Z]] else No(underlying)
         case _ =>
           val a = underlying.asInstanceOf[AnyRef]  // Need to handle null this way or we get a MatchError
-          if ((a ne null) && tg.runtimeClass.isAssignableFrom(a.getClass)) Yes(a.asInstanceOf[Z]) else No(underlying)
+          if ((a ne null) && tg.runtimeClass.isInstance(a)) Yes(a.asInstanceOf[Z]) else No(underlying)
       }}
       catch { case cce: ClassCastException => No(underlying) }
     }

@@ -353,6 +353,12 @@ trait Grok {
   def xF(fail: Hop[Long]): Long
   def D(fail: Hop[Long]): Long
   def xD(fail: Hop[Long]): Long
+  def peekB(fail: Hop[Long]): Byte
+  def peekC(fail: Hop[Long]): Char
+  def peekTok(fail: Hop[Long]): String
+  def peekBin(n: Int)(fail: Hop[Long]): Array[Byte]
+  def peekBinIn(n: Int, target: Array[Byte], start: Int)(fail: Hop[Long]): Unit
+  def predictNext: Int
   def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: Grok => A)(fail: Hop[Long]): A
   def tok(fail: Hop[Long]): String
   def quoted(fail: Hop[Long]): String
@@ -408,7 +414,8 @@ private[eio] sealed abstract class GrokTextImpl {
    *  22 = matching exact string
    *  23 = matching any of a set of strings
    *  24 = parsing binary block
-   *  25 = skipping
+   *  25 = all alternates failed
+   *  26 = skipping
    */
   private[eio] var error: Byte = 0  
   
