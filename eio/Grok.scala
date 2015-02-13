@@ -331,67 +331,101 @@ object GrokNumber {
   val bytesInInfinity = "INFINITY".getBytes
 }
 
-trait GrokControl {
-  def index: Int
-  def indexTo(i: Int): this.type
-  def error: Boolean
-  def resume: this.type
+trait Grok {
+  def skipAllEmpty: Int
+  def skip(fail: Hop[Long]): Unit
+  def skip(n: Int)(fail: Hop[Long]): Unit
+  def Z(fail: Hop[Long]): Boolean
+  def B(fail: Hop[Long]): Byte
+  def uB(fail: Hop[Long]): Byte
+  def S(fail: Hop[Long]): Short
+  def uS(fail: Hop[Long]): Short
+  def C(fail: Hop[Long]): Char
+  def I(fail: Hop[Long]): Int
+  def uI(fail: Hop[Long]): Int
+  def xI(fail: Hop[Long]): Int
+  def Ibase(base: Int)(fail: Hop[Long]): Int
+  def L(fail: Hop[Long]): Long
+  def uL(fail: Hop[Long]): Long
+  def xL(fail: Hop[Long]): Long
+  def Lbase(base: Int)(fail: Hop[Long]): Long
+  def F(fail: Hop[Long]): Long
+  def xF(fail: Hop[Long]): Long
+  def D(fail: Hop[Long]): Long
+  def xD(fail: Hop[Long]): Long
+  def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: Grok => A)(fail: Hop[Long]): A
+  def tok(fail: Hop[Long]): String
+  def quoted(fail: Hop[Long]): String
+  def quotedBy(left: Char, right: Char)(fail: Hop[Long]): String
+  def base64(fail: Hop[Long]): Array[Byte]
+  def base64in(target: Array[Byte], start: Int)(fail: Hop[Long]): Int
+  def exact(s: String)(fail: Hop[Long]): Unit
+  def oneOf(s: String*)(fail: Hop[Long]): String
+  def binary(n: Int)(fail: Hop[Long]): Array[Byte]
+  def binaryIn(n: Int, target: Array[Byte], start: Int)(fail: Hop[Long]): Unit
+  def alternate[A](first: Grok => A, fallbacks: (Grok => A)*)(fail: Hop[Long]): A
 }
 
-abstract class GrokText extends GrokControl {
+trait GrokPositionable extends Grok {
+  def position: Long
+  def toPosition(position: Long)(fail: Hop[Long]): Unit
+}
+
+private[eio] sealed abstract class GrokTextImpl {
   import GrokNumber._
   import Delimiter._
   import DelimByte._
   
-  private var j = 0
-  final def index = j
-  final def indexTo(i: Int): this.type = { j = i; this }
+  private[eio] var index = 0L
   
-  protected var errorLevel = 0
-  def error = errorLevel > 0
-  def resume: this.type = { errorLevel = 0; this }
+  /* Flags in lower 3 bits:
+   *   1 = did not end with delimiter
+   *   2 = out of bounds
+   *   3 = incorrect format or character
+   *   4 = input empty
+   * Flags in upper 5 bits:
+   *   1 = parsing boolean
+   *   2 = parsing byte
+   *   3 = parsing unsigned byte
+   *   4 = parsing short
+   *   5 = parsing unsigned short
+   *   6 = parsing char
+   *   7 = parsing int
+   *   8 = parsing unsigned int
+   *   9 = parsing hex int
+   *  10 = parsing arbitrary base int
+   *  11 = parsing long
+   *  12 = parsing unsigned long
+   *  13 = parsing hex long
+   *  14 = parsing arbitrary base long
+   *  15 = parsing float
+   *  16 = parsing hex float
+   *  17 = parsing double
+   *  18 = parsing hex double
+   *  19 = parsing token
+   *  20 = parsing quoted string
+   *  21 = parsing base64 encoding
+   *  22 = matching exact string
+   *  23 = matching any of a set of strings
+   *  24 = parsing binary block
+   *  25 = skipping
+   */
+  private[eio] var error: Byte = 0  
   
-  
-  @inline final def skipWhite(s: String)(limit: Int = s.length, delim: Delimiter = whiteDelimiter): this.type = {
-    while (j < limit && delim(s(j))) j += 1
-    this
-  }
-  @inline final def skipWhiteB(s: Array[Byte])(limit: Int = s.length, delim: DelimByte = whiteDelimByte): this.type = {
-    while (j < limit && delim(s(j))) j += 1
-    this
-  }
-  
-  @inline final def skipBlack(s: String)(limit: Int = s.length, delim: Delimiter = whiteDelimiter): this.type = {
-    while (j < limit && !delim(s(j))) j += 1
-    this
-  }
-  @inline final def skipBlackB(s: Array[Byte])(limit: Int = s.length, delim: DelimByte = whiteDelimByte): this.type = {
-    while (j < limit && !delim(s(j))) j += 1
-    this
-  }
-  
-  final def skipToken(s: String)(limit: Int = s.length, delim: Delimiter = whiteDelimiter): this.type = {
-    skipWhite(s)(limit,delim)
-    skipBlack(s)(limit,delim)
-  }
-  final def skipTokenB(s: Array[Byte])(limit: Int = s.length, delim: DelimByte = whiteDelimByte): this.type = {
-    skipWhiteB(s)(limit,delim)
-    skipBlackB(s)(limit,delim)
-  }
-  
-  
-  private[this] def myParseLong10(s: String, limit: Int, delim: Delimiter, unsigned: Boolean): Long = {
-    if (j >= limit) { errorLevel = 2; return 0 }
-    val sign = (if (s(j) == '-') { if (unsigned) { errorLevel = 2; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
-    errorLevel = 0
+  private[this] def myParseLong10(s: String, limit: Int, unsigned: Boolean): Long = {
+    if (index >= limit) { error = 4; return 0 }
+    val sign = (if (s(index.toInt) == '-') { if (unsigned) { error = 2; return 0 }; j +=1; -1 } else if (unsigned) 0 else 1)
+    error = 0
     var v = 0L
+    var j = index.toInt
     val j0 = j
     val j1 = if (limit - 18 > j) j+18 else limit
     while (j < j1) {
       val c = s(j) - '0'
       if (c < 0 || c > 9) {
-        if (delim(s(j))) { if (j == j0) errorLevel = 2 }
-        else errorLevel = 1
+        if (delim(s(j))) { if (j == j0) error = 2 }
+        else error = 1
+        k = j
         return if (sign < 0) -v else v
       }
       v = v*10 + c
