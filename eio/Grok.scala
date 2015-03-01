@@ -331,6 +331,26 @@ object GrokNumber {
   val bytesInInfinity = "INFINITY".getBytes
 }
 
+abstract class GrokCore {
+  private[eio] var i = _
+  private[eio] var i0 = _
+  private[eio] var iN = _
+  private[eio] var skipped = 0
+  private[eio] var reloadable = false
+  private[eio] def reload() {}
+  private[eio] def stringBuffer: String
+  private[eio] def arrayBuffer: Array[Byte]
+}
+
+abstract class GrokTokenFinder {
+  indexIn(g: GrokCore, iA: Int, iB: Int, n: Int): Long
+}
+
+
+object GrokStringTokens {
+  val space = 
+}
+
 abstract class Grok {
   type MyType <: Grok
   
@@ -376,11 +396,13 @@ abstract class Grok {
 
 final class GrokString extends Grok {
   type MyType = GrokString
+}
 
 trait GrokPositionable extends Grok {
   def toPosition(position: Long)(fail: Hop[Long]): Unit
 }
 
+/*
 final class GrokString extends GrokPositionable {
   private[this] var i = 0
   def position = i.toLong
@@ -1794,4 +1816,4 @@ object Grok {
     def select(targets: Array[String])(implicit oops: kse.flow.Oops): Int = ???
   }
 }
-
+*/
