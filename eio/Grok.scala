@@ -331,8 +331,14 @@ object GrokNumber {
   val bytesInInfinity = "INFINITY".getBytes
 }
 
-trait Grok {
-  def skipAllEmpty: Int
+abstract class Grok {
+  type MyType <: Grok
+  
+  protected var i = _
+  protected var i0 = _
+  protected var iN = _
+  
+  def skipAllEmpty: Long
   def skip(fail: Hop[Long]): Unit
   def skip(n: Int)(fail: Hop[Long]): Unit
   def Z(fail: Hop[Long]): Boolean
@@ -344,22 +350,18 @@ trait Grok {
   def I(fail: Hop[Long]): Int
   def uI(fail: Hop[Long]): Int
   def xI(fail: Hop[Long]): Int
-  def Ibase(base: Int)(fail: Hop[Long]): Int
   def L(fail: Hop[Long]): Long
   def uL(fail: Hop[Long]): Long
   def xL(fail: Hop[Long]): Long
-  def Lbase(base: Int)(fail: Hop[Long]): Long
   def F(fail: Hop[Long]): Long
-  def xF(fail: Hop[Long]): Long
   def D(fail: Hop[Long]): Long
-  def xD(fail: Hop[Long]): Long
   def peekB(fail: Hop[Long]): Byte
   def peekC(fail: Hop[Long]): Char
   def peekTok(fail: Hop[Long]): String
   def peekBin(n: Int)(fail: Hop[Long]): Array[Byte]
   def peekBinIn(n: Int, target: Array[Byte], start: Int)(fail: Hop[Long]): Unit
   def predictNext: Int
-  def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: Grok => A)(fail: Hop[Long]): A
+  def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(fail: Hop[Long]): A
   def tok(fail: Hop[Long]): String
   def quoted(fail: Hop[Long]): String
   def quotedBy(left: Char, right: Char)(fail: Hop[Long]): String
@@ -372,10 +374,17 @@ trait Grok {
   def alternate[A](first: Grok => A, fallbacks: (Grok => A)*)(fail: Hop[Long]): A
 }
 
+final class GrokString extends Grok {
+  type MyType = GrokString
+
 trait GrokPositionable extends Grok {
-  def position: Long
   def toPosition(position: Long)(fail: Hop[Long]): Unit
 }
+
+final class GrokString extends GrokPositionable {
+  private[this] var i = 0
+  def position = i.toLong
+  def skipAllEmpty = ???
 
 private[eio] sealed abstract class GrokTextImpl {
   import GrokNumber._
