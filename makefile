@@ -22,6 +22,7 @@ Kse.jar : \
   kse/coll/Mopt.class \
   kse/eio/base64/Base64.class \
   kse/eio/base64/package.class \
+  kse/eio/Delimiter.class \
   kse/eio/Grok.class \
   kse/eio/package.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
@@ -65,9 +66,14 @@ kse/eio/base64/Base64.class : \
   eio/Base64.scala
 	${F} eio/Base64.scala
 
+kse/eio/Delimiter.class : \
+  eio/Delimiter.scala
+	${F} eio/Delimiter.scala
+
 kse/eio/Grok.class : \
   kse/flow/Ok.class \
   kse/flow/Hop.class \
+  kse/eio/Delimiter.class \
   eio/Grok.scala
 	${F} eio/Grok.scala
 
