@@ -162,17 +162,17 @@ final class LineDelim extends Delimiter  {
       i
     }
   }
-  final def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
+  final def apply(ab: Array[Byte], i0: Int, iN: Int, n: Int): Int = {
     if (i0 >= iN) -1
     else {
       var i = i0
       var k = n
       while (i < iN && k > 0) {
-        val c = s.charAt(i);
+        val c = ab(i);
         if (c == '\n') { i += 1; k -= 1 }
         else if (c == '\r') {
           i += 1
-          if (i >= iN || s.charAt(i) != '\n') k -= 1
+          if (i >= iN || ab(i) != '\n') k -= 1
         }
         else return i
       }
@@ -186,7 +186,7 @@ final class LineDelim extends Delimiter  {
     }
     var j = i1+1
     while (j < iN && {val c = s.charAt(j); c != '\n' && c != '\r'}) j += 1
-    (i packII j).L
+    (i1 packII j).L
   }
   final def _tok(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
     val i1 = apply(ab, i0, iN, n)
@@ -195,11 +195,11 @@ final class LineDelim extends Delimiter  {
     }
     var j = i1+1
     while (j < iN && {val c = ab(j); c != '\n' && c != '\r'}) j += 1
-    (i packII j).L
+    (i1 packII j).L
   }
   final def tok_(s: String, i0: Int, iN: Int, n: Int): Long = {
     var i = i0
-    while (i < iN &&  {val c = s.charAt(j); c != '\n' && c != '\r'}) i += 1
+    while (i < iN &&  {val c = s.charAt(i); c != '\n' && c != '\r'}) i += 1
     if (i >= iN) {
       return if (i == i0) (-1 packII -1).L else (i packII i).L
     }
@@ -208,7 +208,7 @@ final class LineDelim extends Delimiter  {
   }
   final def tok_(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
     var i = i0
-    while (i < iN &&  {val c = ab(j); c != '\n' && c != '\r'}) i += 1
+    while (i < iN &&  {val c = ab(i); c != '\n' && c != '\r'}) i += 1
     if (i >= iN) {
       return if (i == i0) (-1 packII -1).L else (i packII i).L
     }

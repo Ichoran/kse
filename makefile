@@ -105,6 +105,7 @@ test : \
   kse/tests/Test_TupleImplicits.class \
   kse/tests/Test_Packed.class \
   kse/tests/Test_Base64.class \
+  kse/tests/Test_Delimiter.class \
   kse/tests/Test_Grok.class
 	scala kse.tests.Test_Typecheck
 	scala kse.tests.Test_Ok
@@ -116,6 +117,7 @@ test : \
 	scala kse.tests.Test_TupleImplicits
 	scala kse.tests.Test_Packed
 	scala kse.tests.Test_Base64
+	scala kse.tests.Test_Delimiter
 	scala kse.tests.Test_Grok
 
 kse/tests/Test_Typecheck.class : \

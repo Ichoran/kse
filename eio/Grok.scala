@@ -317,14 +317,81 @@ trait Reloader {
   def advanceBuffer(g: Grok, distance: Long)(fail: Hop[Long]): Boolean
 }
 
-sealed trait Grok {
-  type MyType <: Grok
-  private[eio] var i
-  private[eio] var i0
-  private[eio] var iN
-  private[eio] var stance
-  private[eio] var delim: Delimiter
-  private[eio] var reloader: Reloader = _
+sealed abstract class Grok {
+  // type MyType <: Grok
+  /*private[eio]*/ var i = 0
+  /*private[eio]*/ var iOld = 0
+  /*private[eio]*/ var i0 = 0
+  /*private[eio]*/ var iN = 0
+  /*private[eio]*/ var error = 0
+  /*private[eio]*/ var stance = 0
+  /* private[eio] var delim: Delimiter = null */
+  /* private[eio] var reloader: Reloader = null */
+  
+  def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
+    iOld = i
+    val N = math.min(i+limit, iN)
+    if (i >= N) { error = 1; return 0L }
+    var ans = s.charAt(i).toLong-'0'
+    if (ans < 0 || ans > 9) { error = 2; return 0L }
+    i += 1
+    error = 0
+    while (i < N) {
+      var c = s.charAt(i)-'0'
+      if (c < 0 || c > 9) return ans
+      ans = ans*10 + c
+      i += 1
+    }
+    ans
+  }
+  
+  def rawDecimalDigitsUnsigned(ab: Array[Byte], limit: Int): Long = {
+    iOld = i
+    val N = math.min(i+limit, iN)
+    if (i >= N) { error = 1; return 0L }
+    var ans = ab(i).toLong-'0'
+    if (ans < 0 || ans > 9) { error = 2; return 0L }
+    i += 1
+    error = 0
+    while (i < N) {
+      var c = ab(i)-'0'
+      if (c < 0 || c > 9) return ans
+      ans = ans*10 + c
+      i += 1
+    }
+    ans
+  }
+  
+  def rawHexDigitsUnsigned(s: String, limit: Int): Long = {
+    iOld = i
+    val N = math.min(i+limit, iN)
+    if (i >= N) { error = 1; return 0L }
+    var ans = s.charAt(i).toLong-'0'
+    if (ans < 0) { error = 2; return 0L }
+    if (ans > 9) {
+      ans = (ans - 17)&0xDF
+      if (ans < 0 || ans >= 6) { error = 2; return 0L }
+      ans += 10
+    }
+    i += 1
+    error = 0
+    while (i < N) {
+      var c = s.charAt(i)-'0'
+      if (c < 0) {
+        error = 0
+        return ans
+      }
+      if (c > 9) {
+        val cc = (c-17)&0xDF
+        if (cc < 0 || cc >= 6) { error = 0; return ans }
+        else ans = (ans << 4) + (cc+10)
+      }
+      else ans = (ans << 4) + c
+      i += 1
+    }
+    ans
+  }
+  
 
   def skipAllEmpty: Long
   def skip(fail: Hop[Long]): Unit
