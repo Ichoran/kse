@@ -568,9 +568,13 @@ sealed abstract class Grok {
 }
 
 final class GrokString(private[eio] var string: String, initialDelimiter: Delimiter, initialStance: Int = 1) extends Grok {
+  import kse.eio.{GrokError => e}
+
   iN = string.length
   delim = initialDelimiter
   stance = initialStance
+  
+  private final def err(what: Int, who: Int) = (((what << 5) | who).toLong << 48) + (i&0xFFFFFFFFL)
   
   final def isEmpty(implicit fail: Hop[Long]) = {
     if (stance < 0) i >= iN
@@ -585,6 +589,34 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def uS(implicit fail: Hop[Long]): Short = { fail.on((27 << 24).packII(i).L); 0 }
   final def C(implicit fail: Hop[Long]): Char = { fail.on((27 << 24).packII(i).L); 0 }
   final def I(implicit fail: Hop[Long]): Int = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.I)); return 0 }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.I)); return 0 }
+    val c = string.charAt(i)
+    val negative = if (c == '-') { i += 1; true } else false
+    val j = i
+    val l = rawDecimalDigitsUnsigned(string, 11)
+    if (error > 0) { fail.on(err(error,e.I)); return 0 }
+    if (i-j > 10) { fail.on(err(e.range,e.I)); return 0 }
+    val ans = if (negative) {
+      val x = -l
+      if (x < Int.MinValue) { fail.on(err(e.range,e.I)); return 0 }
+      x.toInt
+    }
+    else {
+      if (l > Int.MaxValue) { fail.on(err(e.range,e.I)); return 0 }
+      l.toInt
+    }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
+  final def uI(implicit fail: Hop[Long]): Int = ???/*{
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on((1 << 24).packII(i).L); return 0 }
@@ -611,8 +643,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       if (j >= 0) i = j
     }
     ans
-  }
-  final def uI(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
+  }*/
   final def xI(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
   final def L(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
   final def uL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
@@ -661,6 +692,44 @@ object Grok {
   def apply(s: String): Grok = new GrokString(s, Delimiter.white)
   def apply(s: String, d: Delimiter): Grok = new GrokString(s, d)
   def apply(s: String, c: Char): Grok = new GrokString(s, new CharDelim(c))
+}
+
+
+object GrokError {
+ // Must fit in 3 bits
+  final val end = 1
+  final val wrong = 2
+  final val range = 3
+  final val delim = 4
+  final val imprecise = -1
+  
+  // Must fit in 5 bits
+  final val Z = 1
+  final val aZ = 2
+  final val B = 3
+  final val uB = 4
+  final val S = 5
+  final val uS = 6
+  final val I = 7
+  final val uI = 8
+  final val xI = 9
+  final val aI = 10
+  final val L = 11
+  final val uL = 12
+  final val xL = 13
+  final val aL = 14
+  final val F = 15
+  final val xF = 16
+  final val D = 17
+  final val xD = 18
+  final val tok = 19
+  final val quote = 20
+  final val qBy = 21
+  final val b64 = 22
+  final val exact = 23
+  final val oneOf = 24
+  final val bin = 25
+  final val alt = 26
 }
 
 /*
