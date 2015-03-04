@@ -23,13 +23,13 @@ final class CharDelim(c: Char) extends Delimiter {
     }
   }
   final def apply(ab: Array[Byte], i0: Int, iN: Int, n: Int): Int = {
-   if (i0 >= iN) -1
-   else {
-     var i = i0
-     var k = n
-     while (i < iN && k > 0 && ab(i) == c) { i += 1; k -= 1 }
-     i
-   }
+    if (i0 >= iN) -1
+    else {
+      var i = i0
+      var k = n
+      while (i < iN && k > 0 && ab(i) == c) { i += 1; k -= 1 }
+      i
+    }
   }
   final def _tok(s: String, i0: Int, iN: Int, n: Int): Long = {
     var i = i0

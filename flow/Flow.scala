@@ -305,7 +305,7 @@ package object flow extends LowPriorityOkValidation {
     def valueOp(f: Int => Int) = { value = f(value); this }
   }
 
-  private sealed class HopImplLong(var value: Long) extends Hopped[Long] with Hop[Long] {
+  private[kse] sealed class HopImplLong(var value: Long) extends Hopped[Long] with Hop[Long] {
     def apply() = throw this
     def apply(a: Long) = { value = a; throw this }
     def value_(a: Long) = { value = a; this }

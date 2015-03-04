@@ -9,7 +9,7 @@ import scala.reflect.{ClassTag => Tag}
 import kse.flow._
 import kse.coll.packed._
 
-
+/*
 object GrokNumber {
   private[this] val parseErrorNaNBits = java.lang.Double.doubleToRawLongBits(Double.NaN) ^ 1
   val parseErrorNaN = java.lang.Double.longBitsToDouble(parseErrorNaNBits)
@@ -311,6 +311,7 @@ object GrokNumber {
   val nonDigit10DelimByte = new DelimByte { def apply(b: Byte) = b < '0' || b > '9' }
   val bytesInInfinity = "INFINITY".getBytes
 }
+*/
 
 trait Reloader {
   def advanceString(g: Grok, distance: Long)(fail: Hop[Long]): Boolean
@@ -318,18 +319,16 @@ trait Reloader {
 }
 
 sealed abstract class Grok {
-  // type MyType <: Grok
+   type MyType <: Grok
   /*private[eio]*/ var i = 0
-  /*private[eio]*/ var iOld = 0
   /*private[eio]*/ var i0 = 0
   /*private[eio]*/ var iN = 0
   /*private[eio]*/ var error = 0
-  /*private[eio]*/ var stance = 0
-  /* private[eio] var delim: Delimiter = null */
-  /* private[eio] var reloader: Reloader = null */
+  /*private[eio]*/ var stance = 1
+  /*private[eio]*/ var delim: Delimiter = null
+  /*private[eio]*/ var reloader: Reloader = null
   
-  def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
-    iOld = i
+  final def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)
     if (i >= N) { error = 1; return 0L }
     var ans = s.charAt(i).toLong-'0'
@@ -345,8 +344,7 @@ sealed abstract class Grok {
     ans
   }
   
-  def rawDecimalDigitsUnsigned(ab: Array[Byte], limit: Int): Long = {
-    iOld = i
+  final def rawDecimalDigitsUnsigned(ab: Array[Byte], limit: Int): Long = {
     val N = math.min(i+limit, iN)
     if (i >= N) { error = 1; return 0L }
     var ans = ab(i).toLong-'0'
@@ -362,8 +360,7 @@ sealed abstract class Grok {
     ans
   }
   
-  def rawHexDigitsUnsigned(s: String, limit: Int): Long = {
-    iOld = i
+  final def rawHexDigitsUnsigned(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)
     if (i >= N) { error = 1; return 0L }
     var ans = s.charAt(i).toLong-'0'
@@ -377,13 +374,10 @@ sealed abstract class Grok {
     error = 0
     while (i < N) {
       var c = s.charAt(i)-'0'
-      if (c < 0) {
-        error = 0
-        return ans
-      }
+      if (c < 0) return ans
       if (c > 9) {
         val cc = (c-17)&0xDF
-        if (cc < 0 || cc >= 6) { error = 0; return ans }
+        if (cc < 0 || cc >= 6) return ans
         else ans = (ans << 4) + (cc+10)
       }
       else ans = (ans << 4) + c
@@ -392,55 +386,279 @@ sealed abstract class Grok {
     ans
   }
   
-
-  def skipAllEmpty: Long
-  def skip(fail: Hop[Long]): Unit
-  def skip(n: Int)(fail: Hop[Long]): Unit
-  def Z(fail: Hop[Long]): Boolean
-  def B(fail: Hop[Long]): Byte
-  def uB(fail: Hop[Long]): Byte
-  def S(fail: Hop[Long]): Short
-  def uS(fail: Hop[Long]): Short
-  def C(fail: Hop[Long]): Char
-  def I(fail: Hop[Long]): Int
-  def uI(fail: Hop[Long]): Int
-  def xI(fail: Hop[Long]): Int
-  def L(fail: Hop[Long]): Long
-  def uL(fail: Hop[Long]): Long
-  def xL(fail: Hop[Long]): Long
-  def F(fail: Hop[Long]): Long
-  def D(fail: Hop[Long]): Long
-  def peekB(fail: Hop[Long]): Byte
-  def peekC(fail: Hop[Long]): Char
-  def peekTok(fail: Hop[Long]): String
-  def peekBin(n: Int)(fail: Hop[Long]): Array[Byte]
-  def peekBinIn(n: Int, target: Array[Byte], start: Int)(fail: Hop[Long]): Unit
-  def predictNext: Int
-  def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(fail: Hop[Long]): A
-  def tok(fail: Hop[Long]): String
-  def quoted(fail: Hop[Long]): String
-  def quotedBy(left: Char, right: Char)(fail: Hop[Long]): String
-  def base64(fail: Hop[Long]): Array[Byte]
-  def base64in(target: Array[Byte], start: Int)(fail: Hop[Long]): Int
-  def exact(s: String)(fail: Hop[Long]): Unit
-  def oneOf(s: String*)(fail: Hop[Long]): String
-  def binary(n: Int)(fail: Hop[Long]): Array[Byte]
-  def binaryIn(n: Int, target: Array[Byte], start: Int)(fail: Hop[Long]): Unit
-  def alternate[A](first: MyType => A, fallbacks: (MyType => A)*)(fail: Hop[Long]): A
-}
-
-final class GrokString private[eio] (private[eio] var string: String)(private[eio] var i0: Int, private[eio] var iN: Int, private[eio] var delim: Delimiter) extends Grok {
-  type MyType = GrokString
+  final def rawHexDigitsUnsigned(ab: Array[Byte], limit: Int): Long = {
+    val N = math.min(i+limit, iN)
+    if (i >= N) { error = 1; return 0L }
+    var ans = ab(i).toLong-'0'
+    if (ans < 0) { error = 2; return 0L }
+    if (ans > 9) {
+      ans = (ans - 17)&0xDF
+      if (ans < 0 || ans >= 6) { error = 2; return 0L }
+      ans += 10
+    }
+    i += 1
+    error = 0
+    while (i < N) {
+      var c = ab(i)-'0'
+      if (c < 0) return ans
+      if (c > 9) {
+        val cc = (c-17)&0xDF
+        if (cc < 0 || cc >= 6) return ans
+        else ans = (ans << 4) + (cc+10)
+      }
+      else ans = (ans << 4) + c
+      i += 1
+    }
+    ans
+  }
   
-  if (iN < string.length) iN = string.length
+  /*
+  // Returns a Double from digits packed into digA and digB (ndig of them), with a decimal point at the position indicated
+  final def myDoubleConversion(neg: Boolean, digA: Long, digB: Int, ndig: Int, point: Int): Double = {
+    import GrokNumber._
+    if (ndig == point && ndig <= 18) (if (neg) -digA else digA).toDouble
+    else if (point > ndig && point <= 18) {
+      val v = (if (neg) -digA else digA) * smallPowersOfTen(point - ndig)
+      v.toDouble
+    }
+    else {
+      val dA = if (ndig < 18) digA * smallPowersOfTen(18-ndig) else digA
+      val dB = if (ndig <= 18) 0L else if (ndig < 27) digB * smallPowersOfTen(27-ndig) else digB
+      val hA = dA/1000000000
+      val hB = dA-hA*1000000000
+      val hC = dB
+      var pt = point - 9
+      val i = 1 + (if (pt < 0) -8*pt-4 else 8*pt)
+      pt -= 9
+      val j = 1 + (if (pt < 0) -8*pt-4 else 8*pt)
+      pt -= 9
+      val k = 1 + (if (pt < 0) -8*pt-4 else 8*pt)
+      var x = hB * tensToTwos(j)
+      var y = hB * tensToTwos(j+1)
+      (tensToTwos(j-1) - tensToTwos(i-1)) match {
+        case q if q > 30 => x = x >> (q-30); y = y >> (q-30)
+        case q if q < 30 => x = x << (30-q); y = y << (30-q)
+        case _ =>
+      }
+      var z = hC * tensToTwos(k)
+      (tensToTwos(k-1) - tensToTwos(i-1)) match {
+        case q if q > 60 => z = z >> (q-60)
+        case q if q < 60 => z = z << (60-q)
+        case _ =>
+      }
+      val vC = hA * tensToTwos(i+2) + y + z
+      val vB = hA * tensToTwos(i+1) + x + (vC >>> 30)
+      val vA = hA * tensToTwos(i) + (vB >>> 30)
+      var nz = 11 - java.lang.Long.numberOfLeadingZeros(vA)
+      var w = ((vA << (16-nz)) | ((vB & 0x3FFFFFFF) >>> (nz+14))) & 0xFFFF
+      var v0 = (vA >> nz)
+      var v = v0 + ((w >> 15)&1)
+      if ((v&0xFFE0000000000000L) != 0) {
+        nz += 1
+        w = (w >> 1) + ((v0&1)<<15)
+        v = (v0 >> 1) + (v0&1)
+        v0 = (v0 >> 1)
+      }
+      if (w == 0x8000 && (v&1) == 1) v -= 1    // Round to even
+      val ex = (0x3FFL - tensToTwos(i-1) + 22 + nz)
+      
+      // Rounding may not agree with choice made by Java algorithm; allow deferral if accuracy is in doubt.
+      if ((w&0x7FFF) == 0x7FFF || (w&0x7FFF) == 0) {
+        var places = ndig - point
+        if (ndig > 13 || (digA%5) != 0 || places > 13 || places < 0) error = -1
+        else {
+          // Try to catch exact power-of-two fractions in modest ranges
+          // For every power of 2, you get one more digit.
+          // If the reverse is true (ends with N zeros on shl of N bits), it's exact.
+          // To fit the whole calculation in a Long, we need to be able
+          // to represent 20^N (so at most 14 digits).
+          var digX = digA
+          var tenth = digX/10
+          // Would be better to catch trailing zeros in parsing!
+          while (tenth*10 == digX && tenth != 0) {
+            digX = tenth
+            tenth /= 10
+            places -= 1
+          }
+          if (digX - tenth*10 != 5 || places < 0) error = -1
+          else {
+            val test = (digA << places) % smallPowersOfTen(places)
+            if (test != 0) error = -1
+          }
+        }
+      }
+
+      val top = (ex << 52) | (if (neg) 0x8000000000000000L else 0)
+      if (ex >= 2047) {
+        if (neg) Double.NegativeInfinity else Double.PositiveInfinity
+      }
+      else if (ex <= 0) {
+        if (ex + 53 <= 0) { if (neg) -0.0 else 0.0 }
+        else {
+          v = (v0 >> (1-ex)) + ((v0 >> (-ex)) & 1)
+          java.lang.Double.longBitsToDouble( (v & 0xFFFFFFFFFFFFFL) | (if (neg) 0x8000000000000000L else 0) )
+        }
+      }
+      else java.lang.Double.longBitsToDouble( (v & 0xFFFFFFFFFFFFFL) | top )
+    }
+  }
+  
+  final def rawApproximateDouble(s: String): Double = {
+    if (i >= iN) { error = 1; return GrokNumber.parseErrorNaN }
+    val negative = s.charAt(i) match {
+      case '+' => i += 1; if (i >= iN) { error = 1; return GrokNumber.parseErrorNaN }; false
+      case '-' => i += 1; if (i >= iN) { error = 1; return GrokNumber.parseErrorNaN }; true
+      case _ => false
+    }
+    var n = 0
+    while (i < iN && s.charAt(i)=='0') { i += 1; n += 1 }
+    if (i >= iN) if (n > 0) return 0 else { error = 1; return GrokNumber.parseErrorNaN }
+    var c = s.charAt(i)
+    n = i
+    var digA = if (c >= '0' && c <= '9') rawDecimalDigitsUnsigned(s, 18) else 0L
+    var digB = if (i == n+18 && i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) rawDecimalDigitsUnsigned(s,18)
+    if (i == n+36) while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9'}) i += 1
+    val preN = i-n
+    
+  }
+  */
+  
+  def isEmpty(implicit fail: Hop[Long]): Boolean
+  def skip(implicit fail: Hop[Long]): Unit
+  def skip(n: Int)(implicit fail: Hop[Long]): Unit
+  def Z(implicit fail: Hop[Long]): Boolean
+  def B(implicit fail: Hop[Long]): Byte
+  def uB(implicit fail: Hop[Long]): Byte
+  def S(implicit fail: Hop[Long]): Short
+  def uS(implicit fail: Hop[Long]): Short
+  def C(implicit fail: Hop[Long]): Char
+  def I(implicit fail: Hop[Long]): Int
+  def uI(implicit fail: Hop[Long]): Int
+  def xI(implicit fail: Hop[Long]): Int
+  def L(implicit fail: Hop[Long]): Long
+  def uL(implicit fail: Hop[Long]): Long
+  def xL(implicit fail: Hop[Long]): Long
+  def F(implicit fail: Hop[Long]): Long
+  def xF(implicit fail: Hop[Long]): Long
+  def D(implicit fail: Hop[Long]): Long
+  def xD(implicit fail: Hop[Long]): Long
+  def peekB(implicit fail: Hop[Long]): Byte
+  def peekC(implicit fail: Hop[Long]): Char
+  def peekTok(implicit fail: Hop[Long]): String
+  def peekBin(n: Int)(implicit fail: Hop[Long]): Array[Byte]
+  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Unit
+  def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(implicit fail: Hop[Long]): A
+  def tok(implicit fail: Hop[Long]): String
+  def quoted(implicit fail: Hop[Long]): String
+  def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String
+  def base64(implicit fail: Hop[Long]): Array[Byte]
+  def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int
+  def exact(s: String)(implicit fail: Hop[Long]): Unit
+  def oneOf(s: String*)(implicit fail: Hop[Long]): String
+  def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte]
+  def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Unit
+  def alternate[A](alts: (MyType => A)*)(implicit fail: Hop[Long]): A
+  
+  def apply[A](f: Hop[Long] => A): Ok[Long, A] = {
+    val hop = new HopImplLong(0L)
+    try { val a = f(hop); Yes(a) } catch { case t if t eq hop => No(hop.value) }
+  }
 }
 
-final class GrokString extends Grok {
-  type MyType = GrokString
+final class GrokString(private[eio] var string: String, initialDelimiter: Delimiter, initialStance: Int = 1) extends Grok {
+  iN = string.length
+  delim = initialDelimiter
+  stance = initialStance
+  
+  final def isEmpty(implicit fail: Hop[Long]) = {
+    if (stance < 0) i >= iN
+    else { val j = delim(string, i, iN, stance); j < 0 || j >= iN }
+  } 
+  final def skip(implicit fail: Hop[Long]) { fail((27 << 24).packII(i).L) }
+  final def skip(n: Int)(implicit fail: Hop[Long]) { fail((27 << 24).packII(i).L) }
+  final def Z(implicit fail: Hop[Long]): Boolean = fail((27 << 24).packII(i).L)
+  final def B(implicit fail: Hop[Long]): Byte = fail((27 << 24).packII(i).L)
+  final def uB(implicit fail: Hop[Long]): Byte = fail((27 << 24).packII(i).L)
+  final def S(implicit fail: Hop[Long]): Short = fail((27 << 24).packII(i).L)
+  final def uS(implicit fail: Hop[Long]): Short = fail((27 << 24).packII(i).L)
+  final def C(implicit fail: Hop[Long]): Char = fail((27 << 24).packII(i).L)
+  final def I(implicit fail: Hop[Long]): Int = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) fail((1 << 24).packII(i).L)
+      i = j
+    }
+    if (i >= iN) fail((1 << 24).packII(i).L)
+    val c = string.charAt(i)
+    val negative = if (c == '-') { i += 1; true } else false
+    val j = i
+    val l = rawDecimalDigitsUnsigned(string, 11)
+    if (error > 0) fail((error << 24).packII(i).L)
+    if (i-j > 10) fail((4 << 24).packII(i).L)
+    val ans = if (negative) {
+      val x = -l
+      if (x < Int.MinValue) fail((4 << 24).packII(i).L)
+      x.toInt
+    }
+    else {
+      if (l > Int.MaxValue) fail((4 << 24).packII(i).L)
+      l.toInt
+    }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
+  final def uI(implicit fail: Hop[Long]): Int = fail((27 << 24).packII(i).L)
+  final def xI(implicit fail: Hop[Long]): Int = fail((27 << 24).packII(i).L)
+  final def L(implicit fail: Hop[Long]): Long = fail((27 << 24).packII(i).L)
+  final def uL(implicit fail: Hop[Long]): Long = fail((27 << 24).packII(i).L)
+  final def xL(implicit fail: Hop[Long]): Long = fail((27 << 24).packII(i).L)
+  final def F(implicit fail: Hop[Long]): Long = fail((27 << 24).packII(i).L)
+  final def xF(implicit fail: Hop[Long]): Long = fail((27 << 24).packII(i).L)
+  final def D(implicit fail: Hop[Long]): Long = fail((27 << 24).packII(i).L)
+  final def xD(implicit fail: Hop[Long]): Long = fail((27 << 24).packII(i).L)
+  final def peekB(implicit fail: Hop[Long]): Byte = fail((27 << 24).packII(i).L)
+  final def peekC(implicit fail: Hop[Long]): Char = fail((27 << 24).packII(i).L)
+  final def peekTok(implicit fail: Hop[Long]): String = fail((27 << 24).packII(i).L)
+  final def peekBin(n: Int)(implicit fail: Hop[Long]): Array[Byte] = fail((27 << 24).packII(i).L)
+  final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) { fail((27 << 24).packII(i).L) }
+  final def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(implicit fail: Hop[Long]): A = fail((27 << 24).packII(i).L)
+  final def tok(implicit fail: Hop[Long]): String = {
+    if (stance < 0) {
+      val l = delim.tok_(string, i, iN, -stance).inLong
+      val a = l.i0
+      val b = l.i1
+      if (a < 0) fail((1 << 24).packII(i).L)
+      val ans = string.substring(i, a)
+      i = b
+      ans
+    }
+    else {
+      val l = delim._tok(string, i, iN, stance).inLong
+      val a = l.i0
+      val b = l.i1
+      if (a < 0) fail((i << 24).packII(i).L)
+      i = b
+      string.substring(a,b)
+    }
+  }
+  final def quoted(implicit fail: Hop[Long]): String = fail((27 << 24).packII(i).L)
+  final def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = fail((27 << 24).packII(i).L)
+  final def base64(implicit fail: Hop[Long]): Array[Byte] = fail((27 << 24).packII(i).L)
+  final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int = fail((27 << 24).packII(i).L)
+  final def exact(s: String)(implicit fail: Hop[Long]){ fail((27 << 24).packII(i).L) }
+  final def oneOf(s: String*)(implicit fail: Hop[Long]): String = fail((27 << 24).packII(i).L)
+  final def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte] = fail((27 << 24).packII(i).L)
+  final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) { fail((27 << 24).packII(i).L) }
+  final def alternate[A](alts: (MyType => A)*)(implicit fail: Hop[Long]): A = fail((27 << 24).packII(i).L)
 }
 
-trait GrokPositionable extends Grok {
-  def toPosition(position: Long)(fail: Hop[Long]): Unit
+object Grok {
+  def apply(s: String): Grok = new GrokString(s, Delimiter.white)
+  def apply(s: String, d: Delimiter): Grok = new GrokString(s, d)
+  def apply(s: String, c: Char): Grok = new GrokString(s, new CharDelim(c))
 }
 
 /*
@@ -618,94 +836,6 @@ private[eio] sealed abstract class GrokTextImpl {
   }
   
 
-  // Returns a Double from digits packed into digA and digB (ndig of them), with a decimal point at the position indicated
-  final def myDoubleConversion(neg: Boolean, digA: Long, digB: Int, ndig: Int, point: Int): Double = {
-    if (ndig == point && ndig <= 18) (if (neg) -digA else digA).toDouble
-    else if (point > ndig && point <= 18) {
-      val v = (if (neg) -digA else digA) * smallPowersOfTen(point - ndig)
-      v.toDouble
-    }
-    else {
-      val dA = if (ndig < 18) digA * smallPowersOfTen(18-ndig) else digA
-      val dB = if (ndig <= 18) 0L else if (ndig < 27) digB * smallPowersOfTen(27-ndig) else digB
-      val hA = dA/1000000000
-      val hB = dA-hA*1000000000
-      val hC = dB
-      var pt = point - 9
-      val i = 1 + (if (pt < 0) -8*pt-4 else 8*pt)
-      pt -= 9
-      val j = 1 + (if (pt < 0) -8*pt-4 else 8*pt)
-      pt -= 9
-      val k = 1 + (if (pt < 0) -8*pt-4 else 8*pt)
-      var x = hB * tensToTwos(j)
-      var y = hB * tensToTwos(j+1)
-      (tensToTwos(j-1) - tensToTwos(i-1)) match {
-        case q if q > 30 => x = x >> (q-30); y = y >> (q-30)
-        case q if q < 30 => x = x << (30-q); y = y << (30-q)
-        case _ =>
-      }
-      var z = hC * tensToTwos(k)
-      (tensToTwos(k-1) - tensToTwos(i-1)) match {
-        case q if q > 60 => z = z >> (q-60)
-        case q if q < 60 => z = z << (60-q)
-        case _ =>
-      }
-      val vC = hA * tensToTwos(i+2) + y + z
-      val vB = hA * tensToTwos(i+1) + x + (vC >>> 30)
-      val vA = hA * tensToTwos(i) + (vB >>> 30)
-      var nz = 11 - java.lang.Long.numberOfLeadingZeros(vA)
-      var w = ((vA << (16-nz)) | ((vB & 0x3FFFFFFF) >>> (nz+14))) & 0xFFFF
-      var v0 = (vA >> nz)
-      var v = v0 + ((w >> 15)&1)
-      if ((v&0xFFE0000000000000L) != 0) {
-        nz += 1
-        w = (w >> 1) + ((v0&1)<<15)
-        v = (v0 >> 1) + (v0&1)
-        v0 = (v0 >> 1)
-      }
-      if (w == 0x8000 && (v&1) == 1) v -= 1    // Round to even
-      val ex = (0x3FFL - tensToTwos(i-1) + 22 + nz)
-      
-      // Rounding may not agree with choice made by Java algorithm; allow deferral if accuracy is in doubt.
-      if ((w&0x7FFF) == 0x7FFF || (w&0x7FFF) == 0) {
-        var places = ndig - point
-        if (ndig > 13 || (digA%5) != 0 || places > 13 || places < 0) errorLevel = 1
-        else {
-          // Try to catch exact power-of-two fractions in modest ranges
-          // For every power of 2, you get one more digit.
-          // If the reverse is true (ends with N zeros on shl of N bits), it's exact.
-          // To fit the whole calculation in a Long, we need to be able
-          // to represent 20^N (so at most 14 digits).
-          var digX = digA
-          var tenth = digX/10
-          // Would be better to catch trailing zeros in parsing!
-          while (tenth*10 == digX && tenth != 0) {
-            digX = tenth
-            tenth /= 10
-            places -= 1
-          }
-          if (digX - tenth*10 != 5 || places < 0) errorLevel = 1
-          else {
-            val test = (digA << places) % smallPowersOfTen(places)
-            if (test != 0) errorLevel = 1
-          }
-        }
-      }
-
-      val top = (ex << 52) | (if (neg) 0x8000000000000000L else 0)
-      if (ex >= 2047) {
-        if (neg) Double.NegativeInfinity else Double.PositiveInfinity
-      }
-      else if (ex <= 0) {
-        if (ex + 53 <= 0) { if (neg) -0.0 else 0.0 }
-        else {
-          v = (v0 >> (1-ex)) + ((v0 >> (-ex)) & 1)
-          java.lang.Double.longBitsToDouble( (v & 0xFFFFFFFFFFFFFL) | (if (neg) 0x8000000000000000L else 0) )
-        }
-      }
-      else java.lang.Double.longBitsToDouble( (v & 0xFFFFFFFFFFFFFL) | top )
-    }
-  }
   
   private[this] def myParseDouble10(s: String, limit: Int, delim: Delimiter, dot: Char): Double = {
     if (j >= limit) { errorLevel = 2; return parseErrorNaN }
