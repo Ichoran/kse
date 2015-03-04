@@ -59,8 +59,10 @@ trait HopOnly extends HopStackless {
   * safe, performant, uncluttered code.
   */
 trait Hop[@specialized(Int, Long) A] extends HopStackless {
-  /** Typically throws a value, but may continue execution */
-  def apply(a: A): Unit
+  /** Throws a stackless exception, carrying the supplied value */
+  def apply(a: A): Nothing
+  /** Typically throws a stackless exception with the supplied value, but may be overridden to not throw or only sometimes throw */
+  def on(a: A): Unit
   /** Detects whether a throwable is in fact this Hop, and if so returns a Hopped; if not, return null.
     * This method should return null if and only if `is` returns false.
     */

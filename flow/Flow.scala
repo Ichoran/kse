@@ -265,7 +265,8 @@ package object flow extends LowPriorityOkValidation {
   private sealed class HopImplRef[A <: AnyRef] extends Hopped[A] with Hop[A] {
     protected var myValue: A = null.asInstanceOf[A]
     final def value = myValue
-    def apply(a: A) { myValue = a; throw this }
+    final def apply(a: A) = { myValue = a; throw this }
+    def on(a: A) { myValue = a; throw this }
     final def is(t: Throwable): Boolean = this eq t
     final def as(t: Throwable): Hopped[A] = if (this eq t) this else null
   }
@@ -273,7 +274,8 @@ package object flow extends LowPriorityOkValidation {
   private sealed class HopImplInt extends Hopped[Int] with Hop[Int] {
     protected var myValue = 0
     final def value = myValue
-    def apply(a: Int) { myValue = a; throw this }
+    final def apply(a: Int) = { myValue = a; throw this }
+    def on(a: Int) { myValue = a; throw this }
     final def is(t: Throwable): Boolean = this eq t
     final def as(t: Throwable): Hopped[Int] = if (this eq t) this else null
   }
@@ -281,21 +283,22 @@ package object flow extends LowPriorityOkValidation {
   private sealed class HopImplLong extends Hopped[Long] with Hop[Long] {
     protected var myValue = 0L
     final def value = myValue
-    def apply(a: Long) { myValue = a; throw this; () }
+    def apply(a: Long) = { myValue = a; throw this }
+    def on(a: Long) { myValue = a; throw this }
     final def is(t: Throwable): Boolean = this eq t
     final def as(t: Throwable): Hopped[Long] = if (this eq t) this else null
   }
   
   private final class HoplessImplRef[A <: AnyRef] extends HopImplRef[A] {
-    override def apply(a: A) { myValue = a }
+    override def on(a: A) { myValue = a }
   }
   
   private final class HoplessImplInt extends HopImplInt {
-    override def apply(a: Int) { myValue = a }
+    override def on(a: Int) { myValue = a }
   }
   
   private final class HoplessImplLong extends HopImplLong {
-    override def apply(a: Long) { myValue = a }
+    override def on(a: Long) { myValue = a }
   }
   
   object UnboundHopSupplier {
