@@ -529,6 +529,7 @@ sealed abstract class Grok {
   def skip(implicit fail: Hop[Long]): Unit
   def skip(n: Int)(implicit fail: Hop[Long]): Unit
   def Z(implicit fail: Hop[Long]): Boolean
+  def aZ(implicit fail: Hop[Long]): Boolean
   def B(implicit fail: Hop[Long]): Byte
   def uB(implicit fail: Hop[Long]): Byte
   def S(implicit fail: Hop[Long]): Short
@@ -537,15 +538,16 @@ sealed abstract class Grok {
   def I(implicit fail: Hop[Long]): Int
   def uI(implicit fail: Hop[Long]): Int
   def xI(implicit fail: Hop[Long]): Int
+  def aI(implicit fail: Hop[Long]): Int
   def L(implicit fail: Hop[Long]): Long
   def uL(implicit fail: Hop[Long]): Long
   def xL(implicit fail: Hop[Long]): Long
-  def F(implicit fail: Hop[Long]): Long
-  def xF(implicit fail: Hop[Long]): Long
-  def D(implicit fail: Hop[Long]): Long
-  def xD(implicit fail: Hop[Long]): Long
-  def peekB(implicit fail: Hop[Long]): Byte
-  def peekC(implicit fail: Hop[Long]): Char
+  def aL(implicit fail: Hop[Long]): Long
+  def F(implicit fail: Hop[Long]): Float
+  def xF(implicit fail: Hop[Long]): Float
+  def D(implicit fail: Hop[Long]): Double
+  def xD(implicit fail: Hop[Long]): Double
+  def peek(implicit fail: Hop[Long]): Char
   def peekTok(implicit fail: Hop[Long]): String
   def peekBin(n: Int)(implicit fail: Hop[Long]): Array[Byte]
   def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Unit
@@ -574,7 +576,35 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   delim = initialDelimiter
   stance = initialStance
   
-  private final def err(what: Int, who: Int) = (((what << 5) | who).toLong << 48) + (i&0xFFFFFFFFL)
+  private final def err(what: Int, who: Int) = (((what << 5) | who).toLong << 56) + (i&0xFFFFFFFFL)
+  private final def smallNumber(dig: Int, lo: Long, hi: Long, id: Int)(fail: Hop[Long]): Long = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, id)); return 0 }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, id)); return 0 }
+    val negative = {
+      if (lo >= 0) false
+      else if (string.charAt(i) == '-') { i += 1; true }
+      else false
+    }   
+    var j = i
+    while (i < iN && string.charAt(i) == '0') i += 1
+    val l = {
+      if (j < i && (i >= iN || { val c = string.charAt(i); c < '0' || c > '9' })) { error = 0; 0 }
+      else { j = i; rawDecimalDigitsUnsigned(string, dig+1) }
+    }
+    if (error > 0) { fail.on(err(error,id)); return 0 }
+    if (i-j > dig) { fail.on(err(e.range,id)); return 0 }
+    val ans = if (negative) -l else l
+    if (ans < lo || ans > hi) { fail.on(err(e.range,id)); return 0 }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
   
   final def isEmpty(implicit fail: Hop[Long]) = {
     if (stance < 0) i >= iN
@@ -583,77 +613,25 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def skip(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
   final def skip(n: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
   final def Z(implicit fail: Hop[Long]): Boolean = { fail.on((27 << 24).packII(i).L); false }
-  final def B(implicit fail: Hop[Long]): Byte = { fail.on((27 << 24).packII(i).L); 0 }
-  final def uB(implicit fail: Hop[Long]): Byte = { fail.on((27 << 24).packII(i).L); 0 }
-  final def S(implicit fail: Hop[Long]): Short = { fail.on((27 << 24).packII(i).L); 0 }
-  final def uS(implicit fail: Hop[Long]): Short = { fail.on((27 << 24).packII(i).L); 0 }
+  final def aZ(implicit fail: Hop[Long]): Boolean = { fail.on((27 << 24).packII(i).L); false }
+  final def B(implicit fail: Hop[Long]): Byte = smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
+  final def uB(implicit fail: Hop[Long]): Byte = smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
+  final def S(implicit fail: Hop[Long]): Short = smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
+  final def uS(implicit fail: Hop[Long]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
   final def C(implicit fail: Hop[Long]): Char = { fail.on((27 << 24).packII(i).L); 0 }
-  final def I(implicit fail: Hop[Long]): Int = {
-    if (stance > 0) {
-      val j = delim(string, i, iN, stance)
-      if (j < 0) { fail.on(err(e.end, e.I)); return 0 }
-      i = j
-    }
-    if (i >= iN) { fail.on(err(e.end, e.I)); return 0 }
-    val c = string.charAt(i)
-    val negative = if (c == '-') { i += 1; true } else false
-    val j = i
-    val l = rawDecimalDigitsUnsigned(string, 11)
-    if (error > 0) { fail.on(err(error,e.I)); return 0 }
-    if (i-j > 10) { fail.on(err(e.range,e.I)); return 0 }
-    val ans = if (negative) {
-      val x = -l
-      if (x < Int.MinValue) { fail.on(err(e.range,e.I)); return 0 }
-      x.toInt
-    }
-    else {
-      if (l > Int.MaxValue) { fail.on(err(e.range,e.I)); return 0 }
-      l.toInt
-    }
-    if (stance < 0) {
-      val j = delim(string, i, iN, -stance)
-      if (j >= 0) i = j
-    }
-    ans
-  }
-  final def uI(implicit fail: Hop[Long]): Int = ???/*{
-    if (stance > 0) {
-      val j = delim(string, i, iN, stance)
-      if (j < 0) { fail.on((1 << 24).packII(i).L); return 0 }
-      i = j
-    }
-    if (i >= iN) { fail.on((1 << 24).packII(i).L); return 0 }
-    val c = string.charAt(i)
-    val negative = if (c == '-') { i += 1; true } else false
-    val j = i
-    val l = rawDecimalDigitsUnsigned(string, 11)
-    if (error > 0) { fail.on((error << 24).packII(i).L); return 0 }
-    if (i-j > 10) { fail.on((4 << 24).packII(i).L); return 0 }
-    val ans = if (negative) {
-      val x = -l
-      if (x < Int.MinValue) { fail.on((4 << 24).packII(i).L); return 0 }
-      x.toInt
-    }
-    else {
-      if (l > Int.MaxValue) { fail.on((4 << 24).packII(i).L); return 0 }
-      l.toInt
-    }
-    if (stance < 0) {
-      val j = delim(string, i, iN, -stance)
-      if (j >= 0) i = j
-    }
-    ans
-  }*/
+  final def I(implicit fail: Hop[Long]): Int = smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
+  final def uI(implicit fail: Hop[Long]): Int = smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
   final def xI(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
+  final def aI(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
   final def L(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
   final def uL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
   final def xL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def F(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def xF(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def D(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def xD(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def peekB(implicit fail: Hop[Long]): Byte = { fail.on((27 << 24).packII(i).L); 0 }
-  final def peekC(implicit fail: Hop[Long]): Char = { fail.on((27 << 24).packII(i).L); 0 }
+  final def aL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
+  final def F(implicit fail: Hop[Long]): Float = { fail.on((27 << 24).packII(i).L); 0 }
+  final def xF(implicit fail: Hop[Long]): Float = { fail.on((27 << 24).packII(i).L); 0 }
+  final def D(implicit fail: Hop[Long]): Double = { fail.on((27 << 24).packII(i).L); 0 }
+  final def xD(implicit fail: Hop[Long]): Double = { fail.on((27 << 24).packII(i).L); 0 }
+  final def peek(implicit fail: Hop[Long]): Char = { fail.on((27 << 24).packII(i).L); 0 }
   final def peekTok(implicit fail: Hop[Long]): String = { fail.on((27 << 24).packII(i).L); null }
   final def peekBin(n: Int)(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
   final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
