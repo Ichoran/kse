@@ -6,7 +6,10 @@ package kse.flow
 import scala.util.control.ControlThrowable
 
 /** Marker trait for control flow classes that work by throwing stackless exceptions. */
-trait HopStackless  // marker trait for control flow classes
+trait HopStackless {
+  /** Test if this hop is the same as a throwable */
+  def is(t: Throwable): Boolean
+}
 
 /** Allows a payload to go along with a hop. */
 trait HopHasValue[@specialized(Int, Long) A] { 
@@ -18,32 +21,15 @@ trait HopHasValue[@specialized(Int, Long) A] {
 abstract class Hopped[@specialized(Int, Long) A] extends ControlThrowable with HopStackless with HopHasValue[A] {}
 
 /** Throws a stackless exception when applied; this should be caught by whichever code created this instance. */
-trait Hopper extends HopStackless {
+trait HopOnly extends HopStackless {
   /** Throws an exception to leave the local execution context. */
-  def apply(): Nothing
-}
-
-/** On `apply`, throws a stackless exception that carries a value; this should be caught by whichever code created this instance. */
-trait HopWith[@specialized(Int, Long) A] extends HopStackless {
-  /** Throws a value-carrying exception to leave the local execution context. */
-  def apply(a: A): Nothing
-}
-
-/** Can throw stackless exceptions with values like [[HopsWith]] but provides a facility for changing the result type. */
-trait HopChain[@specialized(Int, Long) A] extends HopWith[A] {
-  /** Creates a new `HopChain` that takes a `B` instead of an `A`. */
-  def from[B](f: B => A): HopChain[B]
-}
-
-/** Holds a value that will be carried by a stackless exception; the value is viewable in advance. */
-trait HopView[@specialized(Int, Long) A] extends Hopper with HopHasValue[A] {
-  def value: A
+  def hop(): Nothing
 }
 
 /** `Hop` provides customizable non-local return capability via stackless exceptions.
-  * This class contains a mutable field that can carry a value out when it is thrown.
+  * This class typically contains a private mutable field that can carry a value out when it is thrown.
   * 
-  * The use-cases for `Hop` are similar to those for `return`, and performance is similar,
+  * The use-cases for `Hop` are similar to those for non-local `return`, and performance is similar,
   * but there are two major advantages.  First, `return` only works from within a closure
   * passed to another piece of code, while a `Hop` can be called from anywhere that has
   * access to the `Hop` instance.  Second, a `Hop` can be handled as a separate path
@@ -60,7 +46,7 @@ trait HopView[@specialized(Int, Long) A] extends Hopper with HopHasValue[A] {
   * }
   * okayWith(""){ implicit nobody => who("Joe") }  // Returns Ok[String,Int] = Yes(1)
   * okayWith(""){ implicit nobody => who("Moe") }  // Returns Ok[String,Int] = No(Moe)
-  * okayWith("?"){ implicit nobody => nobody() }    // Returns Ok[String,Int] = No(?)
+  * okayWith("?"){ implicit nobody => nobody.hop() }    // Returns Ok[String,Int] = No(?)
   * }}}
   * 
   * This pattern is particularly useful when performing many operations which
@@ -72,11 +58,13 @@ trait HopView[@specialized(Int, Long) A] extends Hopper with HopHasValue[A] {
   * handle every failing branch.  The result, when used in the correct context, is
   * safe, performant, uncluttered code.
   */
-trait Hop[@specialized(Int, Long) A] extends HopView[A] with HopWith[A] with Hopper {
-  /** Sets the value to be carried when an exception is thrown. */
-  def value_(a: A): this.type
-  /** Alters the value to be carried according to the function `f`. */
-  def valueOp(f: A => A): this.type
+trait Hop[@specialized(Int, Long) A] extends HopStackless {
+  /** Typically throws a value, but may continue execution */
+  def apply(a: A): Unit
+  /** Detects whether a throwable is in fact this Hop, and if so returns a Hopped; if not, return null.
+    * This method should return null if and only if `is` returns false.
+    */
+  def as(t: Throwable): Hopped[A]
 }
 
 /** A trait specifically to handle errors that have no information.
@@ -90,7 +78,7 @@ trait Hop[@specialized(Int, Long) A] extends HopView[A] with HopWith[A] with Hop
   * where the overall computation is not highly certain to complete, and when there
   * is no useful information to return aside from the fact that something went wrong.
   */
-trait Oops extends Hopper {}
+trait Oops extends HopOnly {}
 
 /** Thrown by special Oops instance that will throw real exceptions instead of itself. */
 class OopsException extends RuntimeException("Uncaught Oops.") {}
