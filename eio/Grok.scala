@@ -949,8 +949,52 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     fail.on(err(e.wrong, e.oneOf))
     null
   }
-  final def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
-  final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
+  final def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte] = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.exact)); return null }
+      i = j
+    }
+    if (i+n >= iN) { fail.on(err(e.end, e.bin)); return null }
+    val ans = {
+      val buf = new Array[Byte](n)
+      var j = 0
+      while (j < n) {
+        val c = string.charAt(i)
+        if (c > 255) { fail.on(err(e.wrong, e.bin)); return null }
+        buf(j) = c.toByte
+        i += 1
+        j += 1
+      }
+      buf
+    }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
+  final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.exact)); return }
+      i = j
+    }
+    if (i+n >= iN) { fail.on(err(e.end, e.bin)); return }
+    var j = start
+    val end = start + n
+    while (j < end) {
+      val c = string.charAt(i)
+      if (c > 255) { fail.on(err(e.wrong, e.bin)); return }
+      target(j) = c.toByte
+      i += 1
+      j += 1
+    }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }    
+  }
   final def alternate[A](alts: (MyType => A)*)(implicit fail: Hop[Long]): A = { fail.on((27 << 24).packII(i).L); null.asInstanceOf[A] }
 }
 
