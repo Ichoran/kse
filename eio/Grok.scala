@@ -320,11 +320,6 @@ object GrokNumber {
 }
 */
 
-trait Reloader {
-  def advanceString(g: Grok, distance: Long)(fail: Hop[Long]): Boolean
-  def advanceBuffer(g: Grok, distance: Long)(fail: Hop[Long]): Boolean
-}
-
 sealed abstract class Grok {
    type MyType <: Grok
   /*private[eio]*/ var i = 0
@@ -335,6 +330,11 @@ sealed abstract class Grok {
   /*private[eio]*/ var delim: Delimiter = null
   /*private[eio]*/ var reloader: Reloader = null
   
+  trait Reloader {
+    def advanceString[X](distance: Long)(fail: Hop[Long,X]): Boolean
+    def advanceBuffer[X](distance: Long)(fail: Hop[Long,X]): Boolean
+  }
+
   final def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)
     if (i >= N) { error = 1; return 0L }
@@ -532,56 +532,56 @@ sealed abstract class Grok {
   }
   */
   
-  def isEmpty(implicit fail: Hop[Long]): Boolean
-  def skip(implicit fail: Hop[Long]): Unit
-  def skip(n: Int)(implicit fail: Hop[Long]): Unit
-  def Z(implicit fail: Hop[Long]): Boolean
-  def aZ(implicit fail: Hop[Long]): Boolean
-  def B(implicit fail: Hop[Long]): Byte
-  def uB(implicit fail: Hop[Long]): Byte
-  def S(implicit fail: Hop[Long]): Short
-  def uS(implicit fail: Hop[Long]): Short
-  def C(implicit fail: Hop[Long]): Char
-  def I(implicit fail: Hop[Long]): Int
-  def uI(implicit fail: Hop[Long]): Int
-  def xI(implicit fail: Hop[Long]): Int
-  def aI(implicit fail: Hop[Long]): Int
-  def L(implicit fail: Hop[Long]): Long
-  def uL(implicit fail: Hop[Long]): Long
-  def xL(implicit fail: Hop[Long]): Long
-  def aL(implicit fail: Hop[Long]): Long
-  def F(implicit fail: Hop[Long]): Float
-  def xF(implicit fail: Hop[Long]): Float
-  def D(implicit fail: Hop[Long]): Double
-  def xD(implicit fail: Hop[Long]): Double
-  def peek(implicit fail: Hop[Long]): Char
-  def peekTok(implicit fail: Hop[Long]): String
-  def peekBin(n: Int)(implicit fail: Hop[Long]): Array[Byte]
-  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Unit
-  def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(implicit fail: Hop[Long]): A
-  def tok(implicit fail: Hop[Long]): String
-  def quoted(implicit fail: Hop[Long]): String
-  def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String
-  def qtok(implicit fail: Hop[Long]): String
-  def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String
-  def base64(implicit fail: Hop[Long]): Array[Byte]
-  def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int
-  def exact(s: String)(implicit fail: Hop[Long]): Unit
-  def exactNoCase(s: String)(implicit fail: Hop[Long]): Unit
-  def oneOf(s: String*)(implicit fail: Hop[Long]): String
-  def oneOfNoCase(s: String*)(implicit fail: Hop[Long]): String
-  def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte]
-  def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Unit
+  def isEmpty(implicit fail: Hop[Long, this.type]): Boolean
+  def skip(implicit fail: Hop[Long, this.type]): Unit
+  def skip(n: Int)(implicit fail: Hop[Long, this.type]): Unit
+  def Z(implicit fail: Hop[Long, this.type]): Boolean
+  def aZ(implicit fail: Hop[Long, this.type]): Boolean
+  def B(implicit fail: Hop[Long, this.type]): Byte
+  def uB(implicit fail: Hop[Long, this.type]): Byte
+  def S(implicit fail: Hop[Long, this.type]): Short
+  def uS(implicit fail: Hop[Long, this.type]): Short
+  def C(implicit fail: Hop[Long, this.type]): Char
+  def I(implicit fail: Hop[Long, this.type]): Int
+  def uI(implicit fail: Hop[Long, this.type]): Int
+  def xI(implicit fail: Hop[Long, this.type]): Int
+  def aI(implicit fail: Hop[Long, this.type]): Int
+  def L(implicit fail: Hop[Long, this.type]): Long
+  def uL(implicit fail: Hop[Long, this.type]): Long
+  def xL(implicit fail: Hop[Long, this.type]): Long
+  def aL(implicit fail: Hop[Long, this.type]): Long
+  def F(implicit fail: Hop[Long, this.type]): Float
+  def xF(implicit fail: Hop[Long, this.type]): Float
+  def D(implicit fail: Hop[Long, this.type]): Double
+  def xD(implicit fail: Hop[Long, this.type]): Double
+  def peek(implicit fail: Hop[Long, this.type]): Char
+  def peekTok(implicit fail: Hop[Long, this.type]): String
+  def peekBin(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte]
+  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Unit
+  def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(implicit fail: Hop[Long, this.type]): A
+  def tok(implicit fail: Hop[Long, this.type]): String
+  def quoted(implicit fail: Hop[Long, this.type]): String
+  def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String
+  def qtok(implicit fail: Hop[Long, this.type]): String
+  def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String
+  def base64(implicit fail: Hop[Long, this.type]): Array[Byte]
+  def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int
+  def exact(s: String)(implicit fail: Hop[Long, this.type]): Unit
+  def exactNoCase(s: String)(implicit fail: Hop[Long, this.type]): Unit
+  def oneOf(s: String*)(implicit fail: Hop[Long, this.type]): String
+  def oneOfNoCase(s: String*)(implicit fail: Hop[Long, this.type]): String
+  def binary(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte]
+  def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Unit
   
-  def apply[A](f: Hop[Long] => A): Ok[Long, A] = {
-    val hop = UnboundHopSupplier.ofLong
+  def apply[A](f: Hop[Long, this.type] => A): Ok[Long, A] = {
+    val hop = UnboundHopSupplier.ofLong[this.type]
     try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
-  def manual[A](f: Hop[Long] => A): Ok[Long, A] = {
-    val hop = UnboundHopSupplier.notLong
+  def manual[A](f: Hop[Long, this.type] => A): Ok[Long, A] = {
+    val hop = UnboundHopSupplier.notLong[this.type]
     try{ Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
-  def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long]): Boolean
+  def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long, this.type]): Boolean
 }
 
 final class GrokString(private[eio] var string: String, initialDelimiter: Delimiter, initialStance: Int = 1) extends Grok {
@@ -592,7 +592,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   stance = initialStance
   
   private final def err(what: Int, who: Int) = { error = what; (((what << 5) | who).toLong << 56) + (i&0xFFFFFFFFL) }
-  private final def smallNumber(dig: Int, lo: Long, hi: Long, id: Int)(fail: Hop[Long]): Long = {
+  private final def smallNumber(dig: Int, lo: Long, hi: Long, id: Int)(fail: Hop[Long, this.type]): Long = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -621,7 +621,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans
   }
-  private final def longNumber(unsigned: Boolean, id: Int)(fail: Hop[Long]): Long = {
+  private final def longNumber(unsigned: Boolean, id: Int)(fail: Hop[Long, this.type]): Long = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -667,7 +667,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans
   }
-  private final def hexidecimalNumber(dig: Int, id: Int)(fail: Hop[Long]): Long = {
+  private final def hexidecimalNumber(dig: Int, id: Int)(fail: Hop[Long, this.type]): Long = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -689,7 +689,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans
   }
-  private final def matchAsciiInsensitive(lowered: String, id: Int)(fail: Hop[Long]) {
+  private final def matchAsciiInsensitive(lowered: String, id: Int)(fail: Hop[Long, this.type]) {
     error = 0
     var j = 0
     while (j < lowered.length) {
@@ -699,22 +699,22 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
   }
   
-  final def isEmpty(implicit fail: Hop[Long]) = {
+  final def isEmpty(implicit fail: Hop[Long, this.type]) = {
     if (stance < 0) i >= iN
     else { val j = delim(string, i, iN, stance); j < 0 || j >= iN }
   } 
-  final def skip(implicit fail: Hop[Long]) {
+  final def skip(implicit fail: Hop[Long, this.type]) {
     error = 0
     val l = if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)
     val b = l.inLong.i1
     if (b < 0) { fail.on(err(e.end, e.tok)); return }
     i = b
   }
-  final def skip(n: Int)(implicit fail: Hop[Long]) { 
+  final def skip(n: Int)(implicit fail: Hop[Long, this.type]) { 
     var k = n
     while (k > 0) { skip(fail); k -= 1 }
   }
-  final def Z(implicit fail: Hop[Long]): Boolean = {
+  final def Z(implicit fail: Hop[Long, this.type]): Boolean = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -733,7 +733,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans
   }
-  final def aZ(implicit fail: Hop[Long]): Boolean = {
+  final def aZ(implicit fail: Hop[Long, this.type]): Boolean = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -781,29 +781,29 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans 
   }
-  final def B(implicit fail: Hop[Long]): Byte = smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
-  final def uB(implicit fail: Hop[Long]): Byte = smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
-  final def S(implicit fail: Hop[Long]): Short = smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
-  final def uS(implicit fail: Hop[Long]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
-  final def C(implicit fail: Hop[Long]): Char = { fail.on((27 << 24).packII(i).L); 0 }
-  final def I(implicit fail: Hop[Long]): Int = smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
-  final def uI(implicit fail: Hop[Long]): Int = smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
-  final def xI(implicit fail: Hop[Long]): Int = hexidecimalNumber(8, e.xI)(fail).toInt
-  final def aI(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
-  final def L(implicit fail: Hop[Long]): Long = longNumber(false, e.L)(fail)
-  final def uL(implicit fail: Hop[Long]): Long = longNumber(true, e.L)(fail)
-  final def xL(implicit fail: Hop[Long]): Long = hexidecimalNumber(16, e.xI)(fail)
-  final def aL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def F(implicit fail: Hop[Long]): Float = { fail.on((27 << 24).packII(i).L); 0 }
-  final def xF(implicit fail: Hop[Long]): Float = { fail.on((27 << 24).packII(i).L); 0 }
-  final def D(implicit fail: Hop[Long]): Double = { fail.on((27 << 24).packII(i).L); 0 }
-  final def xD(implicit fail: Hop[Long]): Double = { fail.on((27 << 24).packII(i).L); 0 }
-  final def peek(implicit fail: Hop[Long]): Char = { fail.on((27 << 24).packII(i).L); 0 }
-  final def peekTok(implicit fail: Hop[Long]): String = { fail.on((27 << 24).packII(i).L); null }
-  final def peekBin(n: Int)(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
-  final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
-  final def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(implicit fail: Hop[Long]): A = { fail.on((27 << 24).packII(i).L); null.asInstanceOf[A] }
-  final def tok(implicit fail: Hop[Long]): String = {
+  final def B(implicit fail: Hop[Long, this.type]): Byte = smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
+  final def uB(implicit fail: Hop[Long, this.type]): Byte = smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
+  final def S(implicit fail: Hop[Long, this.type]): Short = smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
+  final def uS(implicit fail: Hop[Long, this.type]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
+  final def C(implicit fail: Hop[Long, this.type]): Char = { fail.on((27 << 24).packII(i).L); 0 }
+  final def I(implicit fail: Hop[Long, this.type]): Int = smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
+  final def uI(implicit fail: Hop[Long, this.type]): Int = smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
+  final def xI(implicit fail: Hop[Long, this.type]): Int = hexidecimalNumber(8, e.xI)(fail).toInt
+  final def aI(implicit fail: Hop[Long, this.type]): Int = { fail.on((27 << 24).packII(i).L); 0 }
+  final def L(implicit fail: Hop[Long, this.type]): Long = longNumber(false, e.L)(fail)
+  final def uL(implicit fail: Hop[Long, this.type]): Long = longNumber(true, e.L)(fail)
+  final def xL(implicit fail: Hop[Long, this.type]): Long = hexidecimalNumber(16, e.xI)(fail)
+  final def aL(implicit fail: Hop[Long, this.type]): Long = { fail.on((27 << 24).packII(i).L); 0 }
+  final def F(implicit fail: Hop[Long, this.type]): Float = { fail.on((27 << 24).packII(i).L); 0 }
+  final def xF(implicit fail: Hop[Long, this.type]): Float = { fail.on((27 << 24).packII(i).L); 0 }
+  final def D(implicit fail: Hop[Long, this.type]): Double = { fail.on((27 << 24).packII(i).L); 0 }
+  final def xD(implicit fail: Hop[Long, this.type]): Double = { fail.on((27 << 24).packII(i).L); 0 }
+  final def peek(implicit fail: Hop[Long, this.type]): Char = { fail.on((27 << 24).packII(i).L); 0 }
+  final def peekTok(implicit fail: Hop[Long, this.type]): String = { fail.on((27 << 24).packII(i).L); null }
+  final def peekBin(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
+  final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]) { fail.on((27 << 24).packII(i).L) }
+  final def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(implicit fail: Hop[Long, this.type]): A = { fail.on((27 << 24).packII(i).L); null.asInstanceOf[A] }
+  final def tok(implicit fail: Hop[Long, this.type]): String = {
     error = 0
     if (stance < 0) {
       val l = delim.tok_(string, i, iN, -stance).inLong
@@ -823,8 +823,8 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       string.substring(a,b)
     }
   }
-  final def quoted(implicit fail: Hop[Long]): String = quotedBy('"', '"', '\\')(fail)
-  final def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = {
+  final def quoted(implicit fail: Hop[Long, this.type]): String = quotedBy('"', '"', '\\')(fail)
+  final def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -879,8 +879,8 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans
   }
-  final def qtok(implicit fail: Hop[Long]): String = qtokBy('"', '"', '\\')(fail)
-  final def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = {
+  final def qtok(implicit fail: Hop[Long, this.type]): String = qtokBy('"', '"', '\\')(fail)
+  final def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -891,9 +891,9 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     val c = string.charAt(i)
     if (c != left) tok(fail) else quotedBy(left, right, esc)(fail)
   }
-  final def base64(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
-  final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
-  final def exact(s: String)(implicit fail: Hop[Long]) {
+  final def base64(implicit fail: Hop[Long, this.type]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
+  final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int = { fail.on((27 << 24).packII(i).L); 0 }
+  final def exact(s: String)(implicit fail: Hop[Long, this.type]) {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -908,7 +908,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       if (j >= 0) i = j
     }
   }
-  final def exactNoCase(s: String)(implicit fail: Hop[Long]) {
+  final def exactNoCase(s: String)(implicit fail: Hop[Long, this.type]) {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -923,7 +923,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       if (j >= 0) i = j
     }
   }
-  final def oneOf(s: String*)(implicit fail: Hop[Long]): String = {
+  final def oneOf(s: String*)(implicit fail: Hop[Long, this.type]): String = {
     error = 0
     val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
     val a = l.i0
@@ -946,7 +946,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     fail.on(err(e.wrong, e.oneOf))
     null
   }
-  final def oneOfNoCase(s: String*)(implicit fail: Hop[Long]): String = {
+  final def oneOfNoCase(s: String*)(implicit fail: Hop[Long, this.type]): String = {
     error = 0
     val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
     val a = l.i0
@@ -969,7 +969,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     fail.on(err(e.wrong, e.oneOf))
     null
   }
-  final def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte] = {
+  final def binary(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte] = {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -995,7 +995,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans
   }
-  final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) {
+  final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]) {
     error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -1017,7 +1017,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       if (j >= 0) i = j
     }    
   }
-  def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long]): Boolean = {
+  def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long, this.type]): Boolean = {
     error = 0
     val iStart = i
     try { val ans = f(this); if (!ans) i = iStart; ans } catch { case t if fail is t => i = iStart; false }

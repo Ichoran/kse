@@ -58,7 +58,7 @@ trait HopOnly extends HopStackless {
   * handle every failing branch.  The result, when used in the correct context, is
   * safe, performant, uncluttered code.
   */
-trait Hop[@specialized(Int, Long) A] extends HopStackless {
+trait Hop[@specialized(Int, Long) A, B] extends HopStackless {
   /** Throws a stackless exception, carrying the supplied value */
   def apply(a: A): Nothing
   /** Typically throws a stackless exception with the supplied value, but may be overridden to not throw or only sometimes throw */
