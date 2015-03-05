@@ -560,6 +560,8 @@ sealed abstract class Grok {
   def tok(implicit fail: Hop[Long]): String
   def quoted(implicit fail: Hop[Long]): String
   def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String
+  def qtok(implicit fail: Hop[Long]): String
+  def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String
   def base64(implicit fail: Hop[Long]): Array[Byte]
   def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int
   def exact(s: String)(implicit fail: Hop[Long]): Unit
@@ -689,8 +691,16 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     if (stance < 0) i >= iN
     else { val j = delim(string, i, iN, stance); j < 0 || j >= iN }
   } 
-  final def skip(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
-  final def skip(n: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
+  final def skip(implicit fail: Hop[Long]) {
+    val l = if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)
+    val b = l.inLong.i1
+    if (b < 0) { fail.on(err(e.end, e.tok)); return }
+    i = b
+  }
+  final def skip(n: Int)(implicit fail: Hop[Long]) { 
+    var k = n
+    while (k > 0) { skip(fail); k -= 1 }
+  }
   final def Z(implicit fail: Hop[Long]): Boolean = {
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -797,8 +807,72 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       string.substring(a,b)
     }
   }
-  final def quoted(implicit fail: Hop[Long]): String = { fail.on((27 << 24).packII(i).L); null }
-  final def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = { fail.on((27 << 24).packII(i).L); null }
+  final def quoted(implicit fail: Hop[Long]): String = quotedBy('"', '"', '\\')(fail)
+  final def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.quote)); return null }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.quote)); return null }
+    val c = string.charAt(i)
+    if (c != left) { fail.on(err(e.wrong, e.quote)); return null }
+    var depth = 1
+    var escies = 0
+    var esced = false
+    i += 1
+    val iStart = i
+    while (i < iN && depth > 0) {
+      val c = string.charAt(i)
+      if (esced) esced = false
+      else {
+        if (c == right) depth -= 1
+        else if (c == left) depth += 1
+        else if (c == esc) { escies += 1; esced = true }
+      }
+      i += 1
+    }
+    if (depth != 0) { fail.on(err(e.wrong, e.quote)); return null }
+    val ans =
+      if (escies == 0) string.substring(iStart,i-1)
+      else {
+        val buf = new Array[Char](i-iStart-1-escies)
+        var j = 0
+        var k = iStart
+        esced = false
+        while (k < i-1) {
+          if (esced) {
+            buf(j) = string.charAt(k)
+            j += 1
+            k += 1
+            esced = false
+          }
+          else {
+            val c = string.charAt(k)
+            if (c == esc) esced = true
+            else { buf(j) = c; j += 1 }
+            k += 1
+          }
+        }
+        new String(buf)
+      }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans 
+  }
+  final def qtok(implicit fail: Hop[Long]): String = qtokBy('"', '"', '\\')(fail)
+  final def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.quote)); return null }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.quote)); return null }
+    val c = string.charAt(i)
+    if (c != left) tok(fail) else quotedBy(left, right, esc)(fail)
+  }
   final def base64(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
   final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
   final def exact(s: String)(implicit fail: Hop[Long]){ fail.on((27 << 24).packII(i).L) }
