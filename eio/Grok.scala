@@ -802,7 +802,22 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def uB(implicit fail: Hop[Long, this.type]): Byte = smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
   final def S(implicit fail: Hop[Long, this.type]): Short = smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
   final def uS(implicit fail: Hop[Long, this.type]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
-  final def C(implicit fail: Hop[Long, this.type]): Char = { fail.on((27 << 24).packII(i).L); 0 }
+  final def C(implicit fail: Hop[Long, this.type]): Char = {
+    error = 0
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.C)); return 0 }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.C)); return 0 }
+    val ans = string.charAt(i)
+    i += 1
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
   final def I(implicit fail: Hop[Long, this.type]): Int = smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
   final def uI(implicit fail: Hop[Long, this.type]): Int = smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
   final def xI(implicit fail: Hop[Long, this.type]): Int = hexidecimalNumber(8, e.xI)(fail).toInt
@@ -1193,25 +1208,26 @@ object GrokError {
   final val uB = 4
   final val S = 5
   final val uS = 6
-  final val I = 7
-  final val uI = 8
-  final val xI = 9
-  final val aI = 10
-  final val L = 11
-  final val uL = 12
-  final val xL = 13
-  final val aL = 14
-  final val F = 15
-  final val xF = 16
-  final val D = 17
-  final val xD = 18
-  final val tok = 19
-  final val quote = 20
-  final val qBy = 21
-  final val b64 = 22
-  final val exact = 23
-  final val oneOf = 24
-  final val bin = 25
+  final val C = 7
+  final val I = 8
+  final val uI = 9
+  final val xI = 10
+  final val aI = 11
+  final val L = 12
+  final val uL = 13
+  final val xL = 14
+  final val aL = 15
+  final val F = 16
+  final val xF = 17
+  final val D = 18
+  final val xD = 19
+  final val tok = 20
+  final val quote = 21
+  final val qBy = 22
+  final val b64 = 23
+  final val exact = 24
+  final val oneOf = 25
+  final val bin = 26
 }
 
 /*
