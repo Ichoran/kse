@@ -531,6 +531,7 @@ sealed abstract class Grok {
   }
   */
   
+  def position: Long
   def isEmpty(implicit fail: Hop[Long, this.type]): Boolean
   def skip(implicit fail: Hop[Long, this.type]): this.type
   def skip(n: Int)(implicit fail: Hop[Long, this.type]): this.type
@@ -553,14 +554,24 @@ sealed abstract class Grok {
   def xF(implicit fail: Hop[Long, this.type]): Float
   def D(implicit fail: Hop[Long, this.type]): Double
   def xD(implicit fail: Hop[Long, this.type]): Double
-  def peek(implicit fail: Hop[Long, this.type]): Char
+  def peek(implicit fail: Hop[Long, this.type]): Int
   def peekTok(implicit fail: Hop[Long, this.type]): String
-  def peekBin(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte]
-  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): this.type
+  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int
   def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A
   final def sub[A](delimiter: Delimiter)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(delimiter, 1)(parse)
   final def sub[A](delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), maxSkip)(parse)
   final def sub[A](delimiter: Char)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), 1)(parse)
+  def visit[A](s: String, start: Int, end: Int, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A
+  final def visit[A](s: String, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+    visit(s, 0, s.length, delimiter, stance)(parse)
+  final def visit[A](s: String, delimiter: Delimiter)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+    visit(s, 0, s.length, delimiter, stance)(parse)
+  final def visit[A](s: String, delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+    visit(s, 0, s.length, new CharDelim(delimiter), maxSkip)(parse)
+  final def visit[A](s: String, delimiter: Char)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+    visit(s, 0, s.length, new CharDelim(delimiter), stance)(parse)
+  final def visit[A](s: String)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+    visit(s, 0, s.length, delim, stance)(parse)
   def tok(implicit fail: Hop[Long, this.type]): String
   def quoted(implicit fail: Hop[Long, this.type]): String
   def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String
@@ -701,6 +712,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
   }
   
+  final def position = i.toLong
   final def isEmpty(implicit fail: Hop[Long, this.type]) = {
     if (stance < 0) i >= iN
     else { val j = delim(string, i, iN, stance); j < 0 || j >= iN }
@@ -852,11 +864,40 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def xF(implicit fail: Hop[Long, this.type]): Float = { fail.on((27 << 24).packII(i).L); 0 }
   final def D(implicit fail: Hop[Long, this.type]): Double = { fail.on((27 << 24).packII(i).L); 0 }
   final def xD(implicit fail: Hop[Long, this.type]): Double = { fail.on((27 << 24).packII(i).L); 0 }
-  final def peek(implicit fail: Hop[Long, this.type]): Char = { fail.on((27 << 24).packII(i).L); 0 }
-  final def peekTok(implicit fail: Hop[Long, this.type]): String = { fail.on((27 << 24).packII(i).L); null }
-  final def peekBin(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
-  final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): this.type = { fail.on((27 << 24).packII(i).L); this }
-  final def sub[A](delimiter: Delimiter, maxSkip: Int = 1)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = {
+  final def peek(implicit fail: Hop[Long, this.type]): Int = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) return -1
+      i = j
+    }
+    string.charAt(i)
+  }
+  final def peekTok(implicit fail: Hop[Long, this.type]): String = {
+    val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
+    val a = l.i0
+    if (a == -1) null
+    else if (stance < 0) string.substring(i,a)
+    else { i = a; string.substring(a, l.i1) }
+  }
+  final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) return 0
+      i = j
+    }
+    var k = start
+    val kN = start + n
+    var j = i
+    while (j < iN && k < kN) {
+      val c = string.charAt(j)
+      if (c > 0xFF) return (k - start)
+      target(k) = c.toByte
+      k += 1
+      j += 1
+    }
+    k - start
+  }
+  final def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = {
     error = 0
     val l = if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)
     val a = l.inLong.i0
@@ -873,20 +914,37 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     stance = maxSkip
     try {
       val ans = parse(this)
-      i0 = i0Old
-      iN = iNOld
-      delim = delimOld
-      stance = stanceOld
       i = b
       ans
     }
-    catch {
-      case t if fail is t =>
+    finally {
       i0 = i0Old
       iN = iNOld
       delim = delimOld
       stance = stanceOld
-      throw t
+    }
+  }
+  final def visit[A](s: String, start: Int, end: Int, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = {
+    val stringOld = string
+    val iOld = i
+    val i0Old = i0
+    val iNOld = iN
+    val delimOld = delim
+    val stanceOld = stance
+    string = s
+    i0 = math.max(0,math.min(s.length, start))
+    iN = math.min(s.length, math.max(i0, end))
+    delim = delimiter
+    stance = maxSkip
+    i = i0
+    try { parse(this) }
+    finally {
+      i = iOld
+      i0 = i0Old
+      iN = iNOld
+      string = stringOld
+      delim = delimOld
+      stance = stanceOld
     }
   }
   final def tok(implicit fail: Hop[Long, this.type]): String = {

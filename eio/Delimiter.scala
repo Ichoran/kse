@@ -11,7 +11,7 @@ trait Delimiter {
   def _tok(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long
   def tok_(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long
   
-  def |(d2: Delimiter): Delimiter = this match {
+  def |(d2: Delimiter): Delimiter = if (this eq d2) this else this match {
     case md: MultiDelim => d2 match {
       case md2: MultiDelim => new MultiDelim(md.delimiters ++ md2.delimiters)
       case _ => new MultiDelim(md.delimiters :+ d2)
@@ -23,7 +23,7 @@ trait Delimiter {
   }
 }
 
-final class CharDelim(c: Char) extends Delimiter {
+final class CharDelim(private val c: Char) extends Delimiter {
   final def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
     if (i0 >= iN) -1
     else {
@@ -85,6 +85,10 @@ final class CharDelim(c: Char) extends Delimiter {
     var k = n-1
     while (j < iN && k > 0 && ab(j) == c) j += 1
     (i packII j).L
+  }
+  override def |(d2: Delimiter) = d2 match {
+    case cd2: CharDelim if c == cd2.c => this
+    case _ => super.|(d2)
   }
 }
 
@@ -152,6 +156,10 @@ final class WhiteDelim extends Delimiter  {
     var k = n-1
     while (j < iN && k > 0 && whiteByte(ab(j))) j += 1
     (i packII j).L
+  }
+  override def |(d2: Delimiter) = d2 match {
+    case wd2: WhiteDelim => this
+    case _ => super.|(d2)
   }
 }
 
@@ -225,6 +233,10 @@ final class LineDelim extends Delimiter  {
     }
     val i1 = apply(ab, i, iN, n)
     (i packII i1).L
+  }
+  override def |(d2: Delimiter) = d2 match {
+    case ld2: LineDelim => this
+    case _ => super.|(d2)
   }
 }
 
