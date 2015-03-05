@@ -565,7 +565,9 @@ sealed abstract class Grok {
   def base64(implicit fail: Hop[Long]): Array[Byte]
   def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int
   def exact(s: String)(implicit fail: Hop[Long]): Unit
+  def exactNoCase(s: String)(implicit fail: Hop[Long]): Unit
   def oneOf(s: String*)(implicit fail: Hop[Long]): String
+  def oneOfNoCase(s: String*)(implicit fail: Hop[Long]): String
   def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte]
   def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Unit
   def alternate[A](alts: (MyType => A)*)(implicit fail: Hop[Long]): A
@@ -860,7 +862,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       val j = delim(string, i, iN, -stance)
       if (j >= 0) i = j
     }
-    ans 
+    ans
   }
   final def qtok(implicit fail: Hop[Long]): String = qtokBy('"', '"', '\\')(fail)
   final def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = {
@@ -875,8 +877,36 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   }
   final def base64(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
   final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
-  final def exact(s: String)(implicit fail: Hop[Long]){ fail.on((27 << 24).packII(i).L) }
+  final def exact(s: String)(implicit fail: Hop[Long]) {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.quote)); return }
+      i = j
+    }
+    var k = 0
+    while (i < iN && k < s.length && string.charAt(i) == s.charAt(k)) { i += 1; k += 1 }
+    if (k < s.length) { fail.on(err(e.wrong, e.exact)); return }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+  }
+  final def exactNoCase(s: String)(implicit fail: Hop[Long]) {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.quote)); return }
+      i = j
+    }
+    var k = 0
+    while (i < iN && k < s.length && Character.toUpperCase(string.charAt(i)) == Character.toUpperCase(s.charAt(k))) { i += 1; k += 1 }
+    if (k < s.length) { fail.on(err(e.wrong, e.exact)); return }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+  }
   final def oneOf(s: String*)(implicit fail: Hop[Long]): String = { fail.on((27 << 24).packII(i).L); null }
+  final def oneOfNoCase(s: String*)(implicit fail: Hop[Long]): String = { fail.on((27 << 24).packII(i).L); null }
   final def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
   final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
   final def alternate[A](alts: (MyType => A)*)(implicit fail: Hop[Long]): A = { fail.on((27 << 24).packII(i).L); null.asInstanceOf[A] }
