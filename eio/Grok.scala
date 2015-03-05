@@ -558,9 +558,9 @@ sealed abstract class Grok {
   def peekBin(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte]
   def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): this.type
   def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A
-  final def sub[A](delimiter: Delimiter)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(delimiter, 1)
-  final def sub[A](delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), maxSkip)
-  final def sub[A](delimiter: Char)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), 1)
+  final def sub[A](delimiter: Delimiter)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(delimiter, 1)(parse)
+  final def sub[A](delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), maxSkip)(parse)
+  final def sub[A](delimiter: Char)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), 1)(parse)
   def tok(implicit fail: Hop[Long, this.type]): String
   def quoted(implicit fail: Hop[Long, this.type]): String
   def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String
@@ -784,7 +784,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       val j = delim(string, i, iN, -stance)
       if (j >= 0) i = j
     }
-    ans 
+    ans
   }
   final def B(implicit fail: Hop[Long, this.type]): Byte = smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
   final def uB(implicit fail: Hop[Long, this.type]): Byte = smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
@@ -794,11 +794,60 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def I(implicit fail: Hop[Long, this.type]): Int = smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
   final def uI(implicit fail: Hop[Long, this.type]): Int = smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
   final def xI(implicit fail: Hop[Long, this.type]): Int = hexidecimalNumber(8, e.xI)(fail).toInt
-  final def aI(implicit fail: Hop[Long, this.type]): Int = { fail.on((27 << 24).packII(i).L); 0 }
+  final def aI(implicit fail: Hop[Long, this.type]): Int = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.aI)); return 0 }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.aI)); return 0 }
+    val c = string.charAt(i)
+    if (c == '-') I(fail)
+    else if (c == '+') {
+      i += 1
+      if (i+1 >= iN) { fail.on(err(e.end, e.aI)); return 0 }
+      val c = string.charAt(i)
+      if (c >= '0' && c <= '9') I(fail)
+      else { fail.on(err(e.wrong, e.aI)); return 0 }
+    }
+    else if (c >= '0' && c <= '9') {
+      if (c == '0' && i+2 < iN && (string.charAt(i+1)|0x20)=='x' && { val c = string.charAt(i+2) | 0x20; (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') }) {
+        i += 2
+        xI(fail)
+      }
+      else uI(fail)
+    }
+    else { fail.on(err(e.wrong, e.aI)); return 0 }
+  }
   final def L(implicit fail: Hop[Long, this.type]): Long = longNumber(false, e.L)(fail)
   final def uL(implicit fail: Hop[Long, this.type]): Long = longNumber(true, e.L)(fail)
   final def xL(implicit fail: Hop[Long, this.type]): Long = hexidecimalNumber(16, e.xI)(fail)
-  final def aL(implicit fail: Hop[Long, this.type]): Long = { fail.on((27 << 24).packII(i).L); 0 }
+  final def aL(implicit fail: Hop[Long, this.type]): Long = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.aL)); return 0 }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.aL)); return 0 }
+    val c = string.charAt(i)
+    if (c == '-') L(fail)
+    else if (c == '+') {
+      i += 1
+      if (i+1 >= iN) { fail.on(err(e.end, e.aL)); return 0 }
+      val c = string.charAt(i)
+      if (c >= '0' && c <= '9') L(fail)
+      else { fail.on(err(e.wrong, e.aL)); return 0 }
+    }
+    else if (c >= '0' && c <= '9') {
+      if (c == '0' && i+1 < iN && (string.charAt(i+1)|0x20)=='x') {
+        if (i+2 >= iN) { fail.on(err(e.end, e.aL)); return 0 }
+        i += 2
+        xL(fail)
+      }
+      else uL(fail)
+    }
+    else { fail.on(err(e.wrong, e.aI)); return 0 }
+  }
   final def F(implicit fail: Hop[Long, this.type]): Float = { fail.on((27 << 24).packII(i).L); 0 }
   final def xF(implicit fail: Hop[Long, this.type]): Float = { fail.on((27 << 24).packII(i).L); 0 }
   final def D(implicit fail: Hop[Long, this.type]): Double = { fail.on((27 << 24).packII(i).L); 0 }
