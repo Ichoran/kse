@@ -419,6 +419,8 @@ sealed abstract class Grok {
     ans
   }
   
+  final def errorCode = error
+  
   /*
   // Returns a Double from digits packed into digA and digB (ndig of them), with a decimal point at the position indicated
   final def myDoubleConversion(neg: Boolean, digA: Long, digB: Int, ndig: Int, point: Int): Double = {
@@ -570,12 +572,16 @@ sealed abstract class Grok {
   def oneOfNoCase(s: String*)(implicit fail: Hop[Long]): String
   def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte]
   def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Unit
-  def alternate[A](alts: (MyType => A)*)(implicit fail: Hop[Long]): A
   
   def apply[A](f: Hop[Long] => A): Ok[Long, A] = {
     val hop = UnboundHopSupplier.ofLong
     try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
+  def manual[A](f: Hop[Long] => A): Ok[Long, A] = {
+    val hop = UnboundHopSupplier.notLong
+    try{ Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
+  }
+  def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long]): Boolean
 }
 
 final class GrokString(private[eio] var string: String, initialDelimiter: Delimiter, initialStance: Int = 1) extends Grok {
@@ -587,6 +593,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   
   private final def err(what: Int, who: Int) = { error = what; (((what << 5) | who).toLong << 56) + (i&0xFFFFFFFFL) }
   private final def smallNumber(dig: Int, lo: Long, hi: Long, id: Int)(fail: Hop[Long]): Long = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, id)); return 0 }
@@ -615,6 +622,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     ans
   }
   private final def longNumber(unsigned: Boolean, id: Int)(fail: Hop[Long]): Long = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, id)); return 0 }
@@ -660,6 +668,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     ans
   }
   private final def hexidecimalNumber(dig: Int, id: Int)(fail: Hop[Long]): Long = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, id)); return 0 }
@@ -681,6 +690,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     ans
   }
   private final def matchAsciiInsensitive(lowered: String, id: Int)(fail: Hop[Long]) {
+    error = 0
     var j = 0
     while (j < lowered.length) {
       if (i >= iN) { fail.on(err(e.end, id)); return }
@@ -694,6 +704,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     else { val j = delim(string, i, iN, stance); j < 0 || j >= iN }
   } 
   final def skip(implicit fail: Hop[Long]) {
+    error = 0
     val l = if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)
     val b = l.inLong.i1
     if (b < 0) { fail.on(err(e.end, e.tok)); return }
@@ -704,6 +715,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     while (k > 0) { skip(fail); k -= 1 }
   }
   final def Z(implicit fail: Hop[Long]): Boolean = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.Z)); return false }
@@ -722,6 +734,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     ans
   }
   final def aZ(implicit fail: Hop[Long]): Boolean = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.aZ)); return false }
@@ -791,6 +804,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
   final def sub[A](sep: Char, maxSkip: Int = Int.MaxValue)(parse: MyType => A)(implicit fail: Hop[Long]): A = { fail.on((27 << 24).packII(i).L); null.asInstanceOf[A] }
   final def tok(implicit fail: Hop[Long]): String = {
+    error = 0
     if (stance < 0) {
       val l = delim.tok_(string, i, iN, -stance).inLong
       val a = l.i0
@@ -811,6 +825,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   }
   final def quoted(implicit fail: Hop[Long]): String = quotedBy('"', '"', '\\')(fail)
   final def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.quote)); return null }
@@ -866,6 +881,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   }
   final def qtok(implicit fail: Hop[Long]): String = qtokBy('"', '"', '\\')(fail)
   final def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long]): String = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.quote)); return null }
@@ -878,6 +894,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def base64(implicit fail: Hop[Long]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
   final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
   final def exact(s: String)(implicit fail: Hop[Long]) {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.exact)); return }
@@ -892,6 +909,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
   }
   final def exactNoCase(s: String)(implicit fail: Hop[Long]) {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.exact)); return }
@@ -906,6 +924,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
   }
   final def oneOf(s: String*)(implicit fail: Hop[Long]): String = {
+    error = 0
     val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
     val a = l.i0
     val b = l.i1
@@ -928,6 +947,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     null
   }
   final def oneOfNoCase(s: String*)(implicit fail: Hop[Long]): String = {
+    error = 0
     val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
     val a = l.i0
     val b = l.i1
@@ -950,6 +970,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     null
   }
   final def binary(n: Int)(implicit fail: Hop[Long]): Array[Byte] = {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.exact)); return null }
@@ -975,6 +996,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     ans
   }
   final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long]) {
+    error = 0
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
       if (j < 0) { fail.on(err(e.end, e.exact)); return }
@@ -995,7 +1017,11 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
       if (j >= 0) i = j
     }    
   }
-  final def alternate[A](alts: (MyType => A)*)(implicit fail: Hop[Long]): A = { fail.on((27 << 24).packII(i).L); null.asInstanceOf[A] }
+  def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long]): Boolean = {
+    error = 0
+    val iStart = i
+    try { val ans = f(this); if (!ans) i = iStart; ans } catch { case t if fail is t => i = iStart; false }
+  }
 }
 
 object Grok {
