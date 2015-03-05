@@ -10,6 +10,17 @@ trait Delimiter {
   def apply(ab: Array[Byte], i0: Int, iN: Int, n: Int): Int
   def _tok(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long
   def tok_(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long
+  
+  def |(d2: Delimiter): Delimiter = this match {
+    case md: MultiDelim => d2 match {
+      case md2: MultiDelim => new MultiDelim(md.delimiters ++ md2.delimiters)
+      case _ => new MultiDelim(md.delimiters :+ d2)
+    }
+    case _ => d2 match {
+      case md2: MultiDelim => new MultiDelim(this +: md2.delimiters)
+      case _ => new MultiDelim(Array(this, d2))
+    }
+  }
 }
 
 final class CharDelim(c: Char) extends Delimiter {
@@ -214,6 +225,93 @@ final class LineDelim extends Delimiter  {
     }
     val i1 = apply(ab, i, iN, n)
     (i packII i1).L
+  }
+}
+
+final class MultiDelim(val delimiters: Array[Delimiter]) extends Delimiter {
+  final def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
+    if (i0 >= iN) -1
+    else {
+      var m = n
+      var last = delimiters.length-1
+      var k = 0
+      var i = i0
+      while (m > 0 && last >= 0 && i < iN) {
+        val j = delimiters(k)(s, i, iN, m)
+        if (j > i) { last = k; m -= j-i; i = j }
+        else if (k == last) last = -1
+        else { k += 1; if (k >= delimiters.length) k = 0 }
+      }
+      i
+    }
+  }
+  final def apply(ab: Array[Byte], i0: Int, iN: Int, n: Int): Int = {
+    if (i0 >= iN) -1
+    else {
+      var m = n
+      var last = delimiters.length-1
+      var k = 0
+      var i = i0
+      while (m > 0 && last >= 0 && i < iN) {
+        val j = delimiters(k)(ab, i, iN, m)
+        if (j > i) { last = k; m -= j-i; i = j }
+        else if (k == last) last = -1
+        else { k += 1; if (k >= delimiters.length) k = 0 }
+      }
+      i
+    }
+  }
+  final def _tok(s: String, i0: Int, iN: Int, n: Int): Long = {
+    val i1 = apply(s, i0, iN, n)
+    if (i1 >= iN) return (if (i1 == i0) (-1 packII -1) else (i1 packII i1)).L
+    var i = iN
+    var k = 0
+    while (i > i1 && k < delimiters.length) {
+      val j = delimiters(k)._tok(s, i1, i, 0).inLong.i1
+      i = math.min(i, j)
+      k += 1
+    }
+    (i1 packII i).L
+  }
+  final def _tok(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
+    val i1 = apply(ab, i0, iN, n)
+    if (i1 >= iN) return (if (i1 == i0) (-1 packII -1) else (i1 packII i1)).L
+    var i = iN
+    var k = 0
+    while (i > i1 && k < delimiters.length) {
+      val j = delimiters(k)._tok(ab, i1, i, 0).inLong.i1
+      i = math.min(i, j)
+      k += 1
+    }
+    (i1 packII i).L
+  }
+  final def tok_(s: String, i0: Int, iN: Int, n: Int): Long = {
+    if (i0 >= iN) return (-1 packII -1).L
+    else {
+      var i = iN
+      var k = 0
+      while (i > i0 && k < delimiters.length) {
+        val j = delimiters(k).tok_(s, i0, i, 0).inLong.i0
+        i = math.min(i, j)
+        k += 1
+      }
+      val i1 = apply(s, i, iN, n)
+      (i packII i1).L
+    }
+  }
+  final def tok_(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
+    if (i0 >= iN) return (-1 packII -1).L
+    else {
+      var i = iN
+      var k = 0
+      while (i > i0 && k < delimiters.length) {
+        val j = delimiters(k).tok_(ab, i0, i, 0).inLong.i1
+        i = math.min(i, j)
+        k += 1
+      }
+      val i1 = apply(ab, i, iN, n)
+      (i packII i1).L
+    }
   }
 }
 
