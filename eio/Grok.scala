@@ -11,6 +11,11 @@ import scala.reflect.{ClassTag => Tag}
 import kse.flow._
 import kse.coll.packed._
 
+object GrokNumber {
+  final val maxULongPrefix = 1844674407370955161L
+  final val maxULongLastDigit = 5
+}
+
 /*
 object GrokNumber {
   private[this] val parseErrorNaNBits = java.lang.Double.doubleToRawLongBits(Double.NaN) ^ 1
@@ -362,7 +367,7 @@ sealed abstract class Grok {
     ans
   }
   
-  final def rawHexDigitsUnsigned(s: String, limit: Int): Long = {
+  final def rawHexidecimalDigits(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)
     if (i >= N) { error = 1; return 0L }
     var ans = s.charAt(i).toLong-'0'
@@ -388,7 +393,7 @@ sealed abstract class Grok {
     ans
   }
   
-  final def rawHexDigitsUnsigned(ab: Array[Byte], limit: Int): Long = {
+  final def rawHexidecimalDigits(ab: Array[Byte], limit: Int): Long = {
     val N = math.min(i+limit, iN)
     if (i >= N) { error = 1; return 0L }
     var ans = ab(i).toLong-'0'
@@ -576,7 +581,7 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   delim = initialDelimiter
   stance = initialStance
   
-  private final def err(what: Int, who: Int) = (((what << 5) | who).toLong << 56) + (i&0xFFFFFFFFL)
+  private final def err(what: Int, who: Int) = { error = what; (((what << 5) | who).toLong << 56) + (i&0xFFFFFFFFL) }
   private final def smallNumber(dig: Int, lo: Long, hi: Long, id: Int)(fail: Hop[Long]): Long = {
     if (stance > 0) {
       val j = delim(string, i, iN, stance)
@@ -605,6 +610,80 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     }
     ans
   }
+  private final def longNumber(unsigned: Boolean, id: Int)(fail: Hop[Long]): Long = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, id)); return 0 }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, id)); return 0 }
+    val negative = {
+      if (unsigned) false
+      else if (string.charAt(i) == '-') { i += 1; true }
+      else false
+    }
+    var j = i
+    while (i < iN && string.charAt(i) == '0') i += 1
+    val l = {
+      if (j < i && (i >= iN || { val c = string.charAt(i); c < '0' || c > '9' })) { error = 0; 0 }
+      else { j = i; rawDecimalDigitsUnsigned(string, 19) }
+    }
+    if (error > 0) { fail.on(err(error,id)); return 0 }
+    val ans = 
+      if (unsigned) {
+        if (i-j < 19 || i >= iN) l
+        else {
+          val c = string.charAt(i)-'0'
+          if (c < 0 || c > 9) l
+          else if (l > GrokNumber.maxULongPrefix || c > GrokNumber.maxULongLastDigit) { fail.on(err(e.range, id)); return 0 }
+          else {
+            i += 1
+            if (i < iN && { val c = string.charAt(i); c >= '0' && c <= '9'}) { fail.on(err(e.range, id)); return 0 }
+            l*10 + c
+          }
+        }
+      }
+      else {
+        if (i-j == 19 && i < iN && { val c = string.charAt(i); c >= '0' && c <= '9'}) { fail.on(err(e.range, id)); return 0 }
+        val x = if (negative) -l else l
+        if (x != 0 && (x < 0) != negative) { fail.on(err(e.range,id)); return 0 }
+        x
+      }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
+  private final def hexidecimalNumber(dig: Int, id: Int)(fail: Hop[Long]): Long = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, id)); return 0 }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, id)); return 0 }
+    var j = i
+    while (i < iN && string.charAt(i) == '0') i += 1
+    val ans = {
+      if (j < i && (i >= iN || { val c = string.charAt(i); c < '0' || (c > '9' && ((c&0xDF)<'A' || (c&(0xDF))>'F')) })) { error = 0; 0 }
+      else { j = i; rawHexidecimalDigits(string, dig+1) }
+    }
+    if (error > 0) { fail.on(err(error,id)); return 0 }
+    if (i-j > dig) { fail.on(err(e.range,id)); return 0 }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
+  private final def matchAsciiInsensitive(lowered: String, id: Int)(fail: Hop[Long]) {
+    var j = 0
+    while (j < lowered.length) {
+      if (i >= iN) { fail.on(err(e.end, id)); return }
+      if (lowered.charAt(j) != (string.charAt(i) | 0x20)) { fail.on(err(e.wrong, id)); return }
+      i += 1; j += 1
+    }
+  }
   
   final def isEmpty(implicit fail: Hop[Long]) = {
     if (stance < 0) i >= iN
@@ -612,8 +691,71 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   } 
   final def skip(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
   final def skip(n: Int)(implicit fail: Hop[Long]) { fail.on((27 << 24).packII(i).L) }
-  final def Z(implicit fail: Hop[Long]): Boolean = { fail.on((27 << 24).packII(i).L); false }
-  final def aZ(implicit fail: Hop[Long]): Boolean = { fail.on((27 << 24).packII(i).L); false }
+  final def Z(implicit fail: Hop[Long]): Boolean = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.Z)); return false }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.Z)); return false }
+    var c = string.charAt(i)&0xDF
+    val ans = 
+      if (c == 'T') { matchAsciiInsensitive("true", e.Z)(fail); true }
+      else if (c == 'F') { matchAsciiInsensitive("false", e.Z)(fail); false }
+      else { fail.on(err(e.wrong, e.Z)); return false }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans
+  }
+  final def aZ(implicit fail: Hop[Long]): Boolean = {
+    if (stance > 0) {
+      val j = delim(string, i, iN, stance)
+      if (j < 0) { fail.on(err(e.end, e.aZ)); return false }
+      i = j
+    }
+    if (i >= iN) { fail.on(err(e.end, e.aZ)); return false }
+    val ans = (string.charAt(i)&0xDF) match {
+      case 16 | 17 => smallNumber(1, 0, 1, e.aZ)(fail) == 1
+      case 'T' =>
+        i += 1
+        if (i < iN && (string.charAt(i)&0xDF) == 'R') { i -= 1; matchAsciiInsensitive("true", e.aZ)(fail) }
+        true
+      case 'F' =>
+        i += 1
+        if (i < iN && (string.charAt(i)&0xDF) == 'A') { i -= 1; matchAsciiInsensitive("false", e.aZ)(fail) }
+        false
+      case 'Y' =>
+        i += 1
+        if (i < iN && (string.charAt(i)&0xDF) == 'E') { i -= 1; matchAsciiInsensitive("yes", e.aZ)(fail) }
+        true
+      case 'N' =>
+        i += 1
+        if (i < iN && (string.charAt(i)&0xDF) == 'O') i += 1
+        false
+      case 'O' =>
+        i += 1
+        if (i >= iN) { fail.on(err(e.end, e.aZ)); return false }
+        val c = string.charAt(i) & 0xDF
+        if (c == 'N') { i += 1; true }
+        else if (c == 'F') {
+          i += 1
+          if (i >= iN) { fail.on(err(e.end, e.aZ)); return false }
+          if ((string.charAt(i) & 0xDF) != 'F') { fail.on(err(e.wrong, e.aZ)); return false }
+          i += 1
+          false
+        }
+        else { fail.on(err(e.wrong, e.aZ)); return false }
+      case _ =>
+        fail.on(err(e.wrong, e.aZ)); return false
+    }
+    if (stance < 0) {
+      val j = delim(string, i, iN, -stance)
+      if (j >= 0) i = j
+    }
+    ans 
+  }
   final def B(implicit fail: Hop[Long]): Byte = smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
   final def uB(implicit fail: Hop[Long]): Byte = smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
   final def S(implicit fail: Hop[Long]): Short = smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
@@ -621,11 +763,11 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
   final def C(implicit fail: Hop[Long]): Char = { fail.on((27 << 24).packII(i).L); 0 }
   final def I(implicit fail: Hop[Long]): Int = smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
   final def uI(implicit fail: Hop[Long]): Int = smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
-  final def xI(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
+  final def xI(implicit fail: Hop[Long]): Int = hexidecimalNumber(8, e.xI)(fail).toInt
   final def aI(implicit fail: Hop[Long]): Int = { fail.on((27 << 24).packII(i).L); 0 }
-  final def L(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def uL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
-  final def xL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
+  final def L(implicit fail: Hop[Long]): Long = longNumber(false, e.L)(fail)
+  final def uL(implicit fail: Hop[Long]): Long = longNumber(true, e.L)(fail)
+  final def xL(implicit fail: Hop[Long]): Long = hexidecimalNumber(16, e.xI)(fail)
   final def aL(implicit fail: Hop[Long]): Long = { fail.on((27 << 24).packII(i).L); 0 }
   final def F(implicit fail: Hop[Long]): Float = { fail.on((27 << 24).packII(i).L); 0 }
   final def xF(implicit fail: Hop[Long]): Float = { fail.on((27 << 24).packII(i).L); 0 }
