@@ -108,7 +108,42 @@ package object base64 {
     var bits, n = 0
     while (i < end) {
       val x = decoder(coded(i))
-      if (x < 0) return -1
+      if (x < 0) return -1-(i-start)
+      else if (x < 64) {
+        n += 1
+        bits = (bits << 6) | x
+        if (n > 3) {
+          dest(j) = ((bits>>16) & 0xFF).toByte
+          dest(j+1) = ((bits>>8) & 0xFF).toByte
+          dest(j+2) = (bits & 0xFF).toByte
+          bits = 0
+          n = 0
+          j += 3
+        }
+      }
+      i += 1
+    }
+    if (n == 2) {
+      dest(j) = ((bits >> 4) & 0xFF).toByte
+      j += 1
+    }
+    else if (n == 3) {
+      dest(j) = ((bits >> 10) & 0xFF).toByte
+      dest(j+1) = ((bits >> 2) & 0xFF).toByte
+      j += 2
+    }
+    j
+  }
+  
+  def decodeFromBase64String(coded: String, start: Int, end: Int, dest: Array[Byte], at: Int, decoder: Array[Byte]): Int = {
+    var i = start
+    var j = at
+    var bits, n = 0
+    while (i < end) {
+      val c = coded.charAt(i)
+      if (c > 127) return -1-(i-start)
+      val x = decoder(c)
+      if (x < 0) return -1-(i-start)
       else if (x < 64) {
         n += 1
         bits = (bits << 6) | x

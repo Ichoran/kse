@@ -597,7 +597,7 @@ sealed abstract class Grok {
   def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long, this.type]): Boolean
 }
 
-final class GrokString(private[eio] var string: String, initialDelimiter: Delimiter, initialStance: Int = 1) extends Grok {
+final class GrokString(private[this] var string: String, initialDelimiter: Delimiter, initialStance: Int = 1) extends Grok {
   import kse.eio.{GrokError => e}
 
   iN = string.length
@@ -1050,8 +1050,33 @@ final class GrokString(private[eio] var string: String, initialDelimiter: Delimi
     val c = string.charAt(i)
     if (c != left) tok(fail) else quotedBy(left, right, esc)(fail)
   }
-  final def base64(implicit fail: Hop[Long, this.type]): Array[Byte] = { fail.on((27 << 24).packII(i).L); null }
-  final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int = { fail.on((27 << 24).packII(i).L); 0 }
+  final def base64(implicit fail: Hop[Long, this.type]): Array[Byte] = {
+    error = 0
+    val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
+    val a = l.i0
+    val b = l.i1
+    if (a == -1) { fail.on(err(e.end, e.b64)); return null }
+    val j0 = if (stance < 0) i else a
+    val jN = if (stance < 0) a else b
+    val buffer = new Array[Byte](((jN - j0).toLong*3/4).toInt)
+    val n = kse.eio.base64.decodeFromBase64String(string, j0, jN, buffer, 0, kse.eio.base64.Url64.decoder)
+    if (n < 0) { i = j0 - (n+1); fail.on(err(e.wrong, e.b64)); return null }
+    i = b
+    if (n < buffer.length) java.util.Arrays.copyOf(buffer, n) else buffer
+  }
+  final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int = {
+    error = 0
+    val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
+    val a = l.i0
+    val b = l.i1
+    if (a == -1) { fail.on(err(e.end, e.b64)); return -1 }
+    val j0 = if (stance < 0) i else a
+    val jN = if (stance < 0) a else b
+    val n = kse.eio.base64.decodeFromBase64String(string, j0, jN, target, start, kse.eio.base64.Url64.decoder)
+    if (n < 0) { i = j0 - (n+1); fail.on(err(e.wrong, e.b64)); return -1 }
+    i = b
+    n
+  }
   final def exact(s: String)(implicit fail: Hop[Long, this.type]): this.type = {
     error = 0
     if (stance > 0) {
