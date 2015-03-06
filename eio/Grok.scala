@@ -5,11 +5,23 @@ package kse.eio
 
 import language.postfixOps
 
-import java.lang.Character
 import scala.annotation.tailrec
 import scala.reflect.{ClassTag => Tag}
 import kse.flow._
 import kse.coll.packed._
+
+object GrokCharacter {
+  final def elevateCase(c: Char): Char = {
+    if (c < 0x130 || c > 0x212B) Character.toUpperCase(c)
+    else if (c == 0x130 || c == 0x3F4 || c == 0x2126 || c >= 0x212A) Character.toUpperCase(Character.toLowerCase(c))
+    else Character.toUpperCase(c)
+  }
+  final def elevateCase(c: Int): Int = {
+    if (c < 0x130 || c > 0x212B) Character.toUpperCase(c)
+    else if (c == 0x130 || c == 0x3F4 || c == 0x2126 || c >= 0x212A) Character.toUpperCase(Character.toLowerCase(c))
+    else Character.toUpperCase(c)
+  }
+}
 
 object GrokNumber {
   final val maxULongPrefix = 1844674407370955161L
@@ -936,7 +948,8 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     i0 = math.max(0,math.min(s.length, start))
     iN = math.min(s.length, math.max(i0, end))
     delim = delimiter
-    stance = maxSkip
+    if (maxSkip < 0) { reqSep = true; nSep = -maxSkip }
+    else { reqSep = false; nSep = math.max(1, maxSkip) }
     i = i0
     try { parse(this) }
     finally {
@@ -951,7 +964,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     }
   }
   final def tok(implicit fail: Hop[Long, this.type]): String = {
-    if (!prepare(0, e.tok)) return null
+    if (!prepare(0, e.tok)(fail)) return null
     val a = delim.tok_(string, i, iN, 0).inLong.i0
     val ans = string.substring(i, a)
     ready = 0
@@ -1007,129 +1020,101 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
   }
   final def qtok(implicit fail: Hop[Long, this.type]): String = qtokBy('"', '"', '\\')(fail)
   final def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String = {
-    error = 0
-    if (stance > 0) {
-      val j = delim(string, i, iN, stance)
-      if (j < 0) { fail.on(err(e.end, e.quote)); return null }
-      i = j
-    }
-    if (i >= iN) { fail.on(err(e.end, e.quote)); return null }
+    if (!prepare(0, e.quote)(fail)) return null
     val c = string.charAt(i)
     if (c != left) tok(fail) else quotedBy(left, right, esc)(fail)
   }
   final def base64(implicit fail: Hop[Long, this.type]): Array[Byte] = {
-    error = 0
-    val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
-    val a = l.i0
-    val b = l.i1
-    if (a == -1) { fail.on(err(e.end, e.b64)); return null }
-    val j0 = if (stance < 0) i else a
-    val jN = if (stance < 0) a else b
-    val buffer = new Array[Byte](((jN - j0).toLong*3/4).toInt)
-    val n = kse.eio.base64.decodeFromBase64String(string, j0, jN, buffer, 0, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = j0 - (n+1); fail.on(err(e.wrong, e.b64)); return null }
-    i = b
+    if (!prepare(0, e.tok)(fail)) return null
+    val a = delim.tok_(string, i, iN, 0).inLong.i0
+    val buffer = new Array[Byte](((a - i).toLong*3/4).toInt)
+    val n = kse.eio.base64.decodeFromBase64String(string, i, a, buffer, 0, kse.eio.base64.Url64.decoder)
+    if (n < 0) { i = i - (n+1); fail.on(err(e.wrong, e.b64)); return null }
+    i = a
+    ready = 0
     if (n < buffer.length) java.util.Arrays.copyOf(buffer, n) else buffer
   }
   final def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int = {
-    error = 0
-    val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
-    val a = l.i0
-    val b = l.i1
-    if (a == -1) { fail.on(err(e.end, e.b64)); return -1 }
-    val j0 = if (stance < 0) i else a
-    val jN = if (stance < 0) a else b
-    val n = kse.eio.base64.decodeFromBase64String(string, j0, jN, target, start, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = j0 - (n+1); fail.on(err(e.wrong, e.b64)); return -1 }
-    i = b
+    if (!prepare(0, e.tok)(fail)) return -1
+    val a = delim.tok_(string, i, iN, 0).inLong.i0
+    val n = kse.eio.base64.decodeFromBase64String(string, i, a, target, start, kse.eio.base64.Url64.decoder)
+    if (n < 0) { i = i - (n+1); fail.on(err(e.wrong, e.b64)); return -1 }
+    i = a
+    ready = 0
     n
   }
   final def exact(s: String)(implicit fail: Hop[Long, this.type]): this.type = {
-    error = 0
-    if (stance > 0) {
-      val j = delim(string, i, iN, stance)
-      if (j < 0) { fail.on(err(e.end, e.exact)); return this }
-      i = j
-    }
+    if (!prepare(0, e.exact)(fail)) return null
     var k = 0
     while (i < iN && k < s.length && string.charAt(i) == s.charAt(k)) { i += 1; k += 1 }
     if (k < s.length) { fail.on(err(e.wrong, e.exact)); return this }
-    if (stance < 0) {
-      val j = delim(string, i, iN, -stance)
-      if (j >= 0) i = j
-    }
+    if (!wrapup(e.exact)(fail)) return null
     this
   }
   final def exactNoCase(s: String)(implicit fail: Hop[Long, this.type]): this.type = {
-    error = 0
-    if (stance > 0) {
-      val j = delim(string, i, iN, stance)
-      if (j < 0) { fail.on(err(e.end, e.exact)); return this }
-      i = j
-    }
+    import GrokCharacter._
+    if (!prepare(0, e.exact)(fail)) return null
     var k = 0
-    while (i < iN && k < s.length && Character.toUpperCase(string.charAt(i)) == Character.toUpperCase(s.charAt(k))) { i += 1; k += 1 }
+    while (i < iN && k < s.length && {
+      val c = string.charAt(i)
+      val cc = s.charAt(k)
+      (c == cc) || {
+        if (k > 0 && Character.isLowSurrogate(c)) Character.toUpperCase(string.codePointAt(i-1)) == Character.toUpperCase(s.codePointAt(k-1))
+        else elevateCase(c) == elevateCase(cc)
+      }
+    }) { i += 1; k += 1 }
     if (k < s.length) { fail.on(err(e.wrong, e.exact)); return this }
-    if (stance < 0) {
-      val j = delim(string, i, iN, -stance)
-      if (j >= 0) i = j
-    }
+    if (!wrapup(e.exact)(fail)) return null
     this
   }
   final def oneOf(s: String*)(implicit fail: Hop[Long, this.type]): String = {
-    error = 0
-    val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
-    val a = l.i0
-    val b = l.i1
-    if (b < 0) { fail.on(err(e.end, e.oneOf)); return null }
-    val k0 = if (stance < 0) i else a
-    val kN = if (stance < 0) a else b
+    if (!prepare(0, e.exact)(fail)) return null
+    val a = delim.tok_(string, i, iN, 0).inLong.i0
+    ready = 0
     var n = 0
     while (n < s.length) {
-      if (kN - k0 == s(n).length) {
+      if (a - i == s(n).length) {
         var j = 0
-        var k = k0
+        var k = i
         val sn = s(n)
-        while (k < kN && sn.charAt(j) == string.charAt(k)) { k += 1; j += 1 }
-        if (k == kN) { i = b; return sn }
+        while (k < a && sn.charAt(j) == string.charAt(k)) { k += 1; j += 1 }
+        if (k == a) { i = a; return sn }
       }
       n += 1
     }
-    i = b
+    i = a
     fail.on(err(e.wrong, e.oneOf))
     null
   }
   final def oneOfNoCase(s: String*)(implicit fail: Hop[Long, this.type]): String = {
-    error = 0
-    val l = (if (stance < 0) delim.tok_(string, i, iN, -stance) else delim._tok(string, i, iN, stance)).inLong
-    val a = l.i0
-    val b = l.i1
-    if (b < 0) { fail.on(err(e.end, e.oneOf)); return null }
-    val k0 = if (stance < 0) i else a
-    val kN = if (stance < 0) a else b
+    import GrokCharacter._
+    if (!prepare(0, e.exact)(fail)) return null
+    val a = delim.tok_(string, i, iN, 0).inLong.i0
+    ready = 0
     var n = 0
     while (n < s.length) {
-      if (kN - k0 == s(n).length) {
+      if (a - i == s(n).length) {
         var j = 0
-        var k = k0
+        var k = i
         val sn = s(n)
-        while (k < kN && Character.toUpperCase(sn.charAt(j)) == Character.toUpperCase(string.charAt(k))) { k += 1; j += 1 }
-        if (k == kN) { i = b; return sn }
+        while (k < a && {
+          val c = string.charAt(k)
+          val cc = sn.charAt(j)
+          (c == cc) || {
+            if (j > 0 && Character.isLowSurrogate(c)) Character.toUpperCase(sn.codePointAt(j-1)) == Character.toUpperCase(string.codePointAt(k-1))
+            else elevateCase(c) == elevateCase(cc)
+          }
+        }) { k += 1; j += 1 }
+        if (k == a) { i = a; return sn }
       }
       n += 1
     }
-    i = b
+    i = a
     fail.on(err(e.wrong, e.oneOf))
     null
   }
   final def binary(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte] = {
-    error = 0
-    if (stance > 0) {
-      val j = delim(string, i, iN, stance)
-      if (j < 0) { fail.on(err(e.end, e.exact)); return null }
-      i = j
-    }
-    if (i+n >= iN) { fail.on(err(e.end, e.bin)); return null }
+    if (!prepare(n, e.bin)(fail)) return null
     val ans = {
       val buf = new Array[Byte](n)
       var j = 0
@@ -1142,20 +1127,11 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       }
       buf
     }
-    if (stance < 0) {
-      val j = delim(string, i, iN, -stance)
-      if (j >= 0) i = j
-    }
+    if (!wrapup(e.bin)(fail)) return null
     ans
   }
   final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): this.type = {
-    error = 0
-    if (stance > 0) {
-      val j = delim(string, i, iN, stance)
-      if (j < 0) { fail.on(err(e.end, e.exact)); return this }
-      i = j
-    }
-    if (i+n >= iN) { fail.on(err(e.end, e.bin)); return this }
+    if (!prepare(n, e.bin)(fail)) return null
     var j = start
     val end = start + n
     while (j < end) {
@@ -1165,10 +1141,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       i += 1
       j += 1
     }
-    if (stance < 0) {
-      val j = delim(string, i, iN, -stance)
-      if (j >= 0) i = j
-    }
+    if (!wrapup(e.bin)(fail)) return null
     this
   }
   def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long, this.type]): Boolean = {
@@ -1179,9 +1152,9 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
 }
 
 object Grok {
-  def apply(s: String): Grok = new GrokString(s, Delimiter.white)
-  def apply(s: String, d: Delimiter): Grok = new GrokString(s, d)
-  def apply(s: String, c: Char): Grok = new GrokString(s, new CharDelim(c))
+  def apply(s: String): Grok = new GrokString(s, 0, s.length, Delimiter.white)
+  def apply(s: String, d: Delimiter): Grok = new GrokString(s, 0, s.length, d)
+  def apply(s: String, c: Char): Grok = new GrokString(s, 0, s.length, new CharDelim(c))
 }
 
 
