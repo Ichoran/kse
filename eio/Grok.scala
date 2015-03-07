@@ -27,11 +27,9 @@ object GrokNumber {
   final val maxULongPrefix = 1844674407370955161L
   final val maxULongLastDigit = 5
 
-  /*
   private[this] val parseErrorNaNBits = java.lang.Double.doubleToRawLongBits(Double.NaN) ^ 1
-  val parseErrorNaN = java.lang.Double.longBitsToDouble(parseErrorNaNBits)
+  final val parseErrorNaN = java.lang.Double.longBitsToDouble(parseErrorNaNBits)
   def isParseError(d: Double) = parseErrorNaNBits == java.lang.Double.doubleToRawLongBits(d)
-  */
   
   final val stringInfinity = "infinity"
   final val bytesInfinity = stringInfinity.getBytes
@@ -148,7 +146,6 @@ abstract class Grok {
       return j0+3
     }
     if (c == 'i') {
-      println("In infinity code")
       var j = j0+1
       var k = 1
       while (k < stringInfinity.length && j < iN && stringInfinity.charAt(k) == (s.charAt(j) | 0x20)) { k += 1; j += 1 }
@@ -208,7 +205,6 @@ abstract class Grok {
       return j0+3
     }
     if (c == 'i') {
-      println("In infinity code")
       var j = j0+1
       var k = 1
       while (k < stringInfinity.length && j < iN && stringInfinity.charAt(k) == (ab(j) | 0x20)) { k += 1; j += 1 }
@@ -336,8 +332,8 @@ object GrokError {
   final val range = 3
   final val delim = 4
   final val imprecise = -1
-  final val infinity = -2
-  final val nan = -3
+  final val coded = -2
+  final val exact = -3
   
   // Must fit in 5 bits
   final val Z = 1
