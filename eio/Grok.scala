@@ -27,12 +27,20 @@ object GrokNumber {
   final val maxULongPrefix = 1844674407370955161L
   final val maxULongLastDigit = 5
 
-  private[this] val parseErrorNaNBits = java.lang.Double.doubleToRawLongBits(Double.NaN) ^ 1
+  final val parseErrorNaNBits = java.lang.Double.doubleToRawLongBits(Double.NaN) ^ 1
+  final val negativeZeroDoubleBits = java.lang.Double.doubleToRawLongBits(-0.0)
   final val parseErrorNaN = java.lang.Double.longBitsToDouble(parseErrorNaNBits)
   def isParseError(d: Double) = parseErrorNaNBits == java.lang.Double.doubleToRawLongBits(d)
+  final val smallPowersOfTen = Array(
+    1L, 10L, 100L, 1000L, 10000L, 100000L, 1000000L, 10000000L, 100000000L, 1000000000L,
+    10000000000L, 100000000000L, 1000000000000L, 10000000000000L, 100000000000000L,
+    1000000000000000L, 10000000000000000L, 100000000000000000L, 1000000000000000000L
+  )
   
   final val stringInfinity = "infinity"
   final val bytesInfinity = stringInfinity.getBytes
+  final val stringNaN = "nan"
+  final val bytesNaN = stringNaN.getBytes
 }
 
 abstract class Grok {
@@ -130,65 +138,129 @@ abstract class Grok {
     ans
   }
   
-  final def rawCheckDoubleDigits(s: String, point: Char): Int = {
+  final def rawParseDoubleDigits(s: String, point: Char): Long = {
     import GrokNumber._
-    if (i >= iN) { error = e.end.toByte; return i }
+    if (i >= iN) { error = e.end.toByte; return 0 }
+    
+    // Initial +-
     var c = s.charAt(i)
-    val j0 =
-      if (c == '+' || c == '-') { if (i+1 >= iN) { error = e.end.toByte; return i+1 }; c = s.charAt(i+1); i+1 }
-      else i
+    var negative = false
+    if (c == '+' || c == '-') {
+      i += 1
+      if (i >= iN) { error = e.end.toByte; return 0 }
+      negative = c == '-'
+      c = s.charAt(i)
+    }
+    
+    // Infinity / NaN
     c = (c | 0x20).toChar
-    if (c == 'n') {
-      if (j0+2 >= iN) { error = e.end.toByte; return iN }
-      if ((s.charAt(j0+1) | 0x20) != 'a') { error = e.wrong.toByte; return j0+2 }
-      if ((s.charAt(j0+2) | 0x20) != 'n') { error = e.wrong.toByte; return j0+3 }
-      error = e.nan.toByte
-      return j0+3
-    }
-    if (c == 'i') {
-      var j = j0+1
+    if (c == 'n' || c == 'i') {
+      val keyword = if (c == 'n') stringNaN else stringInfinity
+      i += 1
       var k = 1
-      while (k < stringInfinity.length && j < iN && stringInfinity.charAt(k) == (s.charAt(j) | 0x20)) { k += 1; j += 1 }
-      if (k == 3 || k == stringInfinity.length) {
-        if (k == 3 && j < iN && Character.isLetter(s.charAt(j))) { error = e.wrong.toByte; return j+1 }
-        error = e.infinity.toByte
-        return if (s.charAt(i) == '-') -j else j
+      while (k < keyword.length && i < iN && keyword.charAt(k) == (s.charAt(i) | 0x20)) { k += 1; i += 1 }
+      if (k == 3 || k == keyword.length) {
+        if (i < iN && Character.isLetter(s.charAt(i))) { i += 1; error = e.wrong.toByte; return 0 }
+        error = e.coded
+        return if (c == 'n') 0 else if (negative) -1 else 1
       }
       else {
-        if (j >= iN) error = e.end.toByte else error = e.wrong.toByte
-        return j
+        if (i >= iN) error = e.end.toByte else error = e.wrong.toByte
+        return 0
       }
     }
-    var j = j0
-    while (j < iN && { c = s.charAt(j); c == '0' }) j += 1
-    val jz = j
-    while (j < iN && { c = s.charAt(j); c >= '0' && c <= '9' }) j += 1
-    val ji = j
-    val jd =
-      if (c != point || j >= iN) ji
+
+    // Digits before decimal
+    val j0 = i
+    while (i < iN && s.charAt(i) == '0') i += 1
+    val ja = i
+    while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1
+    val jb = i
+    if (c == point && i < iN) {
+      c = s.charAt(i)
+      i += 1
+    }
+    // Digits after decimal
+    val jc = i
+    if (jb - ja == 0) while (i < iN && s.charAt(i) == '0') i += 1
+    val jcc = i
+    while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1
+    var jd = i
+    // Need some digit somewhere
+    if ((jd-jc) + (jb-j0) <= 0) { error = e.wrong.toByte; return 0 }
+    // Throw away trailing zeros, if any
+    if (jd > jcc) while (jd > jc && s.charAt(jd-1) == '0') jd -= 1
+    if (jd == jc) { jd = jb; while (jd > ja && s.charAt(jd-1) == '0') jd -= 1 }
+    
+    // Exponent
+    val exp =
+      if ((c | 0x20) != 'e') 0
       else {
-        j += 1
-        while (j <= iN && { c = s.charAt(j); c >= '0' && c <= '9' }) j += 1
-        j
+        if (i >= iN) { error = e.end.toByte; return 0 }
+        c = s.charAt(i)
+        i += 1
+        val expneg =
+          if (c == '+' || c == '-') {
+            i += 1
+            if (i >= iN) { error = e.end.toByte; return 0 }
+            c == '-'
+          }
+          else false
+        val ei = i
+        while (i < iN && s.charAt(i) == '0') i += 1
+        val x = rawDecimalDigitsUnsigned(s,11)  // Match this number to magic 11-digit Long constant below
+        if (i == ei) { 
+          if (i >= iN) error = e.end.toByte else error = e.wrong.toByte
+          return 0
+        }
+        if (x >= 10000000000L) while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1  // Consume any extra digits--they won't matter
+        if (expneg) -x else x
       }
-    if (ji - j0 == 0 && (jd-1 <= ji)) error = e.end.toByte; else error = 0
-    if ((c | 0x20) != 'e') {
-      if (error != 0) return j
-      else if (ji == jd && c != point && ji - jz <= 19) return -j
-      else return j
+    
+    // Zero case is easy
+    if (jb == ja && jd <= jcc) {
+      error = 0
+      if (negative) { error = 0; negativeZeroDoubleBits }
+      else { error = e.whole.toByte; 0L }
     }
-    j += 1
-    if (error != 0) { error = e.wrong.toByte; return j }
-    if (j >= iN) { error = e.end.toByte; return j }
-    c = s.charAt(j)
-    val je = if (c == '+' || c == '-') j+1 else j
-    j = je
-    while (j < iN && { c = s.charAt(j); c >= '0' && c <= '9' }) j += 1
-    if (j==je) { error = e.end.toByte; return j }
-    error = 0
-    j
+    else {
+      val lead = if (jb > ja) jb - ja - 1 else jc - jcc -1
+      val lex = lead + exp
+      if (lex > 308) {
+        error = e.coded.toByte
+        if (negative) -1 else 1
+      }
+      else if (lex < -324) {
+        if (negative) { error = 0; negativeZeroDoubleBits }
+        else { error = e.whole.toByte; 0L }
+      }
+      else {
+        val len = if (jd < jcc) jd - ja else if (jb == ja) jd - jcc else jd - ja - 1
+        val fex = (lex - len + 1).toInt
+        println(s"$ja $jb $jc $jcc $jd $lead $lex $len $fex")
+        if (lex <= 18 && fex >= 0) {
+          var ans = 0L
+          var n = len
+          var k = if (jb == ja) jcc else ja
+          while (n > 0) {
+            if (k != jb) { ans = 10*ans + (s.charAt(k) - '0'); n -= 1 }
+            k += 1
+          }
+          if (fex > 0) ans *= smallPowersOfTen(fex)
+          if (negative) ans = -ans
+          if ((ans < 0) == negative) {
+            error = e.whole.toByte
+            println(s"All worked out $ans!")
+            return ans
+          }
+        }
+        error = 0
+        0L
+      }
+    }
   }
   
+  /*
   final def rawCheckDoubleDigits(ab: Array[Byte], point: Byte): Int = {
     import GrokNumber._
     if (i >= iN) { error = e.end.toByte; return i }
@@ -247,6 +319,7 @@ abstract class Grok {
     error = 0
     j
   }
+  */
   
   final def errorCode: Int = error
   
@@ -333,7 +406,7 @@ object GrokError {
   final val delim = 4
   final val imprecise = -1
   final val coded = -2
-  final val exact = -3
+  final val whole = -3
   
   // Must fit in 5 bits
   final val Z = 1

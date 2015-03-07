@@ -273,21 +273,19 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
   final def D(implicit fail: Hop[Long, this.type]): Double = {
     import GrokNumber._
     if (!prepare(1, e.D)(fail)) return parseErrorNaN
-    val j = rawCheckDoubleDigits(string, '.')
-    if (error > 0) { ready = 0; i = j; fail(err(error, e.D)); return parseErrorNaN }
+    val iOld = i
+    val j = rawParseDoubleDigits(string, '.')
+    if (error > 0) { ready = 0; fail(err(error, e.D)); return parseErrorNaN }
     else {
       ready = 0
       val ans = error match {
-        case e.nan =>
-          Double.NaN
-        case e.infinity => 
-          if (j < 0) Double.NegativeInfinity
-          else Double.PositiveInfinity
-        case _ => 
-          try { java.lang.Double.parseDouble(string.substring(i,math.abs(j))) }
+        case e.exact => j.toDouble
+        case e.coded => if (j == 0) Double.NaN else if (j < 0) Double.NegativeInfinity else Double.PositiveInfinity
+        case e.imprecise => 
+          try { java.lang.Double.parseDouble(string.substring(iOld, i)) }
           catch { case _: NumberFormatException => error = e.wrong.toByte; parseErrorNaN }
+        case _ => java.lang.Double.longBitsToDouble(j)
       }
-      i = math.abs(j)
       if (error > 0) { fail(err(error, e.D)); return parseErrorNaN }
       error = 0
       if (!wrapup(e.D)(fail)) return parseErrorNaN
