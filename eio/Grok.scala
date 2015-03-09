@@ -41,6 +41,99 @@ object GrokNumber {
   final val bytesInfinity = stringInfinity.getBytes
   final val stringNaN = "nan"
   final val bytesNaN = stringNaN.getBytes
+  
+  def bigAdd(digits: Array[Int], n: Int, m: Int): Int = {
+    var i = 0
+    var j = 0
+    var k = n+m
+    var carry = 0
+    while (j < m) {
+      val x = carry + digits(i) + digits(j+n)
+      digits(k) = x & 0x3FFFFFFF
+      carry = x >>> 30
+      i += 1
+      j += 1
+      k += 1
+    }
+    if (i == n) {
+      if (carry == 0) return m
+      else { digits(k) = carry; return (m+1) }
+    }
+    while (i < n) {
+      val x = carry + digits(i)
+      digits(k) = x & 0x3FFFFFFF
+      carry = x >>> 30
+      i += 1
+      k += 1
+    }
+    if (carry == 0) n
+    else {
+      digits(k) = carry
+      n + 1
+    }
+  }
+  
+  def bigMulInPlace(a: Int, digits: Array[Int], n: Int): Int = {
+    var carry = 0L
+    var i = 0
+    while (i < n) {
+      val x = a.toLong * digits(i) + carry
+      digits(i) = (x & 0x3FFFFFFF).toInt
+      carry = x >>> 30
+      i += 1
+    }
+    if (carry > 0) {
+      digits(i) = carry.toInt
+      i += 1
+    }
+    i
+  }
+  
+  def bigMulInPlace(a: Long, digits: Array[Int], n: Int): Int = {
+    val al = a & 0x3FFFFFFF
+    val ah = a >>> 30
+    var carry = al*digits(0)
+    var i = 1
+    while (i < n) {
+      val x = ah*digits(i-1) + al*digits(i) + (carry >>> 30)
+      digits(i-1) = (carry & 0x3FFFFFFF).toInt
+      carry = x
+      i += 1
+    }
+    val x = (carry >>> 30) + ah*digits(i - 1)
+    digits(i - 1) = (carry & 0x3FFFFFFF).toInt
+    digits(i) = (x & 0x3FFFFFFF).toInt
+    carry = (x >>> 30)
+    if (carry > 0) {
+      i += 1
+      digits(i) = carry.toInt
+    }
+    i + 1
+  }
+  
+  def bigMul(digits: Array[Int], n: Int, m: Int): Int = {
+    val k0 = n + m
+    var k = 0
+    var carry = 0L
+    while (k < k0 - 1) {
+      var i = k
+      var j = if (i < n) n else { i = n-1; k+1 }
+      var x = carry
+      while (i >= 0 && j < k0) {
+        x += digits(i).toLong * digits(j)
+        i -= 1
+        j += 1
+      }
+      digits(k + k0) = (x & 0x3FFFFFFF).toInt
+      carry = x >>> 30
+      k += 1
+    }
+    if (carry > 0) {
+      digits(k + k0) = carry.toInt
+      k += 1
+    }
+    k
+  }
 }
 
 abstract class Grok {
