@@ -42,6 +42,37 @@ object GrokNumber {
   final val stringNaN = "nan"
   final val bytesNaN = stringNaN.getBytes
   
+  def bigAddInPlace(digits: Array[Int], n: Int, m: Int): Int = {
+    var i = 0
+    var j = 0
+    var k = 0
+    var carry = 0
+    while (j < m) {
+      val x = carry + digits(i) + digits(j+n)
+      digits(k) = x & 0x3FFFFFFF
+      carry = x >>> 30
+      i += 1
+      j += 1
+      k += 1
+    }
+    if (i == n) {
+      if (carry == 0) return m
+      else { digits(k) = carry; return (m+1) }
+    }
+    while (i < n) {
+      val x = carry + digits(i)
+      digits(k) = x & 0x3FFFFFFF
+      carry = x >>> 30
+      i += 1
+      k += 1
+    }
+    if (carry == 0) n
+    else {
+      digits(k) = carry
+      n + 1
+    }
+  }
+  
   def bigAdd(digits: Array[Int], n: Int, m: Int): Int = {
     var i = 0
     var j = 0
@@ -71,22 +102,6 @@ object GrokNumber {
       digits(k) = carry
       n + 1
     }
-  }
-  
-  def bigMulInPlace(a: Int, digits: Array[Int], n: Int): Int = {
-    var carry = 0L
-    var i = 0
-    while (i < n) {
-      val x = a.toLong * digits(i) + carry
-      digits(i) = (x & 0x3FFFFFFF).toInt
-      carry = x >>> 30
-      i += 1
-    }
-    if (carry > 0) {
-      digits(i) = carry.toInt
-      i += 1
-    }
-    i
   }
   
   def bigMulInPlace(a: Long, digits: Array[Int], n: Int): Int = {
@@ -277,7 +292,7 @@ abstract class Grok {
       if (nz > 0 && nd < 36) {
         if (nz < 18-nd) { da = da*smallPowersOfTen(nz+1) + (c - '0'); nz = 0 }
         else if (nz < 36-nd) {
-          if (nd < 18) { val pz = 18-nd; da *= smallPowersOfTen(pz+1); nz -= pz }
+          if (nd < 18) { val pz = 18-nd; da *= smallPowersOfTen(pz); nz -= pz }
           if (db > 0) db = db * smallPowersOfTen(nz+1) + (c - '0')
           else db = (c - '0')
           nz = 0
@@ -368,13 +383,57 @@ abstract class Grok {
       else {
         val len = j19 - lead
         val zex = lex + len - 1
-        println(s"$ja $jb $jc $jcc $jd $lead $lex $len $zex $da $db")
+        println(f"$ja $jb $jc $jcc $jd $lead $lex $len $zex $da $db")
         if (zex >= 0) {
+          // Whole number
           if (lex <= 18) {
+            // Fits easily into a Long
             if (lex > nd) da *= smallPowersOfTen((lex - nd).toInt)
             error = e.whole.toByte
-            println(s"Yeah.  $da")
             return if (negative) -da else da
+          }
+          else if (lex <= 36) {
+            // Fits into two Longs, so we can attempt an exact solution
+            val arr = new Array[Int](6)
+            if (nd < 18) { da *= smallPowersOfTen(18 - nd); nd = 18 }
+            if (nd < lex) db *= smallPowersOfTen((lex + 1 - nd).toInt)
+            arr(0) = (da & 0x3FFFFFFF).toInt
+            if (lex > 27) arr(1) = (da >>> 30).toInt
+            var i = bigMulInPlace(smallPowersOfTen(18), arr, if (lex > 27) 2 else 1)
+            arr(i) = (db & 0x3FFFFFFF).toInt
+            arr(i+1) = (db >>> 30).toInt
+            i = bigAddInPlace(arr, i, 2)
+            db = arr(0) + (arr(1).toLong << 30)
+            if (i > 2 && (arr(2) > 0 || (i > 3 && arr(3) > 0))) da = arr(2) + (if (i > 3) arr(3).toLong << 30 else 0L)
+            else {
+              // Actually probably fit into one Long!
+              da = 0
+              val ans = if (negative) -db else db
+              if (ans < 0 == negative) {
+                error = e.whole.toByte
+                return ans
+              }
+            }
+            println(f"$da $db")
+            // Figure out what the exponent should be
+            var shift = if (da == 0) { da = db; db = 0; 60 } else 0
+            val zeros = java.lang.Long.numberOfLeadingZeros(da)
+            if (zeros > 1) {
+              shift += zeros-1
+              da = da << (zeros-1)
+              if (db != 0) {
+                da = da | (db >> (60 - (zeros-1)))
+                db = db << (zeros-1)
+              }
+            }
+            val rounding = (da & 0x7FF).toInt
+            if (rounding > 0x400 || (rounding == 0x400 && (db > 0 || (da & 0x800) != 0))) {
+              da += 1
+              if (da < 0) { shift -= 1; da = da >>> 1 }
+            }
+            println(f"$da%x")
+            error = 0
+            return (if (negative) 0x8000000000000000L else 0) | ((1023 + 120 - shift).toLong << 52) | ((da >>> 10) & 0xFFFFFFFFFFFFFL)
           }
         }
         error = 0
