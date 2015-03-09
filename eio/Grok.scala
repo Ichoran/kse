@@ -267,7 +267,46 @@ abstract class Grok {
     val j0 = i
     while (i < iN && s.charAt(i) == '0') i += 1
     val ja = i
-    while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1
+    var da = 0L
+    var db = 0L
+    var nd = 0
+    var nz = 0
+    var j19 = -1
+    var more = (i < iN && { c = s.charAt(i); c >= '1' && c <= '9'})
+    @inline def advanceSmartly() {
+      if (nz > 0 && nd < 36) {
+        if (nz < 18-nd) { da = da*smallPowersOfTen(nz+1) + (c - '0'); nz = 0 }
+        else if (nz < 36-nd) {
+          if (nd < 18) { val pz = 18-nd; da *= smallPowersOfTen(pz+1); nz -= pz }
+          if (db > 0) db = db * smallPowersOfTen(nz+1) + (c - '0')
+          else db = (c - '0')
+          nz = 0
+        }
+        else if (nd < 36) {
+          if (nd < 18) da *= smallPowersOfTen(19-nd)
+          else db *= smallPowersOfTen(37-nd)
+          nz -= 36 - nd
+          nd = 36
+        }
+      }
+      else da = c - '0'
+      i += 1
+      while (i < iN && nd < 36 && {c = s.charAt(i); c >= '1' && c <= '9' }) {
+        if (nd < 18) { da = da*10 + (c - '0'); nd += 1 }
+        else if (nd < 36) { db = db*10 + (c - '0'); nd += 1 }
+        i += 1
+      }
+      j19 = i
+      if (c == '0') {
+        nz = i
+        i += 1
+        while (i < iN && { c = s.charAt(i); c == '0' }) i += 1
+        nz = i-nz
+      }
+      if (nd >= 36 && c >= '0' && c <= '9') while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1
+      more = (i < iN && c >= '1' && c <= '9')
+    }
+    while (more) advanceSmartly()
     val jb = i
     if (c == point && i < iN) {
       c = s.charAt(i)
@@ -275,15 +314,14 @@ abstract class Grok {
     }
     // Digits after decimal
     val jc = i
-    if (jb - ja == 0) while (i < iN && s.charAt(i) == '0') i += 1
+    while (i < iN && s.charAt(i) == '0') i += 1
+    nz += i - jc
     val jcc = i
-    while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1
+    more = (i < iN && { c = s.charAt(i); c >= '1' && c <= '9' })
+    while (more) advanceSmartly()
     var jd = i
     // Need some digit somewhere
-    if ((jd-jc) + (jb-j0) <= 0) { error = e.wrong.toByte; return 0 }
-    // Throw away trailing zeros, if any
-    if (jd > jcc) while (jd > jc && s.charAt(jd-1) == '0') jd -= 1
-    if (jd == jc) { jd = jb; while (jd > ja && s.charAt(jd-1) == '0') jd -= 1 }
+    if (nd == 0) { error = e.wrong.toByte; return 0 }
     
     // Exponent
     val exp =
@@ -328,23 +366,15 @@ abstract class Grok {
         else { error = e.whole.toByte; 0L }
       }
       else {
-        val len = if (jd < jcc) jd - ja else if (jb == ja) jd - jcc else jd - ja - 1
-        val fex = (lex - len + 1).toInt
-        println(s"$ja $jb $jc $jcc $jd $lead $lex $len $fex")
-        if (lex <= 18 && fex >= 0) {
-          var ans = 0L
-          var n = len
-          var k = if (jb == ja) jcc else ja
-          while (n > 0) {
-            if (k != jb) { ans = 10*ans + (s.charAt(k) - '0'); n -= 1 }
-            k += 1
-          }
-          if (fex > 0) ans *= smallPowersOfTen(fex)
-          if (negative) ans = -ans
-          if ((ans < 0) == negative) {
+        val len = j19 - lead
+        val zex = lex + len - 1
+        println(s"$ja $jb $jc $jcc $jd $lead $lex $len $zex $da $db")
+        if (zex >= 0) {
+          if (lex <= 18) {
+            if (lex > nd) da *= smallPowersOfTen((lex - nd).toInt)
             error = e.whole.toByte
-            println(s"All worked out $ans!")
-            return ans
+            println(s"Yeah.  $da")
+            return if (negative) -da else da
           }
         }
         error = 0

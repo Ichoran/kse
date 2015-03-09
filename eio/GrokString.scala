@@ -279,7 +279,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     else {
       ready = 0
       val ans = error match {
-        case e.exact => j.toDouble
+        case e.whole => j.toDouble
         case e.coded => if (j == 0) Double.NaN else if (j < 0) Double.NegativeInfinity else Double.PositiveInfinity
         case e.imprecise => 
           try { java.lang.Double.parseDouble(string.substring(iOld, i)) }
