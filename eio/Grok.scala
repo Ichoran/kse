@@ -286,41 +286,50 @@ abstract class Grok {
     var db = 0L
     var nd = 0
     var nz = 0
-    var j19 = -1
     var more = (i < iN && { c = s.charAt(i); c >= '1' && c <= '9'})
+    
     @inline def advanceSmartly() {
-      if (nz > 0 && nd < 36) {
-        if (nz < 18-nd) { da = da*smallPowersOfTen(nz+1) + (c - '0'); nz = 0 }
-        else if (nz < 36-nd) {
-          if (nd < 18) { val pz = 18-nd; da *= smallPowersOfTen(pz); nz -= pz }
-          if (db > 0) db = db * smallPowersOfTen(nz+1) + (c - '0')
-          else db = (c - '0')
-          nz = 0
-        }
-        else if (nd < 36) {
-          if (nd < 18) da *= smallPowersOfTen(19-nd)
-          else db *= smallPowersOfTen(37-nd)
-          nz -= 36 - nd
-          nd = 36
+      if (nd >= 36) {
+        if (c >= '0' && c <= '9') {
+          i += 1
+          while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1
         }
       }
-      else da = c - '0'
-      i += 1
-      while (i < iN && nd < 36 && {c = s.charAt(i); c >= '1' && c <= '9' }) {
-        if (nd < 18) { da = da*10 + (c - '0'); nd += 1 }
-        else if (nd < 36) { db = db*10 + (c - '0'); nd += 1 }
+      else {
+        if (nz > 0) {
+          if (nz < 18-nd) { da = da*smallPowersOfTen(nz+1) + (c - '0'); nd += nz; nz = 0 }
+          else if (nz < 36-nd) {
+            if (nd < 18) { val pz = 18-nd; da *= smallPowersOfTen(pz); nz -= pz; nd = 18 }
+            if (db > 0) db = db * smallPowersOfTen(nz+1) + (c - '0')
+            else db = (c - '0')
+            nd += nz
+            nz = 0
+          }
+          else {
+            if (nd < 18) da *= smallPowersOfTen(19-nd)
+            else db *= smallPowersOfTen(37-nd)
+            nz -= 36 - nd
+            nd = 36
+          }
+        }
+        else da = c - '0'
+        nd += 1
         i += 1
+        while (i < iN && nd < 36 && {c = s.charAt(i); c >= '1' && c <= '9' }) {
+          if (nd < 18) { da = da*10 + (c - '0'); nd += 1 }
+          else if (nd < 36) { db = db*10 + (c - '0'); nd += 1 }
+          i += 1
+        }
+        if (c == '0') {
+          nz = i
+          i += 1
+          while (i < iN && { c = s.charAt(i); c == '0' }) i += 1
+          nz = i-nz
+        }
+        more = (i < iN && c >= '1' && c <= '9')
       }
-      j19 = i
-      if (c == '0') {
-        nz = i
-        i += 1
-        while (i < iN && { c = s.charAt(i); c == '0' }) i += 1
-        nz = i-nz
-      }
-      if (nd >= 36 && c >= '0' && c <= '9') while (i < iN && { c = s.charAt(i); c >= '0' && c <= '9' }) i += 1
-      more = (i < iN && c >= '1' && c <= '9')
     }
+    
     while (more) advanceSmartly()
     val jb = i
     if (c == point && i < iN) {
@@ -381,9 +390,9 @@ abstract class Grok {
         else { error = e.whole.toByte; 0L }
       }
       else {
-        val len = j19 - lead
+        val len = ???
         val zex = lex + len - 1
-        println(f"$ja $jb $jc $jcc $jd $lead $lex $len $zex $da $db")
+        println(f"$ja $jb $jc $jcc $jd $lead $lex $len $zex $nd $nz $da $db")
         if (zex >= 0) {
           // Whole number
           if (lex <= 18) {
@@ -397,9 +406,12 @@ abstract class Grok {
             val arr = new Array[Int](6)
             if (nd < 18) { da *= smallPowersOfTen(18 - nd); nd = 18 }
             if (nd < lex) db *= smallPowersOfTen((lex + 1 - nd).toInt)
+            println(s"$da $db")
             arr(0) = (da & 0x3FFFFFFF).toInt
-            if (lex > 27) arr(1) = (da >>> 30).toInt
-            var i = bigMulInPlace(smallPowersOfTen(18), arr, if (lex > 27) 2 else 1)
+            arr(1) = (da >>> 30).toInt
+            println(s"${lex - 18}  " + arr.take(2).mkString(" "))
+            var i = bigMulInPlace(smallPowersOfTen((lex - 18).toInt), arr, 2)
+            println(arr.take(i).mkString(" "))
             arr(i) = (db & 0x3FFFFFFF).toInt
             arr(i+1) = (db >>> 30).toInt
             i = bigAddInPlace(arr, i, 2)
