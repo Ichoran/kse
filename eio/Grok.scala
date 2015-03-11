@@ -660,7 +660,7 @@ abstract class Grok {
     // Figure out what the exponent should be
     if (hi == 0) return encodeDoubleBits(lo, shift, negative)
     var sh = shift
-    val zeros = java.lang.Long.numberOfLeadingZeros(hi) - 1
+    val zeros = java.lang.Long.numberOfLeadingZeros(hi) - 4
     if (zeros > 0) {
       sh += zeros
       hi = hi << zeros
@@ -669,21 +669,20 @@ abstract class Grok {
         lo = lo << zeros
       }
     }
-    val rounding = (hi & 0x7FF).toInt
-    if (rounding > 0x400 || (rounding == 0x400 && (lo > 0 || (hi & 0x800) != 0))) {
-      hi += 1
+    val rounding = (hi & 0x7F).toInt
+    if (rounding > 0x40 || (rounding == 0x40 && (lo > 0 || (hi & 0x80) != 0))) {
+      hi += 0x80
       if (hi < 0) { sh -= 1; hi = hi >>> 1 }
     }
-    println(f"$hi%x")
     error = 0
     val neg = if (negative) 0x8000000000000000L else 0
-    val exp = (1145 - sh).toLong << 52
+    val exp = (1142 - sh).toLong
     if (exp >= 0x7FF) 0x7FF0000000000000L | neg
     else if (exp < 0) {
       if (exp < -53) neg
-      else neg | (hi >>> (10-exp))
+      else neg | (hi >>> (7-exp))
     }
-    else neg | exp | ((hi >>> 10) & 0xFFFFFFFFFFFFFL)
+    else neg | (exp << 52) | ((hi >>> 7) & 0xFFFFFFFFFFFFFL)
   }
   
   final def rawParseDoubleDigits(s: String, point: Char): Long = {
@@ -801,9 +800,9 @@ abstract class Grok {
     val exp =
       if ((c | 0x20) != 'e') 0
       else {
+        i += 1
         if (i >= iN) { error = e.end.toByte; return 0 }
         c = s.charAt(i)
-        i += 1
         val expneg =
           if (c == '+' || c == '-') {
             i += 1
@@ -814,7 +813,8 @@ abstract class Grok {
         val ei = i
         while (i < iN && s.charAt(i) == '0') i += 1
         val x = rawDecimalDigitsUnsigned(s,11)  // Match this number to magic 11-digit Long constant below
-        if (i == ei) { 
+        if (i == ei) {
+          println("EI I "+s.charAt(ei))
           if (i >= iN) error = e.end.toByte else error = e.wrong.toByte
           return 0
         }
@@ -859,13 +859,13 @@ abstract class Grok {
         arr(0) = (da & 0x3FFFFFFF).toInt
         arr(1) = (da >>> 30).toInt
         println(s"${lex - 18}  " + arr.take(2).mkString(" "))
-        var i = bigMulInPlace(smallPowersOfTen((lex - 18).toInt), arr, 2)
-        println(arr.take(i).mkString(" "))
-        arr(i) = (db & 0x3FFFFFFF).toInt
-        arr(i+1) = (db >>> 30).toInt
-        i = bigAddInPlace(arr, i, 2)
+        var j = bigMulInPlace(smallPowersOfTen((lex - 18).toInt), arr, 2)
+        println(arr.take(j).mkString(" "))
+        arr(j) = (db & 0x3FFFFFFF).toInt
+        arr(j+1) = (db >>> 30).toInt
+        j = bigAddInPlace(arr, j, 2)
         db = arr(0) + (arr(1).toLong << 30)
-        if (i > 2 && (arr(2) > 0 || (i > 3 && arr(3) > 0))) da = arr(2) + (if (i > 3) arr(3).toLong << 30 else 0L)
+        if (j > 2 && (arr(2) > 0 || (j > 3 && arr(3) > 0))) da = arr(2) + (if (j > 3) arr(3).toLong << 30 else 0L)
         else {
           // Actually probably fit into one Long!
           da = 0
@@ -875,7 +875,7 @@ abstract class Grok {
             return ans
           }
         }
-        return encodeDoubleBits(da, db, 0, negative)   
+        return { val x = encodeDoubleBits(da, db, 0, negative); println(x.toHexString + " " + error); x }
       }
     }
     
@@ -889,18 +889,27 @@ abstract class Grok {
       arr(1) = computedClosestLLtoDecimal(k+2)
       arr(2) = computedClosestLLtoDecimal(k+3)
       arr(3) = computedClosestLLtoDecimal(k+4)
-      var j = bigMulInPlace(da, arr, math.min(4, (info.s1+29)/30))
-      while (j > 0 && arr(j) == 0) j -= 1
-      var shift = 1023 - info.s0 - math.min(120, info.s1)
-      if (j >= 3) {
-        da = (arr(3).toLong << 30) | arr(2)
-        db = (arr(1).toLong << 30) | arr(1)
+      val bi = ((BigInt(arr(3)) << 90) + (BigInt(arr(2)) << 60) + (arr(1).toLong << 30) + arr(0))
+      println(s"$da " + bi.toString(2))
+      var j = bigMulInPlace(da, arr, 4)
+      println(arr.foldRight(BigInt(0))((d,x) => (x << 30) + d).toString(2))
+      println((bi*da).toString(2))
+      while (j > 0 && arr(j-1) == 0) j -= 1
+      var shift = info.s0 - 1025 + 30*j - math.min(info.s1,120) + 60
+      if (j >= 4) {
+        da = (arr(j-1).toLong << 30) | arr(j-2)
+        db = (arr(j-3).toLong << 30) | arr(j-4)
+      }
+      else if (j == 3) {
+        da = arr(2)
+        db = (arr(1).toLong << 30) | arr(0)
       }
       else {
         da = (arr(1).toLong << 30) | arr(0)
       }
+      println((BigInt(db) + (BigInt(da) << 60)).toString(2))
       println(s"$da $db $shift ${info.s0} ${info.s1} $j "+computedClosestLLtoDecimal.iterator.drop(k).take(5).map(_.toHexString).mkString(" "))
-      if (j >= 3) encodeDoubleBits(da, db, shift, negative)
+      if (j >= 3) { val x = encodeDoubleBits(da, db, shift, negative); println(x); x }
       else encodeDoubleBits(da, shift, negative)
     }
     else {
