@@ -657,7 +657,6 @@ abstract class Grok {
   final def encodeDoubleBits(high: Long, low: Long, shift: Int, negative: Boolean): Long = {
     var hi = high
     var lo = low
-    println(f"$hi $lo")
     // Figure out what the exponent should be
     if (hi == 0) return encodeDoubleBits(lo, shift, negative)
     var sh = shift
@@ -815,7 +814,6 @@ abstract class Grok {
         while (i < iN && s.charAt(i) == '0') i += 1
         val x = rawDecimalDigitsUnsigned(s,11)  // Match this number to magic 11-digit Long constant below
         if (i == ei) {
-          println("EI I "+s.charAt(ei))
           if (i >= iN) error = e.end.toByte else error = e.wrong.toByte
           return 0
         }
@@ -843,7 +841,6 @@ abstract class Grok {
     
     // Whole number
     val zex = lex - (lnz - (if (ja==jb) jcc else if (jb==jc) ja else ja + 1))
-    println(f"$ja $jb $jc $jcc $jd $lead $exp $lex $zex $nd $nz $da $db")
     if (zex >= 0) {
       if (lex < 18) {
         // Fits easily into a Long
@@ -856,12 +853,9 @@ abstract class Grok {
         val arr = new Array[Int](6)
         if (nd < 18) { da *= smallPowersOfTen(18 - nd); nd = 18 }
         if (nd < lex && db != 0) db *= smallPowersOfTen((lex + 1 - nd).toInt)
-        println(s"$da $db")
         arr(0) = (da & 0x3FFFFFFF).toInt
         arr(1) = (da >>> 30).toInt
-        println(s"${1 + lex - 18}  " + arr.take(2).mkString(" "))
         var j = bigMulInPlace(smallPowersOfTen((1 + lex - 18).toInt), arr, 2)
-        println(arr.take(j).mkString(" "))
         arr(j) = (db & 0x3FFFFFFF).toInt
         arr(j+1) = (db >>> 30).toInt
         j = bigAddInPlace(arr, j, 2)
@@ -876,29 +870,24 @@ abstract class Grok {
             return ans
           }
         }
-        return { val x = encodeDoubleBits(da, db, 0, negative); println(x.toHexString + " " + error); x }
+        return encodeDoubleBits(da, db, 0, negative)
       }
     }
     
     // Fractional, or whole number is too big: have to do this approximately
+    val arr = new Array[Int](if (nd <= 18) 6 else 16)
+    val k = 5*(308 - zex).toInt
+    val info = computedClosestLLtoDecimal(k).inInt
+    arr(0) = computedClosestLLtoDecimal(k+1)
+    arr(1) = computedClosestLLtoDecimal(k+2)
+    arr(2) = computedClosestLLtoDecimal(k+3)
+    arr(3) = computedClosestLLtoDecimal(k+4)
     if (nd <= 18) {
       // Easy branch--digits fit in a Long
-      val arr = new Array[Int](6)
-      val k = 5*(308 - zex).toInt
-      val info = computedClosestLLtoDecimal(k).inInt
-      arr(0) = computedClosestLLtoDecimal(k+1)
-      arr(1) = computedClosestLLtoDecimal(k+2)
-      arr(2) = computedClosestLLtoDecimal(k+3)
-      arr(3) = computedClosestLLtoDecimal(k+4)
-      val bi = ((BigInt(arr(3)) << 90) + (BigInt(arr(2)) << 60) + (arr(1).toLong << 30) + arr(0))
-      println(s"$da " + bi.toString(2))
       var j = bigMulInPlace(da, arr, 4)
-      println(arr.foldRight(BigInt(0))((d,x) => (x << 30) + d).toString(2))
-      println((bi*da).toString(2))
       while (j > 0 && arr(j-1) == 0) j -= 1
       val smallBitExponent = (1024 - info.s0) - (math.min(info.s1, 120) - 1)   // Actual exponent of smallest bit
       val shift = -smallBitExponent - math.max(0, 30*(j-4))
-      println(f"${info.s0} ${info.s0}%x ${info.s1} ${info.s1}%x $smallBitExponent $k ${k/5} $j $shift")
       if (j >= 4) {
         da = (arr(j-1).toLong << 30) | arr(j-2)
         db = (arr(j-3).toLong << 30) | arr(j-4)
@@ -908,11 +897,10 @@ abstract class Grok {
         db = (arr(1).toLong << 30) | arr(0)
       }
       else {
+        // I don't think it's possible to reach this branch due to explicit handling of up to 36 digits!
         da = (arr(1).toLong << 30) | arr(0)
       }
-      println((BigInt(db) + (BigInt(da) << 60)).toString(2))
-      println(s"$da $db $shift ${info.s0} ${info.s1} $j "+computedClosestLLtoDecimal.iterator.drop(k).take(5).map(_.toHexString).mkString(" "))
-      if (j >= 3) { val x = encodeDoubleBits(da, db, shift, negative); println(x); x }
+      if (j >= 3) encodeDoubleBits(da, db, shift, negative)
       else encodeDoubleBits(da, shift, negative)
     }
     else {
