@@ -281,7 +281,8 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       val ans = error match {
         case e.whole => j.toDouble
         case e.coded => if (j == 0) Double.NaN else if (j < 0) Double.NegativeInfinity else Double.PositiveInfinity
-        case e.imprecise => 
+        case e.imprecise =>
+          println("Imprecise!")
           try { java.lang.Double.parseDouble(string.substring(iOld, i)) }
           catch { case _: NumberFormatException => error = e.wrong.toByte; parseErrorNaN }
         case _ => java.lang.Double.longBitsToDouble(j)
