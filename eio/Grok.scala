@@ -690,6 +690,126 @@ abstract class Grok {
     else neg | (exp << 52) | ((hi >>> 7) & 0xFFFFFFFFFFFFFL)
   }
   
+  private final def encodeWholeAsDouble(lex: Int, ndigits: Int, high: Long, low: Long, negative: Boolean): Long = {
+    import GrokNumber._
+    var nd = ndigits
+    if (lex < 36) {
+      // Fits into two Longs, so we can find an exact solution
+      var da = high
+      var db = low
+      val arr = new Array[Int](6)
+      if (nd < 18) { da *= smallPowersOfTen(18 - nd); nd = 18 }
+      if (nd < lex && db != 0) db *= smallPowersOfTen((lex + 1 - nd).toInt)
+      arr(0) = (da & 0x3FFFFFFF).toInt
+      arr(1) = (da >>> 30).toInt
+      var j = bigMulInPlace(smallPowersOfTen(1 + lex - 18), arr, 2)
+      arr(j) = (db & 0x3FFFFFFF).toInt
+      arr(j+1) = (db >>> 30).toInt
+      j = bigAddInPlace(arr, j, 2)
+      db = arr(0) + (arr(1).toLong << 30)
+      if (j > 2 && (arr(2) > 0 || (j > 3 && arr(3) > 0))) da = arr(2) + (if (j > 3) arr(3).toLong << 30 else 0L)
+      else {
+        // Actually probably fit into one Long!
+        da = 0
+        val ans = if (negative) -db else db
+        if (ans < 0 == negative) {
+          error = e.whole.toByte
+          return ans
+        }
+      }
+      return encodeDoubleBits(da, db, 0, negative, 0)
+    }
+    0  // Will never return 0 valid input (i.e. high != 0)!
+  }
+  
+  private final def encodeFracAsDouble(zex: Int, digits: Long, negative: Boolean): Long = {
+    import GrokNumber._
+    var da = digits
+    var db = 0L
+    val arr = new Array[Int](6)
+    val k = 5*(308 - zex)
+    val info = computedClosestLLtoDecimal(k).inInt
+    arr(0) = computedClosestLLtoDecimal(k+1)
+    arr(1) = computedClosestLLtoDecimal(k+2)
+    arr(2) = computedClosestLLtoDecimal(k+3)
+    arr(3) = computedClosestLLtoDecimal(k+4)
+    var j = bigMulInPlace(da, arr, 4)
+    while (j > 0 && arr(j-1) == 0) j -= 1
+    val smallBitExponent = (1024 - info.s0) - (math.min(info.s1, 120) - 1)   // Actual exponent of smallest bit
+    var shift = -smallBitExponent - math.max(0, 30*(j-4))
+    if (j >= 4) {
+      da = (arr(j-1).toLong << 30) | arr(j-2)
+      db = (arr(j-3).toLong << 30) | arr(j-4)
+      if (j > 4) {
+        val zeros = java.lang.Long.numberOfLeadingZeros(da) - 4
+        if (zeros > 0) {
+          da = (da << zeros) | (db >> (60 - zeros))
+          db = (db << zeros) | (arr(j-5) >> (30 - zeros))
+          shift += zeros
+        }
+      }
+    }
+    else if (j == 3) {
+      da = arr(2)
+      db = (arr(1).toLong << 30) | arr(0)
+    }
+    else {
+      // I don't think it's possible to reach this branch due to explicit handling of up to 36 digits!
+      da = (arr(1).toLong << 30) | arr(0)
+    }
+    if (j >= 3) encodeDoubleBits(da, db, shift, negative, if (info.s1 > 120) 2 else 0)
+    else encodeDoubleBits(da, shift, negative)
+  }
+  
+  private final def encodeFracAsDouble(lex: Int, zex: Int, nd: Int, high: Long, low: Long, negative: Boolean): Long = {
+    import GrokNumber._
+    var da = high
+    var db = low
+    val arr = new Array[Int](16)
+    arr(0) = (da & 0x3FFFFFFF).toInt
+    arr(1) = (da >> 30).toInt
+    var j = bigMulInPlace(smallPowersOfTen(nd-18), arr, 2)
+    arr(j) = (db & 0x3FFFFFFF).toInt
+    arr(j+1) = (db >> 30).toInt
+    j = bigAddInPlace(arr, j, 2)
+    while (j > 0 && arr(j-1) == 0) j -= 1
+    println(arr.take(j).foldRight(BigInt(0))((x,b) => x + (b << 30)))
+    val k = 5*(308 - (lex - nd + 1))
+    println(computedClosestLLtoDecimal.iterator.drop(k+1).take(4).foldRight(BigInt(0))((x,b) => x + (b << 30)))
+    val info = computedClosestLLtoDecimal(k).inInt
+    val j0 = j
+    val jN = j + math.min(4, (info.s1+29)/30)
+    while (j < jN) { arr(j) = computedClosestLLtoDecimal(k+1+j-j0); j += 1 }
+    j = bigMul(arr, j0, jN-j0)
+    while (j > 0 && arr(jN + j-1) == 0) j -= 1
+    println(arr.iterator.drop(jN).take(j).foldRight(BigInt(0))((x,b) => x + (b << 30)))
+    val smallBitExponent = (1024 - info.s0) - (math.min(info.s1, 120) - 1)   // Actual exponent of smallest bit
+    var shift = -smallBitExponent - math.max(0, 30*(j-4))
+    if (j >= 4) {
+      da = (arr(jN+j-1).toLong << 30) | arr(jN+j-2)
+      db = (arr(jN+j-3).toLong << 30) | arr(jN+j-4)
+      if (j > 4) {
+        val zeros = java.lang.Long.numberOfLeadingZeros(da) - 4
+        if (zeros > 0) {
+          da = (da << zeros) | (db >> (60 - zeros))
+          db = (db << zeros) | (arr(jN+j-5) >> (30 - zeros))
+          shift += zeros
+        }
+      }
+    }
+    else if (j == 3) {
+      da = arr(jN+2)
+      db = (arr(jN+1).toLong << 30) | arr(jN)
+    }
+    else {
+      // I don't think it's possible to reach this branch due to explicit handling of up to 36 digits!
+      da = (arr(jN+1).toLong << 30) | arr(jN)
+      db = 0
+      shift += 60
+    }
+    encodeDoubleBits(da, db, shift, negative, (if (info.s1 > 120) 2 else 0) + (if (1+lex-zex > 36) 5 else 0))
+  }
+  
   final def rawParseDoubleDigits(s: String, point: Char): Long = {
     import GrokNumber._
     if (i >= iN) { error = e.end.toByte; return 0 }
@@ -854,177 +974,17 @@ abstract class Grok {
         error = e.whole.toByte
         return if (negative) -da else da
       }
-      else if (lex < 36) {
-        // Fits into two Longs, so we can find an exact solution
-        val arr = new Array[Int](6)
-        if (nd < 18) { da *= smallPowersOfTen(18 - nd); nd = 18 }
-        if (nd < lex && db != 0) db *= smallPowersOfTen((lex + 1 - nd).toInt)
-        arr(0) = (da & 0x3FFFFFFF).toInt
-        arr(1) = (da >>> 30).toInt
-        var j = bigMulInPlace(smallPowersOfTen((1 + lex - 18).toInt), arr, 2)
-        arr(j) = (db & 0x3FFFFFFF).toInt
-        arr(j+1) = (db >>> 30).toInt
-        j = bigAddInPlace(arr, j, 2)
-        db = arr(0) + (arr(1).toLong << 30)
-        if (j > 2 && (arr(2) > 0 || (j > 3 && arr(3) > 0))) da = arr(2) + (if (j > 3) arr(3).toLong << 30 else 0L)
-        else {
-          // Actually probably fit into one Long!
-          da = 0
-          val ans = if (negative) -db else db
-          if (ans < 0 == negative) {
-            error = e.whole.toByte
-            return ans
-          }
-        }
-        return encodeDoubleBits(da, db, 0, negative, 0)
+      else {
+        val ans = encodeWholeAsDouble(lex.toInt, nd, da, db, negative)
+        if (ans != 0) return ans
       }
     }
     
     // Fractional, or whole number is too big: have to do this approximately
-    if (nd <= 18) {
-      // Easier branch--digits fit in a Long
-      val arr = new Array[Int](6)
-      val k = 5*(308 - zex).toInt
-      val info = computedClosestLLtoDecimal(k).inInt
-      arr(0) = computedClosestLLtoDecimal(k+1)
-      arr(1) = computedClosestLLtoDecimal(k+2)
-      arr(2) = computedClosestLLtoDecimal(k+3)
-      arr(3) = computedClosestLLtoDecimal(k+4)
-      var j = bigMulInPlace(da, arr, 4)
-      while (j > 0 && arr(j-1) == 0) j -= 1
-      val smallBitExponent = (1024 - info.s0) - (math.min(info.s1, 120) - 1)   // Actual exponent of smallest bit
-      var shift = -smallBitExponent - math.max(0, 30*(j-4))
-      if (j >= 4) {
-        da = (arr(j-1).toLong << 30) | arr(j-2)
-        db = (arr(j-3).toLong << 30) | arr(j-4)
-        if (j > 4) {
-          val zeros = java.lang.Long.numberOfLeadingZeros(da) - 4
-          if (zeros > 0) {
-            da = (da << zeros) | (db >> (60 - zeros))
-            db = (db << zeros) | (arr(j-5) >> (30 - zeros))
-            shift += zeros
-          }
-        }
-      }
-      else if (j == 3) {
-        da = arr(2)
-        db = (arr(1).toLong << 30) | arr(0)
-      }
-      else {
-        // I don't think it's possible to reach this branch due to explicit handling of up to 36 digits!
-        da = (arr(1).toLong << 30) | arr(0)
-      }
-      if (j >= 3) encodeDoubleBits(da, db, shift, negative, if (info.s1 > 120) 2 else 0)
-      else encodeDoubleBits(da, shift, negative)
-    }
-    else {
-      // Harder branch--digits only fit in two Longs
-      val arr = new Array[Int](16)
-      arr(0) = (da & 0x3FFFFFFF).toInt
-      arr(1) = (da >> 30).toInt
-      var j = bigMulInPlace(smallPowersOfTen(nd-18), arr, 2)
-      arr(j) = (db & 0x3FFFFFFF).toInt
-      arr(j+1) = (db >> 30).toInt
-      j = bigAddInPlace(arr, j, 2)
-      while (j > 0 && arr(j-1) == 0) j -= 1
-      println(arr.take(j).foldRight(BigInt(0))((x,b) => x + (b << 30)))
-      val k = 5*(308 - (lex - nd + 1)).toInt
-      println(computedClosestLLtoDecimal.iterator.drop(k+1).take(4).foldRight(BigInt(0))((x,b) => x + (b << 30)))
-      val info = computedClosestLLtoDecimal(k).inInt
-      val j0 = j
-      val jN = j + math.min(4, (info.s1+29)/30)
-      while (j < jN) { arr(j) = computedClosestLLtoDecimal(k+1+j-j0); j += 1 }
-      j = bigMul(arr, j0, jN-j0)
-      while (j > 0 && arr(jN + j-1) == 0) j -= 1
-      println(arr.iterator.drop(jN).take(j).foldRight(BigInt(0))((x,b) => x + (b << 30)))
-      val smallBitExponent = (1024 - info.s0) - (math.min(info.s1, 120) - 1)   // Actual exponent of smallest bit
-      var shift = -smallBitExponent - math.max(0, 30*(j-4))
-      if (j >= 4) {
-        da = (arr(jN+j-1).toLong << 30) | arr(jN+j-2)
-        db = (arr(jN+j-3).toLong << 30) | arr(jN+j-4)
-        if (j > 4) {
-          val zeros = java.lang.Long.numberOfLeadingZeros(da) - 4
-          if (zeros > 0) {
-            da = (da << zeros) | (db >> (60 - zeros))
-            db = (db << zeros) | (arr(jN+j-5) >> (30 - zeros))
-            shift += zeros
-          }
-        }
-      }
-      else if (j == 3) {
-        da = arr(jN+2)
-        db = (arr(jN+1).toLong << 30) | arr(jN)
-      }
-      else {
-        // I don't think it's possible to reach this branch due to explicit handling of up to 36 digits!
-        da = (arr(jN+1).toLong << 30) | arr(jN)
-        db = 0
-        shift += 60
-      }
-      encodeDoubleBits(da, db, shift, negative, (if (info.s1 > 120) 2 else 0) + (if (1+lex-zex > 36) 5 else 0))
-    }
+    if (nd <= 18) encodeFracAsDouble(zex.toInt, da, negative)
+    else encodeFracAsDouble(lex.toInt, zex.toInt, nd, da, db, negative)
   }
   
-  /*
-  final def rawCheckDoubleDigits(ab: Array[Byte], point: Byte): Int = {
-    import GrokNumber._
-    if (i >= iN) { error = e.end.toByte; return i }
-    var c = ab(i)
-    val j0 =
-      if (c == '+' || c == '-') { if (i+1 >= iN) { error = e.end.toByte; return i+1 }; c = ab(i+1); i+1 }
-      else i
-    c = (c | 0x20).toByte
-    if (c == 'n') {
-      if (j0+2 >= iN) { error = e.end.toByte; return iN }
-      if ((ab(j0+1) | 0x20) != 'a') { error = e.wrong.toByte; return j0+2 }
-      if ((ab(j0+2) | 0x20) != 'n') { error = e.wrong.toByte; return j0+3 }
-      error = e.nan.toByte
-      return j0+3
-    }
-    if (c == 'i') {
-      var j = j0+1
-      var k = 1
-      while (k < stringInfinity.length && j < iN && stringInfinity.charAt(k) == (ab(j) | 0x20)) { k += 1; j += 1 }
-      if (k == 3 || k == stringInfinity.length) {
-        if (k == 3 && j < iN && Character.isLetter(ab(j))) { error = e.wrong.toByte; return j+1 }
-        error = e.infinity.toByte
-        return if (ab(i) == '-') -j else j
-      }
-      else {
-        if (j >= iN) error = e.end.toByte else error = e.wrong.toByte
-        return j
-      }
-    }
-    var j = j0
-    while (j < iN && { c = ab(j); c == '0' }) j += 1
-    val jz = j
-    while (j < iN && { c = ab(j); c >= '0' && c <= '9' }) j += 1
-    val ji = j
-    val jd =
-      if (c != point || j >= iN) ji
-      else {
-        j += 1
-        while (j <= iN && { c = ab(j); c >= '0' && c <= '9' }) j += 1
-        j
-      }
-    if (ji - j0 == 0 && (jd-1 <= ji)) error = e.end.toByte; else error = 0
-    if ((c | 0x20) != 'e') {
-      if (error != 0) return j
-      else if (ji == jd && c != point && ji - jz <= 19) return -j
-      else return j
-    }
-    j += 1
-    if (error != 0) { error = e.wrong.toByte; return j }
-    if (j >= iN) { error = e.end.toByte; return j }
-    c = ab(j)
-    val je = if (c == '+' || c == '-') j+1 else j
-    j = je
-    while (j < iN && { c = ab(j); c >= '0' && c <= '9' }) j += 1
-    if (j==je) { error = e.end.toByte; return j }
-    error = 0
-    j
-  }
-  */
   
   final def errorCode: Int = error
   
