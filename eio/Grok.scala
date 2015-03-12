@@ -203,6 +203,7 @@ object GrokNumber {
   }
   
   // From ReferenceTableComputations.closestLongLongExpansionToDecimal
+  // First of 5 is two shorts packed in an int; first is # of bits (up to 120, 121 means inexact), while second is 1024 minus exponent of lead bit
   val computedClosestLLtoDecimal = Array(
     7929857   , 715647606 , 1029454887, 904155128 , 597288715 ,   7929861   , 500791075 , 358637631 , 372906382 , 955661945 ,
     7929864   , 615381225 , 931155199 , 298325105 , 764529556 ,   7929867   , 492304980 , 959672524 , 23911719  , 611623645 ,
@@ -653,7 +654,7 @@ abstract class Grok {
     return (if (negative) 0x8000000000000000L else 0) | ((1145 - sh).toLong << 52) | ((b >>> 10) & 0xFFFFFFFFFFFFFL)
   }
   
-  private final def encodeDoubleBits(high: Long, low: Long, shift: Int, negative: Boolean): Long = {
+  final def encodeDoubleBits(high: Long, low: Long, shift: Int, negative: Boolean): Long = {
     var hi = high
     var lo = low
     println(f"$hi $lo")
@@ -788,7 +789,7 @@ abstract class Grok {
     // Digits after decimal
     val jc = i
     while (i < iN && s.charAt(i) == '0') i += 1
-    nz += i - jc
+    if (nd > 0) nz += i - jc
     val jcc = i
     more = (i < iN && { c = s.charAt(i); c >= '1' && c <= '9' })
     while (more) advanceSmartly()
@@ -829,7 +830,7 @@ abstract class Grok {
     }
     
     // Check for clearly too large/small
-    val lead = if (jb > ja) jb - ja else jc - jcc
+    val lead = if (jb > ja) jb - ja - 1 else jc - jcc - 1
     val lex = lead + exp
     if (lex > 308) {
       error = e.coded.toByte
@@ -841,16 +842,16 @@ abstract class Grok {
     }
     
     // Whole number
-    val zex = lex - (lnz - (if (ja==jb) jcc else ja))
-    println(f"$ja $jb $jc $jcc $jd $lead $lex $zex $nd $nz $da $db")
+    val zex = lex - (lnz - (if (ja==jb) jcc else if (jb==jc) ja else ja + 1))
+    println(f"$ja $jb $jc $jcc $jd $lead $exp $lex $zex $nd $nz $da $db")
     if (zex >= 0) {
-      if (lex <= 18) {
+      if (lex < 18) {
         // Fits easily into a Long
-        if (lex > nd) da *= smallPowersOfTen((lex - nd).toInt)
+        if (lex >= nd) da *= smallPowersOfTen((1 + lex - nd).toInt)
         error = e.whole.toByte
         return if (negative) -da else da
       }
-      else if (lex <= 36) {
+      else if (lex < 36) {
         // Fits into two Longs, so we can find an exact solution
         val arr = new Array[Int](6)
         if (nd < 18) { da *= smallPowersOfTen(18 - nd); nd = 18 }
@@ -858,8 +859,8 @@ abstract class Grok {
         println(s"$da $db")
         arr(0) = (da & 0x3FFFFFFF).toInt
         arr(1) = (da >>> 30).toInt
-        println(s"${lex - 18}  " + arr.take(2).mkString(" "))
-        var j = bigMulInPlace(smallPowersOfTen((lex - 18).toInt), arr, 2)
+        println(s"${1 + lex - 18}  " + arr.take(2).mkString(" "))
+        var j = bigMulInPlace(smallPowersOfTen((1 + lex - 18).toInt), arr, 2)
         println(arr.take(j).mkString(" "))
         arr(j) = (db & 0x3FFFFFFF).toInt
         arr(j+1) = (db >>> 30).toInt
@@ -883,7 +884,7 @@ abstract class Grok {
     if (nd <= 18) {
       // Easy branch--digits fit in a Long
       val arr = new Array[Int](6)
-      val k = 5*(308 - (lex - nd)).toInt
+      val k = 5*(308 - zex).toInt
       val info = computedClosestLLtoDecimal(k).inInt
       arr(0) = computedClosestLLtoDecimal(k+1)
       arr(1) = computedClosestLLtoDecimal(k+2)
@@ -895,7 +896,9 @@ abstract class Grok {
       println(arr.foldRight(BigInt(0))((d,x) => (x << 30) + d).toString(2))
       println((bi*da).toString(2))
       while (j > 0 && arr(j-1) == 0) j -= 1
-      var shift = info.s0 - 1025 + 30*j - math.min(info.s1,120) + 60
+      val smallBitExponent = (1024 - info.s0) - (math.min(info.s1, 120) - 1)   // Actual exponent of smallest bit
+      val shift = -smallBitExponent - math.max(0, 30*(j-4))
+      println(f"${info.s0} ${info.s0}%x ${info.s1} ${info.s1}%x $smallBitExponent $k ${k/5} $j $shift")
       if (j >= 4) {
         da = (arr(j-1).toLong << 30) | arr(j-2)
         db = (arr(j-3).toLong << 30) | arr(j-4)
