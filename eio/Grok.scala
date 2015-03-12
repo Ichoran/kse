@@ -658,7 +658,6 @@ abstract class Grok {
     var hi = high
     var lo = low
     // Figure out what the exponent should be
-    if (hi == 0) return encodeDoubleBits(lo, shift, negative)
     var sh = shift
     val zeros = java.lang.Long.numberOfLeadingZeros(hi) - 4
     if (zeros > 0) {
@@ -674,7 +673,7 @@ abstract class Grok {
     if (rounding > 0x40 || (rounding == 0x40 && (lo > 0 || (hi & 0x80) != 0))) {
       rup = true
       hi += 0x80
-      if (hi < 0) { sh -= 1; hi = hi >>> 1 }
+      if (hi > 0xFFFFFFFFFFFFFFFL) { sh -= 1; hi = hi >>> 1 }
     }
     if (!rup && (rounding == 0x40 || (rounding == 0x3F && {
       val x = (lo + uncertainty) - 0x1000000000000000L
