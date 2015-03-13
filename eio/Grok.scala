@@ -1261,6 +1261,10 @@ object Grok {
   def apply(s: String): Grok = new GrokString(s, 0, s.length, Delimiter.white)
   def apply(s: String, d: Delimiter): Grok = new GrokString(s, 0, s.length, d)
   def apply(s: String, c: Char): Grok = new GrokString(s, 0, s.length, new CharDelim(c))
+  
+  def text(ab: Array[Byte]): Grok = new GrokBuffer(ab, 0, ab.length, Delimiter.white)
+  def text(ab: Array[Byte], d: Delimiter): Grok = new GrokBuffer(ab, 0, ab.length, d)
+  def text(ab: Array[Byte], c: Char): Grok = new GrokBuffer(ab, 0, ab.length, new CharDelim(c))
 }
 
 

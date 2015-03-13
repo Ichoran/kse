@@ -76,16 +76,27 @@ kse/eio/Grok.class : \
   kse/flow/Hop.class \
   kse/eio/Delimiter.class \
   eio/Grok.scala \
-  eio/GrokString.scala
-	${F} eio/Grok.scala eio/GrokString.scala
+  eio/GrokString.scala \
+  eio/GrokBuffer.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala
 
 kse/eio/GrokString.class : \
   kse/flow/Ok.class \
   kse/flow/Hop.class \
   kse/eio/Delimiter.class \
   eio/Grok.scala \
-  eio/GrokString.scala
-	${F} eio/Grok.scala eio/GrokString.scala
+  eio/GrokString.scala \
+  eio/GrokBuffer.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala
+
+kse/eio/GrokBuffer.class : \
+  kse/flow/Ok.class \
+  kse/flow/Hop.class \
+  kse/eio/Delimiter.class \
+  eio/Grok.scala \
+  eio/GrokString.scala \
+  eio/GrokBuffer.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala
 
 kse/eio/package.class : \
   kse/flow/Ok.class \
