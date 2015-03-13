@@ -448,6 +448,44 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     if (!wrapup(e.quote)(fail)) return null
     ans
   }
+  private def quotedByDegenerately(q: Byte)(implicit fail: GrokHop[this.type]): String = {
+    val iStart = i
+    var doublets = 0
+    while (i < iN) {
+      val c = buffer(i)
+      if (c == q) {
+        if (doublets == 2) doublets = 1
+        else if (i+1 < iN && buffer(i+1) == q) doublets = 2
+        else {
+          val ans = 
+            if (doublets > 0) {
+              val buf = new Array[Char](i - iStart)
+              var k = 0
+              var j = iStart
+              var skip = false
+              while (j < i) {
+                val c = buffer(j)
+                if (!skip) {
+                  buf(k) = c.toChar
+                  k += 1
+                  if (c == q) skip = true
+                }
+                else skip = false
+                j += 1
+              }
+              new String(buf, 0, k)
+            }
+            else new String(buffer, iStart, i - iStart)
+          i += 1
+          if (!wrapup(e.quote)(fail)) return null
+          return ans
+        }
+      }
+      i += 1
+    }
+    fail.on(err(e.end, e.quote))
+    null
+  }
   final def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(2, e.quote)(fail)) return null
     val c = buffer(i)
@@ -456,6 +494,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     val besc = esc.toByte
     if (c != left) { fail.on(err(e.wrong, e.quote)); return null }
     i += 1
+    if (bleft == bright && bleft == besc) return quotedByDegenerately(bleft)(fail)
     val iStart = i
     var depth = 1
     var escies = 0

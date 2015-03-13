@@ -442,11 +442,50 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (!wrapup(e.quote)(fail)) return null
     ans
   }
+  private def quotedByDegenerately(q: Char)(implicit fail: GrokHop[this.type]): String = {
+    val iStart = i
+    var doublets = 0
+    while (i < iN) {
+      val c = string.charAt(i)
+      if (c == q) {
+        if (doublets == 2) doublets = 1
+        else if (i+1 < iN && string.charAt(i+1) == q) doublets = 2
+        else {
+          val ans = 
+            if (doublets > 0) {
+              val buf = new Array[Char](i - iStart)
+              var k = 0
+              var j = iStart
+              var skip = false
+              while (j < i) {
+                val c = string.charAt(j)
+                if (!skip) {
+                  buf(k) = c
+                  k += 1
+                  if (c == q) skip = true
+                }
+                else skip = false
+                j += 1
+              }
+              new String(buf, 0, k)
+            }
+            else string.substring(iStart, i)
+          i += 1
+          if (!wrapup(e.quote)(fail)) return null
+          return ans
+        }
+      }
+      i += 1
+    }
+    fail.on(err(e.end, e.quote))
+    null
+  }
   final def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(2, e.quote)(fail)) return null
     val c = string.charAt(i)
     if (c != left) { fail.on(err(e.wrong, e.quote)); return null }
     i += 1
+    if (left == right && left == esc) return quotedByDegenerately(left)(fail)
     val iStart = i
     var depth = 1
     var escies = 0

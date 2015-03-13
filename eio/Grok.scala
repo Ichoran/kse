@@ -545,25 +545,23 @@ object GrokNumber {
 final case class GrokError(whatError: Byte, whoError: Byte, token: Int, position: Long) {}
 
 sealed trait GrokHop[X <: Grok] extends Hop[GrokError, X] {
-  def dormant(): this.type
-  def active(): this.type
-  def contextOf(x: X): GrokHop[X]
+  def attitude(i: Int): this.type
+  def attitude: Int
 }
 
 final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {
   private[this] var myValue: GrokError = null
-  private[this] var willThrow = true
+  private[this] var myAttitude = 0
   
   def value = myValue
 
   def apply(err: GrokError) = { myValue = err; throw this }
   def as(t: Throwable) = if (this eq t) this else null
   def is(t: Throwable) = this eq t
-  def on(err: GrokError) { myValue = err; if (willThrow) throw this }
+  def on(err: GrokError) { myValue = err; if (attitude == 0) throw this else if (attitude > 0) throw new IllegalArgumentException(err.toString) }
   
-  def dormant() = { willThrow = false; this }
-  def active() = { willThrow = true; this }
-  def contextOf(x: X) = ???
+  def attitude = myAttitude
+  def attitude(i: Int) = { myAttitude = i; this }
 }
 
 abstract class Grok {
