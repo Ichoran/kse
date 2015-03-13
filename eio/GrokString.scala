@@ -124,6 +124,8 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     ready = 0
   }
   
+  final def customError = err(e.wrong, e.custom)
+  
   final def position = {
     if (ready == 0) {
       ready = 1
@@ -466,6 +468,13 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     t += 1
     ready = 0
     n
+  }
+  final def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = {
+    if (!prepare(1, e.exact)(fail)) return null
+    if (string.charAt(i) != c) { fail.on(err(e.wrong, e.exact)); return this }
+    i += 1
+    if (!wrapup(e.exact)(fail)) return null
+    this
   }
   final def exact(s: String)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(0, e.exact)(fail)) return null

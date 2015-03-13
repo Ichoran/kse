@@ -1188,6 +1188,7 @@ abstract class Grok {
   
   
   final def errorCode: Int = error
+  def customError: GrokError
   
   def position: Long
   def isEmpty(implicit fail: GrokHop[this.type]): Boolean
@@ -1238,6 +1239,7 @@ abstract class Grok {
   def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: GrokHop[this.type]): String
   def base64(implicit fail: GrokHop[this.type]): Array[Byte]
   def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
+  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type
   def exact(s: String)(implicit fail: GrokHop[this.type]): this.type
   def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type
   def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String
@@ -1260,9 +1262,10 @@ abstract class Grok {
 object Grok {
   def apply(s: String): Grok = new GrokString(s, 0, s.length, Delimiter.white)
   def apply(s: String, d: Delimiter): Grok = new GrokString(s, 0, s.length, d)
+  def apply(s: String, d: Delimiter, nSep: Int): Grok = new GrokString(s, 0, s.length, d, nSep)
   def apply(s: String, c: Char): Grok = new GrokString(s, 0, s.length, new CharDelim(c))
   
-  def text(ab: Array[Byte]): Grok = new GrokBuffer(ab, 0, ab.length, Delimiter.white)
+  def text(ab: Array[Byte]): Grok = new GrokBuffer(ab, 0, ab.length, Delimiter.white, Int.MaxValue)
   def text(ab: Array[Byte], d: Delimiter): Grok = new GrokBuffer(ab, 0, ab.length, d)
   def text(ab: Array[Byte], c: Char): Grok = new GrokBuffer(ab, 0, ab.length, new CharDelim(c))
 }
@@ -1308,5 +1311,6 @@ object GrokErrorCodes {
   final val exact = 24 ; whatErrorBuilder += ((tok, "expected string"))
   final val oneOf = 25 ; whatErrorBuilder += ((tok, "expected string"))
   final val bin = 26   ; whatErrorBuilder += ((tok, "binary data"))
+  final val custom = 27; whatErrorBuilder += ((tok, "validation"))
   final val whats = whatErrorBuilder.result();
 }
