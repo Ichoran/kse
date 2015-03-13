@@ -21,7 +21,16 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
   reqSep = initialReqSep
   ready = 1
   
-  private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i)
+  def input(newInput: String, start: Int = 0, end: Int = Int.MaxValue): this.type = {
+    string = newInput
+    i0 = math.max(0, math.min(start, string.length))
+    iN = math.min(string.length, math.max(end, i0))
+    i = i0
+    t = 0
+    this
+  }
+  
+  private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i, string)
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {
@@ -333,59 +342,6 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     }
     k - start
   }
-  final def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = {
-    error = 0
-    val l = if (ready != 0) delim.tok_(string, i, iN, 0) else delim._tok(string, i, iN, nSep)
-    val a = l.inLong.i0
-    val b = l.inLong.i1
-    if (b < 0) { fail.on(err(e.end, e.tok)); null.asInstanceOf[A] }
-    val i0Old = i0
-    val nSepOld = nSep
-    val delimOld = delim
-    i0 = if (ready != 0) i else a
-    i = i0
-    delim = delimOld | delimiter
-    nSep = math.max(1, maxSkip)
-    try {
-      val ans = parse(this)
-      if (i < b) i = b
-      ans
-    }
-    finally {
-      i0 = i0Old
-      nSep = nSepOld
-      delim = delimOld
-      ready = 0
-    }
-  }
-  final def visit[A](s: String, start: Int, end: Int, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = {
-    val stringOld = string
-    val iOld = i
-    val i0Old = i0
-    val iNOld = iN
-    val nSepOld = nSep
-    val reqSepOld = reqSep
-    val readyOld = ready
-    val delimOld = delim
-    string = s
-    i0 = math.max(0,math.min(s.length, start))
-    iN = math.min(s.length, math.max(i0, end))
-    delim = delimiter
-    if (maxSkip < 0) { reqSep = true; nSep = -maxSkip }
-    else { reqSep = false; nSep = math.max(1, maxSkip) }
-    i = i0
-    try { parse(this) }
-    finally {
-      i = iOld
-      i0 = i0Old
-      iN = iNOld
-      nSep = nSepOld
-      reqSep = reqSepOld
-      ready = readyOld
-      string = stringOld
-      delim = delimOld
-    }
-  }
   final def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val a = delim.tok_(string, i, iN, 0).inLong.i0
@@ -641,14 +597,38 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (!wrapup(e.bin)(fail)) return null
     this
   }
-  def tryTo(f: this.type => Boolean)(implicit fail: GrokHop[this.type]): Boolean = {
-    error = 0
-    val iStart = i
-    val tStart = t
-    try {
-      val ans = f(this)
-      if (!ans) { i = iStart; t = tStart; }
-      ans
-    } catch { case t if fail is t => i = iStart; this.t = tStart; false }
+  
+  def context[A](description: String = "")(parse: => A)(implicit fail: GrokHop[this.type]): A = {
+    val tOld = t
+    val iOld = i
+    try { parse }
+    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(sub.whatError, e.sub.toByte, tOld, iOld, string, description, sub :: Nil) ) }
+  }
+  
+  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = ???
+  
+  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A = {
+    val tOld = t
+    val iOld = i
+    val i0Old = i0
+    val iNOld = iN
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val readyOld = ready
+    val stringOld = string
+    try { parse }
+    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(e.delim.toByte, e.alt.toByte, tOld, iOld, stringOld, "", sub :: Nil) ) }
+    finally {
+      string = stringOld
+      ready = readyOld
+      reqSep = reqSepOld
+      nSep = nSepOld
+      delim = delimOld
+      iN = iNOld
+      i0 = i0Old
+      i = iOld
+      t = tOld
+    }
   }
 }

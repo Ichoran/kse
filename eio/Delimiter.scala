@@ -1,5 +1,7 @@
 package kse.eio
 
+import language.implicitConversions
+
 import java.lang.Character
 import kse.coll.packed._
 
@@ -336,5 +338,6 @@ object Delimiter {
   val tab = new CharDelim('\t')
   val white = new WhiteDelim
   val newline = new LineDelim
+  implicit def charactersAreDelimiters(delimChar: Char) = new CharDelim(delimChar)
 }
  

@@ -333,59 +333,6 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
     k - start
   }
-  final def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = {
-    error = 0
-    val l = if (ready != 0) delim.tok_(buffer, i, iN, 0) else delim._tok(buffer, i, iN, nSep)
-    val a = l.inLong.i0
-    val b = l.inLong.i1
-    if (b < 0) { fail.on(err(e.end, e.tok)); null.asInstanceOf[A] }
-    val i0Old = i0
-    val nSepOld = nSep
-    val delimOld = delim
-    i0 = if (ready != 0) i else a
-    i = i0
-    delim = delimOld | delimiter
-    nSep = math.max(1, maxSkip)
-    try {
-      val ans = parse(this)
-      if (i < b) i = b
-      ans
-    }
-    finally {
-      i0 = i0Old
-      nSep = nSepOld
-      delim = delimOld
-      ready = 0
-    }
-  }
-  final def visit[A](s: String, start: Int, end: Int, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = {
-    val bufferOld = buffer
-    val iOld = i
-    val i0Old = i0
-    val iNOld = iN
-    val nSepOld = nSep
-    val reqSepOld = reqSep
-    val readyOld = ready
-    val delimOld = delim
-    buffer = s.getBytes
-    i0 = math.max(0,math.min(s.length, start))
-    iN = math.min(s.length, math.max(i0, end))
-    delim = delimiter
-    if (maxSkip < 0) { reqSep = true; nSep = -maxSkip }
-    else { reqSep = false; nSep = math.max(1, maxSkip) }
-    i = i0
-    try { parse(this) }
-    finally {
-      i = iOld
-      i0 = i0Old
-      iN = iNOld
-      nSep = nSepOld
-      reqSep = reqSepOld
-      ready = readyOld
-      buffer = bufferOld
-      delim = delimOld
-    }
-  }
   final def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val a = delim.tok_(buffer, i, iN, 0).inLong.i0
@@ -658,15 +605,11 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     if (!wrapup(e.bin)(fail)) return null
     this
   }
-  def tryTo(f: this.type => Boolean)(implicit fail: GrokHop[this.type]): Boolean = {
-    error = 0
-    val iStart = i
-    val tStart = t
-    try {
-      val ans = f(this)
-      if (!ans) { i = iStart; t = tStart; }
-      ans
-    } catch { case t if fail is t => i = iStart; this.t = tStart; false }
-  }
+  
+  def context[A](description: String = "")(parse: => A)(implicit fail: GrokHop[this.type]): A = ???
+  
+  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = ???
+  
+  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A = ???
 }
 

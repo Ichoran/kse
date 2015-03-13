@@ -542,7 +542,7 @@ object GrokNumber {
   )
 }
 
-final case class GrokError(whatError: Byte, whoError: Byte, token: Int, position: Long) {}
+final case class GrokError(whatError: Byte, whoError: Byte, token: Int, position: Long, target: Any = null, description: String = "", suberrors: List[GrokError] = Nil) {}
 
 sealed trait GrokHop[X <: Grok] extends Hop[GrokError, X] {
   def attitude(i: Int): this.type
@@ -574,6 +574,13 @@ abstract class Grok {
   protected var error: Byte = 0
   protected var ready: Byte = 0
   protected var delim: Delimiter = null
+    
+  def mustDelimit(yes: Boolean): this.type = { reqSep = yes; this }
+  def mergeDelims(count: Int): this.type = { nSep = if (count <= 0) Int.MaxValue else count; this }
+  def changeDelim(delimiter: Delimiter): this.type = { delim = delimiter; this }
+  def addDelim(delimiter: Delimiter): this.type = { delim = delim | delimiter; this }
+  def delimit(required: Boolean, count: Int): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; this }
+  def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
   
   final def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)
@@ -1215,21 +1222,6 @@ abstract class Grok {
   def peek(implicit fail: GrokHop[this.type]): Int
   def peekTok(implicit fail: GrokHop[this.type]): String
   def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
-  def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A
-  final def sub[A](delimiter: Delimiter)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = sub(delimiter, 1)(parse)
-  final def sub[A](delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = sub(new CharDelim(delimiter), maxSkip)(parse)
-  final def sub[A](delimiter: Char)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = sub(new CharDelim(delimiter), 1)(parse)
-  def visit[A](s: String, start: Int, end: Int, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A
-  final def visit[A](s: String, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
-    visit(s, 0, s.length, delimiter, maxSkip)(parse)
-  final def visit[A](s: String, delimiter: Delimiter)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
-    visit(s, 0, s.length, delimiter, nSep)(parse)
-  final def visit[A](s: String, delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
-    visit(s, 0, s.length, new CharDelim(delimiter), maxSkip)(parse)
-  final def visit[A](s: String, delimiter: Char)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
-    visit(s, 0, s.length, new CharDelim(delimiter), nSep)(parse)
-  final def visit[A](s: String)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
-    visit(s, 0, s.length, delim, nSep)(parse)
   def tok(implicit fail: GrokHop[this.type]): String
   def quoted(implicit fail: GrokHop[this.type]): String
   def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
@@ -1249,21 +1241,19 @@ abstract class Grok {
     val hop = new GrokHopImpl[this.type]
     try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
-  def manual[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
-    val hop = new GrokHopImpl[this.type]
-    try{ Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
-  }
-  def tryTo(f: this.type => Boolean)(implicit fail: GrokHop[this.type]): Boolean
+  
+  def context[A](description: String = "")(parse: => A)(implicit fail: GrokHop[this.type]): A
+  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
+  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
 }
 
 
 object Grok {
-  def apply(s: String): Grok = new GrokString(s, 0, s.length, Delimiter.white)
-  def apply(s: String, d: Delimiter): Grok = new GrokString(s, 0, s.length, d)
-  def apply(s: String, d: Delimiter, nSep: Int): Grok = new GrokString(s, 0, s.length, d, nSep)
+  def apply(s: String) = new GrokString(s, 0, s.length, Delimiter.white)
+  def apply(s: String, d: Delimiter) = new GrokString(s, 0, s.length, d)
   def apply(s: String, c: Char): Grok = new GrokString(s, 0, s.length, new CharDelim(c))
   
-  def text(ab: Array[Byte]): Grok = new GrokBuffer(ab, 0, ab.length, Delimiter.white, Int.MaxValue)
+  def text(ab: Array[Byte]): Grok = new GrokBuffer(ab, 0, ab.length, Delimiter.white)
   def text(ab: Array[Byte], d: Delimiter): Grok = new GrokBuffer(ab, 0, ab.length, d)
   def text(ab: Array[Byte], c: Char): Grok = new GrokBuffer(ab, 0, ab.length, new CharDelim(c))
 }
@@ -1303,13 +1293,14 @@ object GrokErrorCodes {
   final val D = 18     ; whatErrorBuilder += ((D, "floating point number"))
   final val xD = 19    ; whatErrorBuilder += ((xD, "floating point number (hexidecimal)"))
   final val tok = 20   ; whatErrorBuilder += ((tok, "string token"))
-  final val quote = 21 ; whatErrorBuilder += ((tok, "quoted string"))
-  final val qBy = 22   ; whatErrorBuilder += ((tok, "quoted string"))
-  final val b64 = 23   ; whatErrorBuilder += ((tok, "base64 encoded data"))
-  final val exact = 24 ; whatErrorBuilder += ((tok, "expected string"))
-  final val oneOf = 25 ; whatErrorBuilder += ((tok, "expected string"))
-  final val bin = 26   ; whatErrorBuilder += ((tok, "binary data"))
-  final val custom = 27; whatErrorBuilder += ((tok, "validation"))
+  final val quote = 21 ; whatErrorBuilder += ((quote, "quoted string"))
+  final val b64 = 22   ; whatErrorBuilder += ((b64, "base64 encoded data"))
+  final val exact = 23 ; whatErrorBuilder += ((exact, "expected string"))
+  final val oneOf = 24 ; whatErrorBuilder += ((oneOf, "expected string"))
+  final val bin = 25   ; whatErrorBuilder += ((bin, "binary data"))
+  final val sub = 26   ; whatErrorBuilder += ((sub, "subset of data"))
+  final val alt = 27   ; whatErrorBuilder += ((alt, "related data"))
+  final val custom = 28; whatErrorBuilder += ((tok, "validation"))
   final val whats = whatErrorBuilder.result();
 }
 
