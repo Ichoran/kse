@@ -1234,9 +1234,9 @@ abstract class Grok {
     visit(s, 0, s.length, delim, nSep)(parse)
   def tok(implicit fail: GrokHop[this.type]): String
   def quoted(implicit fail: GrokHop[this.type]): String
-  def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: GrokHop[this.type]): String
+  def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
   def qtok(implicit fail: GrokHop[this.type]): String
-  def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: GrokHop[this.type]): String
+  def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
   def base64(implicit fail: GrokHop[this.type]): Array[Byte]
   def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
   def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type
@@ -1313,4 +1313,51 @@ object GrokErrorCodes {
   final val bin = 26   ; whatErrorBuilder += ((tok, "binary data"))
   final val custom = 27; whatErrorBuilder += ((tok, "validation"))
   final val whats = whatErrorBuilder.result();
+}
+
+abstract class GrokEscape {
+  def replace(c: Char): Int
+  def replace(b: Byte): Int
+  def extended(c: Char, extra: Long): Long
+  def extended(b: Byte, extra: Long): Long
+}
+object GrokEscape {
+  val identity = new GrokEscape {
+    private def incorrect() = throw new IllegalArgumentException("identity escape map does not parse extended escapes")
+    def replace(c: Char) = c
+    def replace(b: Byte) = b & 0xFF
+    def extended(c: Char, extra: Long) = incorrect()
+    def extended(b: Byte, extra: Long) = incorrect()
+  }
+  val standard = new GrokEscape {
+    private def incorrect() = throw new IllegalArgumentException("extended escapes are triggered only by \\u")
+    def replace(c: Char) = c match {
+      case '"' => '"'
+      case '\\' => '\\'
+      case 'r' => '\r'
+      case 'n' => '\n'
+      case 't' => '\t'
+      case 'b' => '\b'
+      case 'f' => '\f'
+      case 'u' => 0x140011
+      case _ => c
+    }
+    def replace(b: Byte) = b match {
+      case '"' => '"'
+      case '\\' => '\\'
+      case 'r' => '\r'
+      case 'n' => '\n'
+      case 't' => '\t'
+      case 'b' => '\b'
+      case 'f' => '\f'
+      case 'u' => 0x140011
+      case _ => b
+    }
+    def extended(c: Char, extra: Long) =
+      if (c == 'u') extra.toChar
+      else incorrect()
+    def extended(b: Byte, extra: Long) =
+      if (b == 'u') extra.toChar
+      else incorrect()
+  }
 }

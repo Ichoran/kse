@@ -396,7 +396,53 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     ans
   }
   final def quoted(implicit fail: GrokHop[this.type]): String = quotedBy('"', '"', '\\')(fail)
-  final def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: GrokHop[this.type]): String = {
+  private def quotedByWithEscapes(iStart: Int, iEnd: Int, left: Char, right: Char, esc: Char, escaper: GrokEscape)(implicit fail: GrokHop[this.type]): String = {
+    val buf = new Array[Char](iEnd - iStart)
+    var j = 0
+    var k = iStart
+    while (k < iEnd) {
+      val c = string.charAt(k)
+      k += 1
+      if (c != esc) { buf(j) = c; j += 1 }
+      else {
+        val c = string.charAt(k)
+        val x = escaper.replace(c)
+        if (x < 65536) {
+          buf(j) = x.toChar
+          j += 1
+          k += 1
+        }
+        else {
+          var n = (x >> 16) & 0xF
+          if (k+n >= iEnd) { fail.on(err(e.wrong, e.quote)); return null }
+          var l = 0L
+          if ((x & 0x100000) != 0) {
+            val iOld = i
+            i = k+1
+            l = rawHexidecimalDigits(string, k+n)
+            if (error != 0) { fail.on(err(error, e.quote)); return null }
+            i = iOld
+          }
+          else while (n > 0) { l = (l << 16) | string.charAt(k+n-1); n -= 1 }
+          k += n+1
+          val shift = if ((x&0xF0) != 0) 16 else 8
+          val mask = if (shift == 8) 0xFF else 0xFFFF
+          n = x & 0xF
+          l = escaper.extended(c, l)
+          while (n > 0) {
+            buf(j) = (l & mask).toChar
+            l = l >>> shift
+            n -= 1
+            j += 1
+          }
+        }
+      }
+    }
+    val ans = new String(buf, 0, j)
+    if (!wrapup(e.quote)(fail)) return null
+    ans
+  }
+  final def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(2, e.quote)(fail)) return null
     val c = string.charAt(i)
     if (c != left) { fail.on(err(e.wrong, e.quote)); return null }
@@ -416,37 +462,16 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       i += 1
     }
     if (depth != 0) { fail.on(err(e.wrong, e.quote)); return null }
-    val ans =
-      if (escies == 0) string.substring(iStart,i-1)
-      else {
-        val buf = new Array[Char](i-iStart-1-escies)
-        var j = 0
-        var k = iStart
-        esced = false
-        while (k < i-1) {
-          if (esced) {
-            buf(j) = string.charAt(k)
-            j += 1
-            k += 1
-            esced = false
-          }
-          else {
-            val c = string.charAt(k)
-            if (c == esc) esced = true
-            else { buf(j) = c; j += 1 }
-            k += 1
-          }
-        }
-        new String(buf)
-      }
+    if (escies > 0) return quotedByWithEscapes(iStart, i-1, left, right, esc, escaper)(fail)
+    val ans = string.substring(iStart,i-1)
     if (!wrapup(e.quote)(fail)) return null
     ans
   }
   final def qtok(implicit fail: GrokHop[this.type]): String = qtokBy('"', '"', '\\')(fail)
-  final def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: GrokHop[this.type]): String = {
+  final def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.quote)(fail)) return null
     val c = string.charAt(i)
-    if (c != left) tok(fail) else quotedBy(left, right, esc)(fail)
+    if (c != left) tok(fail) else quotedBy(left, right, esc, escaper)(fail)
   }
   final def base64(implicit fail: GrokHop[this.type]): Array[Byte] = {
     if (!prepare(0, e.tok)(fail)) return null
