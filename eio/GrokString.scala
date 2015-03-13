@@ -400,11 +400,11 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (!prepare(2, e.quote)(fail)) return null
     val c = string.charAt(i)
     if (c != left) { fail.on(err(e.wrong, e.quote)); return null }
+    i += 1
+    val iStart = i
     var depth = 1
     var escies = 0
     var esced = false
-    i += 1
-    val iStart = i
     while (i < iN && depth > 0) {
       val c = string.charAt(i)
       if (esced) esced = false
