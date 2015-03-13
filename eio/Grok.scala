@@ -542,8 +542,32 @@ object GrokNumber {
   )
 }
 
+final case class GrokError(whatError: Byte, whoError: Byte, token: Int, position: Long) {}
+
+sealed trait GrokHop[X <: Grok] extends Hop[GrokError, X] {
+  def dormant(): this.type
+  def active(): this.type
+  def contextOf(x: X): GrokHop[X]
+}
+
+final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {
+  private[this] var myValue: GrokError = null
+  private[this] var willThrow = true
+  
+  def value = myValue
+
+  def apply(err: GrokError) = { myValue = err; throw this }
+  def as(t: Throwable) = if (this eq t) this else null
+  def is(t: Throwable) = this eq t
+  def on(err: GrokError) { myValue = err; if (willThrow) throw this }
+  
+  def dormant() = { willThrow = false; this }
+  def active() = { willThrow = true; this }
+  def contextOf(x: X) = ???
+}
+
 abstract class Grok {
-  import kse.eio.{GrokError => e}
+  import kse.eio.{GrokErrorCodes => e}
   protected var i = 0
   protected var i0 = 0
   protected var iN = 0
@@ -985,74 +1009,251 @@ abstract class Grok {
     else encodeFracAsDouble(lex.toInt, zex.toInt, nd, da, db, negative)
   }
   
+  // Created from string version with following search and replace:
+  // s/s.charAt(/ab(/ s/keyword.charAt(/keyword(/ s/stringNaN/bytesNaN/ s/stringInfinity/bytesInfinity/ s/).toChar/).toByte/ s/s: String/ab: Array[Byte]/ s/signed(s,/signed(ab,/
+  final def rawParseDoubleDigits(ab: Array[Byte], point: Char): Long = {
+    import GrokNumber._
+    if (i >= iN) { error = e.end.toByte; return 0 }
+    
+    // Initial +-
+    var c = ab(i)
+    var negative = false
+    if (c == '+' || c == '-') {
+      i += 1
+      if (i >= iN) { error = e.end.toByte; return 0 }
+      negative = c == '-'
+      c = ab(i)
+    }
+    
+    // Infinity / NaN
+    c = (c | 0x20).toByte
+    if (c == 'n' || c == 'i') {
+      val keyword = if (c == 'n') bytesNaN else bytesInfinity
+      i += 1
+      var k = 1
+      while (k < keyword.length && i < iN && keyword(k) == (ab(i) | 0x20)) { k += 1; i += 1 }
+      if (k == 3 || k == keyword.length) {
+        if (i < iN && Character.isLetter(ab(i))) { i += 1; error = e.wrong.toByte; return 0 }
+        error = e.coded
+        return if (c == 'n') 0 else if (negative) -1 else 1
+      }
+      else {
+        if (i >= iN) error = e.end.toByte else error = e.wrong.toByte
+        return 0
+      }
+    }
+
+    // Digits before decimal
+    val j0 = i
+    while (i < iN && ab(i) == '0') i += 1
+    val ja = i
+    var da = 0L
+    var db = 0L
+    var nd = 0
+    var nz = 0
+    var lnz = -1
+    var more = (i < iN && { c = ab(i); c >= '1' && c <= '9'})
+    
+    @inline def advanceSmartly() {
+      if (nd >= 36) {
+        if (c >= '0' && c <= '9') {
+          i += 1
+          while (i < iN && { c = ab(i); c >= '0' && c <= '9' }) {
+            if (c != '0') lnz = i
+            i += 1
+          }
+        }
+        more = false
+      }
+      else {
+        if (nz > 0) {
+          if (nz < 18-nd) { da = da*smallPowersOfTen(nz+1) + (c - '0'); nd += nz; nz = 0 }
+          else if (nz < 36-nd) {
+            if (nd < 18) { val pz = 18-nd; da *= smallPowersOfTen(pz); nz -= pz; nd = 18 }
+            if (db > 0) db = db * smallPowersOfTen(nz+1) + (c - '0')
+            else db = (c - '0')
+            nd += nz
+            nz = 0
+          }
+          else {
+            if (nd < 18) da *= smallPowersOfTen(19-nd)
+            else db *= smallPowersOfTen(37-nd)
+            nz -= 36 - nd
+            nd = 36
+          }
+        }
+        else if (nd > 0) {
+          if (nd < 18) da = da*10 + (c - '0')
+          else db = db*10 + (c - '0')
+        }
+        else da = c - '0'
+        nd += 1
+        lnz = i
+        i += 1
+        while (i < iN && nd < 36 && {c = ab(i); c >= '1' && c <= '9' }) {
+          if (nd < 18) { da = da*10 + (c - '0'); nd += 1 }
+          else if (nd < 36) { db = db*10 + (c - '0'); nd += 1 }
+          lnz = i
+          i += 1
+        }
+        if (c == '0') {
+          nz = i
+          i += 1
+          while (i < iN && { c = ab(i); c == '0' }) i += 1
+          nz = i-nz
+        }
+        more = (i < iN && c >= '1' && c <= '9')
+      }
+    }
+    
+    while (more) advanceSmartly()
+    val jb = i
+    if (c == point && i < iN) {
+      c = ab(i)
+      i += 1
+    }
+    // Digits after decimal
+    val jc = i
+    while (i < iN && ab(i) == '0') i += 1
+    if (nd > 0) nz += i - jc
+    val jcc = i
+    more = (i < iN && { c = ab(i); c >= '1' && c <= '9' })
+    while (more) advanceSmartly()
+    var jd = i
+    // Need some digit somewhere
+    if (nd == 0) { error = e.wrong.toByte; return 0 }
+    
+    // Exponent
+    val exp =
+      if ((c | 0x20) != 'e') 0
+      else {
+        i += 1
+        if (i >= iN) { error = e.end.toByte; return 0 }
+        c = ab(i)
+        val expneg =
+          if (c == '+' || c == '-') {
+            i += 1
+            if (i >= iN) { error = e.end.toByte; return 0 }
+            c == '-'
+          }
+          else false
+        val ei = i
+        while (i < iN && ab(i) == '0') i += 1
+        val x = rawDecimalDigitsUnsigned(ab,11)  // Match this number to magic 11-digit Long constant below
+        if (i == ei) {
+          if (i >= iN) error = e.end.toByte else error = e.wrong.toByte
+          return 0
+        }
+        if (x >= 10000000000L) while (i < iN && { c = ab(i); c >= '0' && c <= '9' }) i += 1  // Consume any extra digits--they won't matter
+        if (expneg) -x else x
+      }
+    
+    // Zero case is easy
+    if (jb == ja && jd <= jcc) {
+      if (negative) { error = 0; return negativeZeroDoubleBits }
+      else { error = e.whole.toByte; return 0L }
+    }
+    
+    // Check for clearly too large/small
+    val lead = if (jb > ja) jb - ja - 1 else jc - jcc - 1
+    val lex = lead + exp
+    if (lex > 308) {
+      error = e.coded.toByte
+      return if (negative) -1 else 1
+    }
+    else if (lex < -324) {
+      if (negative) { error = 0; return negativeZeroDoubleBits }
+      else { error = e.whole.toByte; return 0L }
+    }
+    
+    // Whole number
+    val zex = lex - (lnz - (if (ja==jb) jcc else if (jb==jc) ja else ja + 1))
+    if (zex >= 0) {
+      if (lex < 18) {
+        // Fits easily into a Long
+        if (lex >= nd) da *= smallPowersOfTen((1 + lex - nd).toInt)
+        error = e.whole.toByte
+        return if (negative) -da else da
+      }
+      else {
+        val ans = encodeWholeAsDouble(lex.toInt, nd, da, db, negative)
+        if (ans != 0) return ans
+      }
+    }
+    
+    // Fractional, or whole number is too big: have to do this approximately
+    if (nd <= 18) encodeFracAsDouble(zex.toInt, da, negative)
+    else encodeFracAsDouble(lex.toInt, zex.toInt, nd, da, db, negative)
+  }
+  
   
   final def errorCode: Int = error
   
   def position: Long
-  def isEmpty(implicit fail: Hop[Long, this.type]): Boolean
-  def trim(implicit fail: Hop[Long, this.type]): this.type
-  def skip(implicit fail: Hop[Long, this.type]): this.type
-  def skip(n: Int)(implicit fail: Hop[Long, this.type]): this.type
-  def Z(implicit fail: Hop[Long, this.type]): Boolean
-  def aZ(implicit fail: Hop[Long, this.type]): Boolean
-  def B(implicit fail: Hop[Long, this.type]): Byte
-  def uB(implicit fail: Hop[Long, this.type]): Byte
-  def S(implicit fail: Hop[Long, this.type]): Short
-  def uS(implicit fail: Hop[Long, this.type]): Short
-  def C(implicit fail: Hop[Long, this.type]): Char
-  def I(implicit fail: Hop[Long, this.type]): Int
-  def uI(implicit fail: Hop[Long, this.type]): Int
-  def xI(implicit fail: Hop[Long, this.type]): Int
-  def aI(implicit fail: Hop[Long, this.type]): Int
-  def L(implicit fail: Hop[Long, this.type]): Long
-  def uL(implicit fail: Hop[Long, this.type]): Long
-  def xL(implicit fail: Hop[Long, this.type]): Long
-  def aL(implicit fail: Hop[Long, this.type]): Long
-  def F(implicit fail: Hop[Long, this.type]): Float
-  def xF(implicit fail: Hop[Long, this.type]): Float
-  def D(implicit fail: Hop[Long, this.type]): Double
-  def xD(implicit fail: Hop[Long, this.type]): Double
-  def peek(implicit fail: Hop[Long, this.type]): Int
-  def peekTok(implicit fail: Hop[Long, this.type]): String
-  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int
-  def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A
-  final def sub[A](delimiter: Delimiter)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(delimiter, 1)(parse)
-  final def sub[A](delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), maxSkip)(parse)
-  final def sub[A](delimiter: Char)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A = sub(new CharDelim(delimiter), 1)(parse)
-  def visit[A](s: String, start: Int, end: Int, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A
-  final def visit[A](s: String, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+  def isEmpty(implicit fail: GrokHop[this.type]): Boolean
+  def trim(implicit fail: GrokHop[this.type]): this.type
+  def skip(implicit fail: GrokHop[this.type]): this.type
+  def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type
+  def Z(implicit fail: GrokHop[this.type]): Boolean
+  def aZ(implicit fail: GrokHop[this.type]): Boolean
+  def B(implicit fail: GrokHop[this.type]): Byte
+  def uB(implicit fail: GrokHop[this.type]): Byte
+  def S(implicit fail: GrokHop[this.type]): Short
+  def uS(implicit fail: GrokHop[this.type]): Short
+  def C(implicit fail: GrokHop[this.type]): Char
+  def I(implicit fail: GrokHop[this.type]): Int
+  def uI(implicit fail: GrokHop[this.type]): Int
+  def xI(implicit fail: GrokHop[this.type]): Int
+  def aI(implicit fail: GrokHop[this.type]): Int
+  def L(implicit fail: GrokHop[this.type]): Long
+  def uL(implicit fail: GrokHop[this.type]): Long
+  def xL(implicit fail: GrokHop[this.type]): Long
+  def aL(implicit fail: GrokHop[this.type]): Long
+  def F(implicit fail: GrokHop[this.type]): Float
+  def xF(implicit fail: GrokHop[this.type]): Float
+  def D(implicit fail: GrokHop[this.type]): Double
+  def xD(implicit fail: GrokHop[this.type]): Double
+  def peek(implicit fail: GrokHop[this.type]): Int
+  def peekTok(implicit fail: GrokHop[this.type]): String
+  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
+  def sub[A](delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A
+  final def sub[A](delimiter: Delimiter)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = sub(delimiter, 1)(parse)
+  final def sub[A](delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = sub(new CharDelim(delimiter), maxSkip)(parse)
+  final def sub[A](delimiter: Char)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A = sub(new CharDelim(delimiter), 1)(parse)
+  def visit[A](s: String, start: Int, end: Int, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A
+  final def visit[A](s: String, delimiter: Delimiter, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
     visit(s, 0, s.length, delimiter, maxSkip)(parse)
-  final def visit[A](s: String, delimiter: Delimiter)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+  final def visit[A](s: String, delimiter: Delimiter)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
     visit(s, 0, s.length, delimiter, nSep)(parse)
-  final def visit[A](s: String, delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+  final def visit[A](s: String, delimiter: Char, maxSkip: Int)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
     visit(s, 0, s.length, new CharDelim(delimiter), maxSkip)(parse)
-  final def visit[A](s: String, delimiter: Char)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+  final def visit[A](s: String, delimiter: Char)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
     visit(s, 0, s.length, new CharDelim(delimiter), nSep)(parse)
-  final def visit[A](s: String)(parse: this.type => A)(implicit fail: Hop[Long, this.type]): A =
+  final def visit[A](s: String)(parse: this.type => A)(implicit fail: GrokHop[this.type]): A =
     visit(s, 0, s.length, delim, nSep)(parse)
-  def tok(implicit fail: Hop[Long, this.type]): String
-  def quoted(implicit fail: Hop[Long, this.type]): String
-  def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String
-  def qtok(implicit fail: Hop[Long, this.type]): String
-  def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: Hop[Long, this.type]): String
-  def base64(implicit fail: Hop[Long, this.type]): Array[Byte]
-  def base64in(target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): Int
-  def exact(s: String)(implicit fail: Hop[Long, this.type]): this.type
-  def exactNoCase(s: String)(implicit fail: Hop[Long, this.type]): this.type
-  def oneOf(s: String*)(implicit fail: Hop[Long, this.type]): String
-  def oneOfNoCase(s: String*)(implicit fail: Hop[Long, this.type]): String
-  def binary(n: Int)(implicit fail: Hop[Long, this.type]): Array[Byte]
-  def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: Hop[Long, this.type]): this.type
+  def tok(implicit fail: GrokHop[this.type]): String
+  def quoted(implicit fail: GrokHop[this.type]): String
+  def quotedBy(left: Char, right: Char, esc: Char)(implicit fail: GrokHop[this.type]): String
+  def qtok(implicit fail: GrokHop[this.type]): String
+  def qtokBy(left: Char, right: Char, esc: Char)(implicit fail: GrokHop[this.type]): String
+  def base64(implicit fail: GrokHop[this.type]): Array[Byte]
+  def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
+  def exact(s: String)(implicit fail: GrokHop[this.type]): this.type
+  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type
+  def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String
+  def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String
+  def binary(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
+  def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
   
-  def apply[A](f: Hop[Long, this.type] => A): Ok[Long, A] = {
-    val hop = UnboundHopSupplier.ofLong[this.type]
+  def apply[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
+    val hop = new GrokHopImpl[this.type]
     try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
-  def manual[A](f: Hop[Long, this.type] => A): Ok[Long, A] = {
-    val hop = UnboundHopSupplier.notLong[this.type]
+  def manual[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
+    val hop = new GrokHopImpl[this.type]
     try{ Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
-  def tryTo(f: this.type => Boolean)(implicit fail: Hop[Long, this.type]): Boolean
+  def tryTo(f: this.type => Boolean)(implicit fail: GrokHop[this.type]): Boolean
 }
 
 
@@ -1063,41 +1264,45 @@ object Grok {
 }
 
 
-object GrokError {
- // Must fit in 3 bits
-  final val end = 1
-  final val wrong = 2
-  final val range = 3
-  final val delim = 4
+
+object GrokErrorCodes {
+  private[this] val whyErrorBuilder = Map.newBuilder[Int, String]
+  final val end = 1             ; whyErrorBuilder += ((end, "end of input"))
+  final val wrong = 2           ; whyErrorBuilder += ((wrong, "improper format"))
+  final val range = 3           ; whyErrorBuilder += ((range, "out of valid range"))
+  final val delim = 4           ; whyErrorBuilder += ((delim, "did not match whole token"))
+  final val missing = 5         ; whyErrorBuilder += ((missing, "missing implementation"))
   final val imprecise = -1
   final val coded = -2
   final val whole = -3
+  final val whys = whyErrorBuilder.result()
   
-  // Must fit in 5 bits
-  final val Z = 1
-  final val aZ = 2
-  final val B = 3
-  final val uB = 4
-  final val S = 5
-  final val uS = 6
-  final val C = 7
-  final val I = 8
-  final val uI = 9
-  final val xI = 10
-  final val aI = 11
-  final val L = 12
-  final val uL = 13
-  final val xL = 14
-  final val aL = 15
-  final val F = 16
-  final val xF = 17
-  final val D = 18
-  final val xD = 19
-  final val tok = 20
-  final val quote = 21
-  final val qBy = 22
-  final val b64 = 23
-  final val exact = 24
-  final val oneOf = 25
-  final val bin = 26
+  private[this] val whatErrorBuilder = Map.newBuilder[Int, String]
+  final val Z = 1      ; whatErrorBuilder += ((Z, "boolean"))
+  final val aZ = 2     ; whatErrorBuilder += ((aZ, "boolean (variants allowed)"))
+  final val B = 3      ; whatErrorBuilder += ((B, "byte"))
+  final val uB = 4     ; whatErrorBuilder += ((uB, "unsigned byte"))
+  final val S = 5      ; whatErrorBuilder += ((S, "short integer"))
+  final val uS = 6     ; whatErrorBuilder += ((uS, "unsigned short integer"))
+  final val C = 7      ; whatErrorBuilder += ((C, "character"))
+  final val I = 8      ; whatErrorBuilder += ((I, "integer"))
+  final val uI = 9     ; whatErrorBuilder += ((uI, "unsigned integer"))
+  final val xI = 10    ; whatErrorBuilder += ((xI, "integer (hexidecimal)"))
+  final val aI = 11    ; whatErrorBuilder += ((aI, "integer (any format)"))
+  final val L = 12     ; whatErrorBuilder += ((L, "long integer"))
+  final val uL = 13    ; whatErrorBuilder += ((uL, "unsigned long integer"))
+  final val xL = 14    ; whatErrorBuilder += ((xL, "long integer (hexidecimal)"))
+  final val aL = 15    ; whatErrorBuilder += ((aL, "long integer (any format)"))
+  final val F = 16     ; whatErrorBuilder += ((F, "32-bit floating point number"))
+  final val xF = 17    ; whatErrorBuilder += ((xF, "32-bit floating point number (hexidecimal)"))
+  final val D = 18     ; whatErrorBuilder += ((D, "floating point number"))
+  final val xD = 19    ; whatErrorBuilder += ((xD, "floating point number (hexidecimal)"))
+  final val tok = 20   ; whatErrorBuilder += ((tok, "string token"))
+  final val quote = 21 ; whatErrorBuilder += ((tok, "quoted string"))
+  final val qBy = 22   ; whatErrorBuilder += ((tok, "quoted string"))
+  final val b64 = 23   ; whatErrorBuilder += ((tok, "base64 encoded data"))
+  final val exact = 24 ; whatErrorBuilder += ((tok, "expected string"))
+  final val oneOf = 25 ; whatErrorBuilder += ((tok, "expected string"))
+  final val bin = 26   ; whatErrorBuilder += ((tok, "binary data"))
+  final val whats = whatErrorBuilder.result();
 }
