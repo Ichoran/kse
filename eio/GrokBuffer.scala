@@ -21,7 +21,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
   reqSep = initialReqSep
   ready = 1
   
-  private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i)
+  private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i)(buffer)
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {
@@ -606,7 +606,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     this
   }
   
-  def context[A](description: String = "")(parse: => A)(implicit fail: GrokHop[this.type]): A = ???
+  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A = ???
   
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = ???
   

@@ -542,7 +542,84 @@ object GrokNumber {
   )
 }
 
-final case class GrokError(whatError: Byte, whoError: Byte, token: Int, position: Long, target: Any = null, description: String = "", suberrors: List[GrokError] = Nil) {}
+final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position: Long, description: String = null, suberrors: List[GrokError] = Nil)(val target: AnyRef = null) {
+  private def escapeControls(s: String, bias: Int): String = {
+    val sb = new StringBuilder
+    var i = 0
+    while (i < s.length) {
+      val c = s.charAt(i)
+      if (c < 32) {
+        val e = GrokEscape.standardTextEncodingTable(c)
+        if (e.length == 1) sb += c
+        else {
+          if (bias < 0 && i*3 < s.length) sb.clear
+          else if (bias > 0 && (s.length - i)*3 < s.length) i = s.length
+          else sb ++= e
+        }
+      }
+      else sb += c
+      i += 1
+    }
+    sb.result()
+  }
+  private def mkStringContext(s: String, p: Long, indent: Int): String = {
+    val k = math.max(0, math.min(s.length, (p & 0x7FFFFFFF).toInt))
+    val total = math.min(40, 70 - indent)
+    val left = math.max(0, k-total/2)
+    val right = math.min(s.length, left+total)
+    val sleft = escapeControls(s.substring(left, k), -1)
+    val sright = escapeControls(s.substring(k, right), 1)
+    sleft + "^" + sright
+  }
+  private def mkTextContext(ab: Array[Byte], p: Long, indent: Int): String = {
+    val k = math.max(0, math.min(ab.length, (p & 0x7FFFFFFF).toInt))
+    val total = math.max(4, math.min(20, 30 - indent))
+    val left = math.max(0, k-total/2)
+    val right = math.min(ab.length, left + total)
+    var sleft = new String(java.util.Arrays.copyOfRange(ab, left, k))
+    var sright = new String(java.util.Arrays.copyOfRange(ab, k, right))
+    if (sleft.indexOf(0x65533) >= 0 || sright.indexOf(0x65533) >= 0) {
+      var bufl = new Array[Char](k-left)
+      var i = 0; while (i < bufl.length) { bufl(i) = ab(left+i).toChar; i += 1 }
+      sleft = new String(bufl)
+      val bufr = new Array[Char](right-k)
+      var j = 0; while (j < bufr.length) { bufr(j) = ab(k+j).toChar; j += 1 }
+      sright = new String(bufr)
+    }
+    escapeControls(sleft, -1) + "^" + escapeControls(sright, 1)
+  }
+  private def mkBinaryContext(ab: Array[Byte], p: Long, indent: Int): String = {
+    val k = math.max(0, math.min(ab.length, (p & 0x7FFFFFFF).toInt))
+    val total = math.max(4, math.min(18, (64 - indent)/2))
+    val left = math.max(0, k-total/2)
+    val right = math.min(ab.length, left+total)
+    java.util.Arrays.copyOfRange(ab, left, k).map(b => b.toHexString).mkString + "^" + java.util.Arrays.copyOfRange(ab, k, right).map(b => b.toHexString).mkString
+  }
+  private def toText(indent: Int, lastpos: Long, lasttarg: AnyRef): List[String] = {
+    val oldPosition = lastpos == position && (lasttarg eq target)
+    val prefix = if (indent <= 0) "Error in " else " "*indent
+    val who = (GrokErrorCodes.whos.get(whoError) match { case Some(x) => x + " "; case None => "unknown" })
+    val desc = "while parsing " + (if (description==null) "" else if (description.length > 0 && description(description.length-1) != ' ') description + " " else description)
+    val where = if (oldPosition) "" else "at token " + token + " position " + position
+    val why = GrokErrorCodes.whys.get(whyError) match { case Some(x) => ": " + x + ". "; case None => ". " }
+    val firstLine = prefix + who + desc + where + why
+    val remaining = suberrors.flatMap(_.toText(indent + 2, position, target))
+    if (oldPosition) firstLine :: remaining
+    else {
+      target match {
+        case s: String =>
+          val context = " "*math.max(0,indent) + "Context: " + mkStringContext(s, position, indent)
+          firstLine :: context :: remaining
+        case ab: Array[Byte] =>
+          val context = " "*math.max(0,indent) + "Context: " + mkTextContext(ab, position, indent) + "  " + mkBinaryContext(ab, position, indent)
+          firstLine :: context :: remaining
+        case _ => firstLine :: remaining
+      }
+    }
+  }
+  def toTextLines: List[String] = toText(0, -1, null)
+  override def toString = toTextLines.mkString("\n")
+}
 
 sealed trait GrokHop[X <: Grok] extends Hop[GrokError, X] {
   def attitude(i: Int): this.type
@@ -1242,7 +1319,7 @@ abstract class Grok {
     try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
   
-  def context[A](description: String = "")(parse: => A)(implicit fail: GrokHop[this.type]): A
+  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
 }
@@ -1272,36 +1349,36 @@ object GrokErrorCodes {
   final val whole = -3
   final val whys = whyErrorBuilder.result()
   
-  private[this] val whatErrorBuilder = Map.newBuilder[Int, String]
-  final val Z = 1      ; whatErrorBuilder += ((Z, "boolean"))
-  final val aZ = 2     ; whatErrorBuilder += ((aZ, "boolean (variants allowed)"))
-  final val B = 3      ; whatErrorBuilder += ((B, "byte"))
-  final val uB = 4     ; whatErrorBuilder += ((uB, "unsigned byte"))
-  final val S = 5      ; whatErrorBuilder += ((S, "short integer"))
-  final val uS = 6     ; whatErrorBuilder += ((uS, "unsigned short integer"))
-  final val C = 7      ; whatErrorBuilder += ((C, "character"))
-  final val I = 8      ; whatErrorBuilder += ((I, "integer"))
-  final val uI = 9     ; whatErrorBuilder += ((uI, "unsigned integer"))
-  final val xI = 10    ; whatErrorBuilder += ((xI, "integer (hexidecimal)"))
-  final val aI = 11    ; whatErrorBuilder += ((aI, "integer (any format)"))
-  final val L = 12     ; whatErrorBuilder += ((L, "long integer"))
-  final val uL = 13    ; whatErrorBuilder += ((uL, "unsigned long integer"))
-  final val xL = 14    ; whatErrorBuilder += ((xL, "long integer (hexidecimal)"))
-  final val aL = 15    ; whatErrorBuilder += ((aL, "long integer (any format)"))
-  final val F = 16     ; whatErrorBuilder += ((F, "32-bit floating point number"))
-  final val xF = 17    ; whatErrorBuilder += ((xF, "32-bit floating point number (hexidecimal)"))
-  final val D = 18     ; whatErrorBuilder += ((D, "floating point number"))
-  final val xD = 19    ; whatErrorBuilder += ((xD, "floating point number (hexidecimal)"))
-  final val tok = 20   ; whatErrorBuilder += ((tok, "string token"))
-  final val quote = 21 ; whatErrorBuilder += ((quote, "quoted string"))
-  final val b64 = 22   ; whatErrorBuilder += ((b64, "base64 encoded data"))
-  final val exact = 23 ; whatErrorBuilder += ((exact, "expected string"))
-  final val oneOf = 24 ; whatErrorBuilder += ((oneOf, "expected string"))
-  final val bin = 25   ; whatErrorBuilder += ((bin, "binary data"))
-  final val sub = 26   ; whatErrorBuilder += ((sub, "subset of data"))
-  final val alt = 27   ; whatErrorBuilder += ((alt, "related data"))
-  final val custom = 28; whatErrorBuilder += ((tok, "validation"))
-  final val whats = whatErrorBuilder.result();
+  private[this] val whoErrorBuilder = Map.newBuilder[Int, String]
+  final val Z = 1      ; whoErrorBuilder += ((Z, "boolean"))
+  final val aZ = 2     ; whoErrorBuilder += ((aZ, "boolean (variants allowed)"))
+  final val B = 3      ; whoErrorBuilder += ((B, "byte"))
+  final val uB = 4     ; whoErrorBuilder += ((uB, "unsigned byte"))
+  final val S = 5      ; whoErrorBuilder += ((S, "short integer"))
+  final val uS = 6     ; whoErrorBuilder += ((uS, "unsigned short integer"))
+  final val C = 7      ; whoErrorBuilder += ((C, "character"))
+  final val I = 8      ; whoErrorBuilder += ((I, "integer"))
+  final val uI = 9     ; whoErrorBuilder += ((uI, "unsigned integer"))
+  final val xI = 10    ; whoErrorBuilder += ((xI, "integer (hexidecimal)"))
+  final val aI = 11    ; whoErrorBuilder += ((aI, "integer (any format)"))
+  final val L = 12     ; whoErrorBuilder += ((L, "long integer"))
+  final val uL = 13    ; whoErrorBuilder += ((uL, "unsigned long integer"))
+  final val xL = 14    ; whoErrorBuilder += ((xL, "long integer (hexidecimal)"))
+  final val aL = 15    ; whoErrorBuilder += ((aL, "long integer (any format)"))
+  final val F = 16     ; whoErrorBuilder += ((F, "32-bit floating point number"))
+  final val xF = 17    ; whoErrorBuilder += ((xF, "32-bit floating point number (hexidecimal)"))
+  final val D = 18     ; whoErrorBuilder += ((D, "floating point number"))
+  final val xD = 19    ; whoErrorBuilder += ((xD, "floating point number (hexidecimal)"))
+  final val tok = 20   ; whoErrorBuilder += ((tok, "string token"))
+  final val quote = 21 ; whoErrorBuilder += ((quote, "quoted string"))
+  final val b64 = 22   ; whoErrorBuilder += ((b64, "base64 encoded data"))
+  final val exact = 23 ; whoErrorBuilder += ((exact, "expected string"))
+  final val oneOf = 24 ; whoErrorBuilder += ((oneOf, "expected string"))
+  final val bin = 25   ; whoErrorBuilder += ((bin, "binary data"))
+  final val sub = 26   ; whoErrorBuilder += ((sub, "subset of data"))
+  final val alt = 27   ; whoErrorBuilder += ((alt, "related data"))
+  final val custom = 28; whoErrorBuilder += ((tok, "validation"))
+  final val whos = whoErrorBuilder.result();
 }
 
 abstract class GrokEscape {
@@ -1348,5 +1425,15 @@ object GrokEscape {
     def extended(b: Byte, extra: Long) =
       if (b == 'u') extra.toChar
       else incorrect()
+  }
+  val standardTextEncodingTable = {
+    val tbl = (0 until 32).map(_.toChar.toString).toArray
+    tbl(0) = "\\0"
+    tbl('\b') = "\\b"
+    tbl('\f') = "\\f"
+    tbl('\n') = "\\n"
+    tbl('\r') = "\\r"
+    tbl('\t') = "\\t"
+    tbl
   }
 }

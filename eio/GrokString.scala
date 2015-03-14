@@ -30,7 +30,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     this
   }
   
-  private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i, string)
+  private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i)(string)
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {
@@ -598,14 +598,45 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     this
   }
   
-  def context[A](description: String = "")(parse: => A)(implicit fail: GrokHop[this.type]): A = {
+  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A = {
     val tOld = t
     val iOld = i
     try { parse }
-    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(sub.whatError, e.sub.toByte, tOld, iOld, string, description, sub :: Nil) ) }
+    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(sub.whyError, e.sub.toByte, tOld, iOld, description, sub :: Nil)(string) ) }
   }
   
-  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = ???
+  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = {
+    var tToBe = t
+    var iToBe = i
+    var readyToBe = ready
+    val i0Old = i0
+    val iNOld = iN
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val stringOld = string
+    try {
+      val ans = parse
+      if (string eq stringOld) {
+        tToBe = t
+        iToBe = i
+        readyToBe = ready
+      }
+      Yes(ans)
+    }
+    catch { case t if fail is t => No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as t value) :: Nil)(stringOld) ) }
+    finally {
+      string = stringOld
+      reqSep = reqSepOld
+      nSep = nSepOld
+      delim = delimOld
+      iN = iNOld
+      i0 = i0Old
+      ready = readyToBe
+      i = iToBe
+      t = tToBe
+    }
+  }
   
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A = {
     val tOld = t
@@ -618,7 +649,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     val readyOld = ready
     val stringOld = string
     try { parse }
-    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(e.delim.toByte, e.alt.toByte, tOld, iOld, stringOld, "", sub :: Nil) ) }
+    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(e.delim.toByte, e.alt.toByte, tOld, iOld, null, sub :: Nil)(stringOld) ) }
     finally {
       string = stringOld
       ready = readyOld
