@@ -13,19 +13,13 @@ trait Delimiter {
   def _tok(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long
   def tok_(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long
   
-  def |(d2: Delimiter): Delimiter = if (this eq d2) this else this match {
-    case md: MultiDelim => d2 match {
-      case md2: MultiDelim => new MultiDelim(md.delimiters ++ md2.delimiters)
-      case _ => new MultiDelim(md.delimiters :+ d2)
-    }
-    case _ => d2 match {
-      case md2: MultiDelim => new MultiDelim(this +: md2.delimiters)
-      case _ => new MultiDelim(Array(this, d2))
-    }
-  }
+  def terminatedBy(d2: Delimiter)(onEnd: Int => Unit) = new TerminatedDelim(this, d2)(onEnd)
 }
 
 final class CharDelim(private val c: Char) extends Delimiter {
+  final def delimMaxChars = 1
+  final def delimMaxBytes = 1
+  
   final def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
     if (i0 >= iN) -1
     else {
@@ -88,13 +82,12 @@ final class CharDelim(private val c: Char) extends Delimiter {
     while (j < iN && k > 0 && ab(j) == c) j += 1
     (i packII j).L
   }
-  override def |(d2: Delimiter) = d2 match {
-    case cd2: CharDelim if c == cd2.c => this
-    case _ => super.|(d2)
-  }
 }
 
 final class WhiteDelim extends Delimiter  {
+  final def delimMaxChars = 1
+  final def delimMaxBytes = 1
+
   @inline final def whiteByte(b: Byte) = ((b & 0xFF) < 64) && ((1L << b) & 0x1f0003e00L) != 0
   @inline final def darkByte(b: Byte) = ((b & 0xFF) >= 64) || ((1L << b) & 0x1f0003e00L) == 0
   final def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
@@ -159,13 +152,12 @@ final class WhiteDelim extends Delimiter  {
     while (j < iN && k > 0 && whiteByte(ab(j))) j += 1
     (i packII j).L
   }
-  override def |(d2: Delimiter) = d2 match {
-    case wd2: WhiteDelim => this
-    case _ => super.|(d2)
-  }
 }
 
 final class LineDelim extends Delimiter  {
+  final def delimMaxChars = 2
+  final def delimMaxBytes = 2
+  
   final def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
     if (i0 >= iN) -1
     else {
@@ -236,96 +228,85 @@ final class LineDelim extends Delimiter  {
     val i1 = apply(ab, i, iN, n)
     (i packII i1).L
   }
-  override def |(d2: Delimiter) = d2 match {
-    case ld2: LineDelim => this
-    case _ => super.|(d2)
-  }
 }
 
-final class MultiDelim(val delimiters: Array[Delimiter]) extends Delimiter {
-  final def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
-    if (i0 >= iN) -1
-    else {
-      var m = n
-      var last = delimiters.length-1
-      var k = 0
-      var i = i0
-      while (m > 0 && last >= 0 && i < iN) {
-        val j = delimiters(k)(s, i, iN, m)
-        if (j > i) { last = k; m -= j-i; i = j }
-        else if (k == last) last = -1
-        else { k += 1; if (k >= delimiters.length) k = 0 }
-      }
-      i
+final class TerminatedDelim(tokenizer: Delimiter, terminator: Delimiter)(onEnd: Int => Unit) extends Delimiter {
+  private[this] var cachedData: AnyRef = null
+  private[this] var cachedStart: Int = Int.MaxValue
+  private[this] var cachedEnd: Int = Int.MaxValue
+    
+  private def checkTermEnd(s: String, i0: Int, iN: Int) {
+    if ((s eq cachedData) && cachedEnd == iN) {
+      onEnd(cachedEnd)
+      cachedData = null
     }
   }
-  final def apply(ab: Array[Byte], i0: Int, iN: Int, n: Int): Int = {
-    if (i0 >= iN) -1
-    else {
-      var m = n
-      var last = delimiters.length-1
-      var k = 0
-      var i = i0
-      while (m > 0 && last >= 0 && i < iN) {
-        val j = delimiters(k)(ab, i, iN, m)
-        if (j > i) { last = k; m -= j-i; i = j }
-        else if (k == last) last = -1
-        else { k += 1; if (k >= delimiters.length) k = 0 }
-      }
-      i
+  private def checkTermEnd(ab: Array[Byte], i0: Int, iN: Int) {
+    if ((ab eq cachedData) && cachedEnd == iN) {
+      onEnd(cachedEnd)
+      cachedData = null
     }
   }
-  final def _tok(s: String, i0: Int, iN: Int, n: Int): Long = {
-    val i1 = apply(s, i0, iN, n)
-    if (i1 >= iN) return (if (i1 == i0) (-1 packII -1) else (i1 packII i1)).L
-    var i = iN
-    var k = 0
-    while (i > i1 && k < delimiters.length) {
-      val j = delimiters(k)._tok(s, i1, i, 0).inLong.i1
-      i = math.min(i, j)
-      k += 1
-    }
-    (i1 packII i).L
-  }
-  final def _tok(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
-    val i1 = apply(ab, i0, iN, n)
-    if (i1 >= iN) return (if (i1 == i0) (-1 packII -1) else (i1 packII i1)).L
-    var i = iN
-    var k = 0
-    while (i > i1 && k < delimiters.length) {
-      val j = delimiters(k)._tok(ab, i1, i, 0).inLong.i1
-      i = math.min(i, j)
-      k += 1
-    }
-    (i1 packII i).L
-  }
-  final def tok_(s: String, i0: Int, iN: Int, n: Int): Long = {
-    if (i0 >= iN) return (-1 packII -1).L
-    else {
-      var i = iN
-      var k = 0
-      while (i > i0 && k < delimiters.length) {
-        val j = delimiters(k).tok_(s, i0, i, 0).inLong.i0
-        i = math.min(i, j)
-        k += 1
-      }
-      val i1 = apply(s, i, iN, n)
-      (i packII i1).L
+  private def loadCaches(s: String, i0: Int, iN: Int) {
+    if (!(s eq cachedData) || (cachedStart > i0) || (cachedEnd < i0)) {
+      cachedData = s
+      cachedStart = i0
+      val term = terminator.tok_(s, i0, iN, 1).inLong
+      cachedEnd = term.i0 match { case x if x == term.i1 => iN+1; case x => x }
     }
   }
-  final def tok_(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
-    if (i0 >= iN) return (-1 packII -1).L
-    else {
-      var i = iN
-      var k = 0
-      while (i > i0 && k < delimiters.length) {
-        val j = delimiters(k).tok_(ab, i0, i, 0).inLong.i1
-        i = math.min(i, j)
-        k += 1
-      }
-      val i1 = apply(ab, i, iN, n)
-      (i packII i1).L
+  private def loadCaches(ab: Array[Byte], i0: Int, iN: Int) {
+    if (!(ab eq cachedData) || (cachedStart > i0)) {
+      cachedData = ab
+      cachedStart = i0
+      val term = terminator.tok_(ab, i0, iN, 1).inLong
+      cachedEnd = term.i0 match { case x if x == term.i1 => iN+1; case x => x }
     }
+  }
+    
+  def apply(s: String, i0: Int, iN: Int, n: Int): Int = {
+    if (i0 >= iN) { checkTermEnd(s, i0, iN); return -1 }
+    loadCaches(s, i0, iN)
+    val ans = tokenizer(s, i0, math.min(iN, cachedEnd), n)
+    if (ans == cachedEnd) { onEnd(cachedEnd); cachedData = null }
+    ans
+  }
+  def apply(ab: Array[Byte], i0: Int, iN: Int, n: Int): Int = {
+    if (i0 >= iN) { checkTermEnd(ab, i0, iN); return -1 }
+    loadCaches(ab, i0, iN)
+    val ans = tokenizer(ab, i0, math.min(iN, cachedEnd), n)
+    if (ans == cachedEnd) { onEnd(cachedEnd); cachedData = null }
+    ans
+  }
+  
+  def _tok(s: String, i0: Int, iN: Int, n: Int): Long = {
+    if (i0 >= iN) { checkTermEnd(s, i0, iN); return (-1 packII -1).L }
+    loadCaches(s, i0, iN)
+    val ans = tokenizer._tok(s, i0, math.min(iN, cachedEnd), n)
+    if (ans.inLong.i1 == cachedEnd) { onEnd(cachedEnd); cachedData = null }
+    ans
+  }
+  def _tok(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
+    if (i0 >= iN) { checkTermEnd(ab, i0, iN); return (-1 packII -1).L }
+    loadCaches(ab, i0, iN)
+    val ans = tokenizer._tok(ab, i0, math.min(iN, cachedEnd), n)
+    if (ans.inLong.i1 == cachedEnd) { onEnd(cachedEnd); cachedData = null }
+    ans
+  }
+  
+  def tok_(s: String, i0: Int, iN: Int, n: Int): Long = {
+    if (i0 >= iN) { checkTermEnd(s, i0, iN); return (-1 packII -1).L }
+    loadCaches(s, i0, iN)
+    val ans = tokenizer.tok_(s, i0, math.min(iN, cachedEnd), n)
+    if (ans.inLong.i1 == cachedEnd) { onEnd(cachedEnd); cachedData = null }
+    ans
+  }
+  def tok_(ab: Array[Byte], i0: Int, iN: Int, n: Int): Long = {
+    if (i0 >= iN) { checkTermEnd(ab, i0, iN); return (-1 packII -1).L }
+    loadCaches(ab, i0, iN)
+    val ans = tokenizer.tok_(ab, i0, math.min(iN, cachedEnd), n)
+    if (ans.inLong.i1 == cachedEnd) { onEnd(cachedEnd); cachedData = null }
+    ans
   }
 }
 
@@ -338,6 +319,5 @@ object Delimiter {
   val tab = new CharDelim('\t')
   val white = new WhiteDelim
   val newline = new LineDelim
-  implicit def charactersAreDelimiters(delimChar: Char) = new CharDelim(delimChar)
 }
  

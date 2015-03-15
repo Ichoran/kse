@@ -6,7 +6,7 @@ package kse.eio
 import language.postfixOps
 
 import scala.annotation.tailrec
-import scala.reflect.{ClassTag => Tag}
+import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
@@ -661,5 +661,102 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       i = iOld
       t = tOld
     }
+  }
+  
+  def each[A](parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A] = {
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val stringOld = string
+    println(s"! $i $t $ready")
+    try {
+      val ans = Array.newBuilder[A]
+      while (!isEmpty) {
+        println(s"@ $i $t $ready")
+        ans += parse
+        println(s"# $i $t $ready")
+        string = stringOld
+        reqSep = reqSepOld
+        nSep = nSepOld
+        delim = delimOld
+      }
+      println(s"% $i $t $ready")      
+      ans.result()
+    }
+    finally {
+      string = stringOld
+      reqSep = reqSepOld
+      nSep = nSepOld
+      delim = delimOld
+      println(s"^ $i $t $ready")
+    }
+  }
+  
+  def grokEach[A](delimiter: Delimiter)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]] = {
+    var tToBe = t
+    var iToBe = i
+    var readyToBe = ready
+    val i0Old = i0
+    val iNOld = iN
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val stringOld = string
+    var successBuffer = Array.newBuilder[A]
+    lazy val failureBuffer = Array.newBuilder[Ok[GrokError,A]]
+    var hitEnd = false
+    val delimNew = delimiter.terminatedBy(delim){ x => hitEnd = true; iN = x }
+    while (!isEmpty) {
+      println(s"a $i $t $ready")
+      if (!prepare(0, e.exact)(fail)) return null
+      try {
+        hitEnd = false
+        delim = delimNew
+        val ans = parse
+        println(s"b $i $t $ready")
+        if (string eq stringOld) {
+          tToBe = t
+          iToBe = i
+          ready = 0
+        }
+        string = stringOld
+        reqSep = reqSepOld
+        nSep = nSepOld
+        iN = iNOld
+        i0 = i0Old
+        println(s"c $i $t $ready")
+        if (!hitEnd) skip(1)
+        readyToBe = ready
+        if (successBuffer != null) successBuffer += ans else failureBuffer += Yes(ans)
+        println(s"d $i $t $ready")
+      }
+      catch { case x if fail is x =>
+        println(s"e $i $t $ready")
+        if (successBuffer != null) {
+          val buf = successBuffer.result()
+          var i = 0
+          while (i < buf.length) { failureBuffer += Yes(buf(i)); i += 1 }
+          successBuffer = null
+        }
+        failureBuffer += No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as x value) :: Nil)(stringOld) )
+        string = stringOld
+        reqSep = reqSepOld
+        nSep = nSepOld
+        iN = iNOld
+        i0 = i0Old
+        ready = readyToBe
+        t = tToBe
+        i = iToBe
+        skip(1)
+        readyToBe = ready
+        println(s"f $i $t $ready")      
+      }
+      finally {
+        delim = delimOld
+      }
+      if (!wrapup(e.sub)(fail)) return null
+      println(s"g $i $t $ready")
+    }
+    if (successBuffer != null) Yes(successBuffer.result()) else No(failureBuffer.result())
   }
 }

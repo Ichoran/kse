@@ -6,7 +6,7 @@ package kse.eio
 import language.postfixOps
 
 import scala.annotation.tailrec
-import scala.reflect.{ClassTag => Tag}
+import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
@@ -611,5 +611,9 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = ???
   
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A = ???
+  
+  def each[A](parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A] = ???
+  
+  def grokEach[A](delimiter: Delimiter)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]] = ???
 }
 

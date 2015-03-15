@@ -6,7 +6,7 @@ package kse.eio
 import language.postfixOps
 
 import scala.annotation.tailrec
-import scala.reflect.{ClassTag => Tag}
+import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll._
 import kse.coll.packed._
@@ -677,12 +677,15 @@ abstract class Grok {
   protected var ready: Byte = 0
   protected var delim: Delimiter = null
     
-  def mustDelimit(yes: Boolean): this.type = { reqSep = yes; this }
-  def mergeDelims(count: Int): this.type = { nSep = if (count <= 0) Int.MaxValue else count; this }
-  def changeDelim(delimiter: Delimiter): this.type = { delim = delimiter; this }
-  def addDelim(delimiter: Delimiter): this.type = { delim = delim | delimiter; this }
+  def delimit(required: Boolean): this.type = { reqSep = required; this }
   def delimit(required: Boolean, count: Int): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; this }
   def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
+  def delimit(required: Boolean, count: Int, delimiter: Char): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = new CharDelim(delimiter); this }
+  def delimit(count: Int): this.type = { nSep = if (count <= 0) Int.MaxValue else count; this }
+  def delimit(count: Int, delimiter: Delimiter): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
+  def delimit(count: Int, delimiter: Char): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = new CharDelim(delimiter); this }
+  def delimit(delimiter: Delimiter): this.type = { delim = delimiter; this }
+  def delimit(delimiter: Char): this.type = { delim = new CharDelim(delimiter); this }
   
   final def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)
@@ -1339,14 +1342,20 @@ abstract class Grok {
   def binary(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
   def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
   
+  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
+  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
+  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
+  
+  def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
+
+  def grokEach[A](delimiter: Delimiter)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]]
+  def grokEach[A](delimiter: Char)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]] = grokEach(new CharDelim(delimiter))(parse)(fail, tag)
+  
   def apply[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
     val hop = new GrokHopImpl[this.type]
     try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   }
   
-  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
-  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
-  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
 }
 
 
