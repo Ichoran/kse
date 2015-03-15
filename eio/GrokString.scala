@@ -295,7 +295,6 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         case e.whole => j.toDouble
         case e.coded => if (j == 0) Double.NaN else if (j < 0) Double.NegativeInfinity else Double.PositiveInfinity
         case e.imprecise =>
-          println("Imprecise!")
           try { java.lang.Double.parseDouble(string.substring(iOld, i)) }
           catch { case _: NumberFormatException => error = e.wrong.toByte; parseErrorNaN }
         case _ => java.lang.Double.longBitsToDouble(j)
@@ -667,28 +666,20 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     val delimOld = delim
     val nSepOld = nSep
     val reqSepOld = reqSep
-    val stringOld = string
-    println(s"! $i $t $ready")
     try {
       val ans = Array.newBuilder[A]
       while (!isEmpty) {
-        println(s"@ $i $t $ready")
         ans += parse
-        println(s"# $i $t $ready")
-        string = stringOld
         reqSep = reqSepOld
         nSep = nSepOld
         delim = delimOld
-      }
-      println(s"% $i $t $ready")      
+      }  
       ans.result()
     }
     finally {
-      string = stringOld
       reqSep = reqSepOld
       nSep = nSepOld
       delim = delimOld
-      println(s"^ $i $t $ready")
     }
   }
   
@@ -696,50 +687,43 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     var tToBe = t
     var iToBe = i
     var readyToBe = ready
+    val delimOld = delim
     val i0Old = i0
     val iNOld = iN
-    val delimOld = delim
     val nSepOld = nSep
     val reqSepOld = reqSep
-    val stringOld = string
     var successBuffer = Array.newBuilder[A]
     lazy val failureBuffer = Array.newBuilder[Ok[GrokError,A]]
-    var hitEnd = false
+    var hitEnd, finalized = false
     val delimNew = delimiter.terminatedBy(delim){ x => hitEnd = true; iN = x }
     while (!isEmpty) {
-      println(s"a $i $t $ready")
       if (!prepare(0, e.exact)(fail)) return null
       try {
         hitEnd = false
+        finalized = false
         delim = delimNew
         val ans = parse
-        println(s"b $i $t $ready")
-        if (string eq stringOld) {
-          tToBe = t
-          iToBe = i
-          ready = 0
-        }
-        string = stringOld
+        tToBe = t
+        iToBe = i
+        ready = 0
         reqSep = reqSepOld
         nSep = nSepOld
         iN = iNOld
         i0 = i0Old
-        println(s"c $i $t $ready")
-        if (!hitEnd) skip(1)
+        delim = delimOld
+        finalized = true
+        if (!hitEnd && i < iN) skip
         readyToBe = ready
         if (successBuffer != null) successBuffer += ans else failureBuffer += Yes(ans)
-        println(s"d $i $t $ready")
       }
       catch { case x if fail is x =>
-        println(s"e $i $t $ready")
         if (successBuffer != null) {
           val buf = successBuffer.result()
           var i = 0
           while (i < buf.length) { failureBuffer += Yes(buf(i)); i += 1 }
           successBuffer = null
         }
-        failureBuffer += No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as x value) :: Nil)(stringOld) )
-        string = stringOld
+        failureBuffer += No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as x value) :: Nil)(string) )
         reqSep = reqSepOld
         nSep = nSepOld
         iN = iNOld
@@ -747,15 +731,24 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         ready = readyToBe
         t = tToBe
         i = iToBe
-        skip(1)
+        delim = delimOld
+        finalized = true
+        skip
         readyToBe = ready
-        println(s"f $i $t $ready")      
       }
       finally {
-        delim = delimOld
+        if (!finalized) {
+          reqSep = reqSepOld
+          nSep = nSepOld
+          iN = iNOld
+          i0 = i0Old
+          delim = delimOld
+          t = tToBe
+          i = iToBe
+          ready = readyToBe
+        }
       }
       if (!wrapup(e.sub)(fail)) return null
-      println(s"g $i $t $ready")
     }
     if (successBuffer != null) Yes(successBuffer.result()) else No(failureBuffer.result())
   }

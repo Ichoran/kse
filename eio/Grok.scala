@@ -647,8 +647,9 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
 }
 
 sealed trait GrokHop[X <: Grok] extends Hop[GrokError, X] {
-  def attitude(i: Int): this.type
-  def attitude: Int
+  def dormant[A](a: => A): A
+  def stackless[A](a: => A): A
+  def terminal[A](a: => A): A
 }
 
 final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {
@@ -657,13 +658,19 @@ final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with G
   
   def value = myValue
 
-  def apply(err: GrokError) = { myValue = err; throw this }
+  def apply(err: GrokError) = { myValue = err; if (myAttitude <= 0) throw this else throw new IllegalArgumentException(err.toString) }
   def as(t: Throwable) = if (this eq t) this else null
   def is(t: Throwable) = this eq t
-  def on(err: GrokError) { myValue = err; if (attitude == 0) throw this else if (attitude > 0) throw new IllegalArgumentException(err.toString) }
-  
-  def attitude = myAttitude
-  def attitude(i: Int) = { myAttitude = i; this }
+  def on(err: GrokError) { myValue = err; if (myAttitude == 0) throw this else if (myAttitude > 0) throw new IllegalArgumentException(err.toString) }
+
+  private def withAttitude[A](newAttitude: Int)(a: => A): A = {
+    val oldAttitude = myAttitude
+    myAttitude = newAttitude
+    try { a } finally { myAttitude = oldAttitude }
+  }
+  def dormant[A](a: => A) = withAttitude(-1)(a)
+  def stackless[A](a: => A) = withAttitude(0)(a)
+  def terminal[A](a: => A) = withAttitude(1)(a)
 }
 
 abstract class Grok {
