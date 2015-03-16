@@ -14,12 +14,23 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
   import kse.eio.{GrokErrorCodes => e}
 
   private[this] var t = 0
+  private[this] var binaryMode = false
   i0 = math.max(0, math.min(initialStart, buffer.length))
   iN = math.min(buffer.length, math.max(initialEnd, i0))
   delim = initialDelimiter
   nSep = math.max(1, initialnSep)
   reqSep = initialReqSep
   ready = 1
+  
+  def input(newInput: Array[Byte], start: Int = 0, end: Int = Int.MaxValue): this.type = {
+    buffer = newInput
+    i0 = math.max(0, math.min(start, buffer.length))
+    iN = math.min(buffer.length, math.max(end, i0))
+    i = i0
+    t = 0
+    ready = 1
+    this
+  }
   
   private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i)(buffer)
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
@@ -606,14 +617,172 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     this
   }
   
-  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A = ???
+  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A = {
+    val tOld = t
+    val iOld = i
+    try { parse }
+    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(sub.whyError, e.sub.toByte, tOld, iOld, description, sub :: Nil)(buffer) ) }
+  }
   
-  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = ???
+  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A] = {
+    var tToBe = t
+    var iToBe = i
+    var readyToBe = ready
+    val i0Old = i0
+    val iNOld = iN
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
+    val bufferOld = buffer
+    try {
+      val ans = parse
+      if (buffer eq bufferOld) {
+        tToBe = t
+        iToBe = i
+        readyToBe = ready
+      }
+      Yes(ans)
+    }
+    catch { case t if fail is t => No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as t value) :: Nil)(bufferOld) ) }
+    finally {
+      buffer = bufferOld
+      binaryMode = binaryModeOld
+      reqSep = reqSepOld
+      nSep = nSepOld
+      delim = delimOld
+      iN = iNOld
+      i0 = i0Old
+      ready = readyToBe
+      i = iToBe
+      t = tToBe
+    }
+  }
   
-  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A = ???
+  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A = {
+    val tOld = t
+    val iOld = i
+    val i0Old = i0
+    val iNOld = iN
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val readyOld = ready
+    val bufferOld = buffer
+    try { parse }
+    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(e.delim.toByte, e.alt.toByte, tOld, iOld, null, sub :: Nil)(bufferOld) ) }
+    finally {
+      buffer = bufferOld
+      ready = readyOld
+      reqSep = reqSepOld
+      nSep = nSepOld
+      delim = delimOld
+      iN = iNOld
+      i0 = i0Old
+      i = iOld
+      t = tOld
+    }
+  }
   
-  def each[A](parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A] = ???
+  def each[A](parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A] = {
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
+    try {
+      val ans = Array.newBuilder[A]
+      while (!isEmpty) {
+        ans += parse
+        binaryMode = binaryModeOld
+        reqSep = reqSepOld
+        nSep = nSepOld
+        delim = delimOld
+      }  
+      ans.result()
+    }
+    finally {
+      binaryMode = binaryModeOld
+      reqSep = reqSepOld
+      nSep = nSepOld
+      delim = delimOld
+    }
+  }
   
-  def grokEach[A](delimiter: Delimiter)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]] = ???
+  def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = ???
+  /*
+  def grokEach[A](delimiter: Delimiter)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]] = {
+    var tToBe = t
+    var iToBe = i
+    var readyToBe = ready
+    val delimOld = delim
+    val i0Old = i0
+    val iNOld = iN
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
+    var successBuffer = Array.newBuilder[A]
+    lazy val failureBuffer = Array.newBuilder[Ok[GrokError,A]]
+    var hitEnd, finalized = false
+    val delimNew = delimiter.terminatedBy(delim)
+    while (!isEmpty) {
+      if (!prepare(0, e.exact)(fail)) return null
+      try {
+        hitEnd = false
+        finalized = false
+        delim = delimNew
+        val ans = parse
+        tToBe = t
+        iToBe = i
+        ready = 0
+        binaryMode = binaryModeOld
+        reqSep = reqSepOld
+        nSep = nSepOld
+        iN = iNOld
+        i0 = i0Old
+        delim = delimOld
+        finalized = true
+        if (!hitEnd && i < iN) skip
+        readyToBe = ready
+        if (successBuffer != null) successBuffer += ans else failureBuffer += Yes(ans)
+      }
+      catch { case x if fail is x =>
+        if (successBuffer != null) {
+          val buf = successBuffer.result()
+          var i = 0
+          while (i < buf.length) { failureBuffer += Yes(buf(i)); i += 1 }
+          successBuffer = null
+        }
+        failureBuffer += No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as x value) :: Nil)(buffer) )
+        binaryMode = binaryModeOld
+        reqSep = reqSepOld
+        nSep = nSepOld
+        iN = iNOld
+        i0 = i0Old
+        ready = readyToBe
+        t = tToBe
+        i = iToBe
+        delim = delimOld
+        finalized = true
+        skip
+        readyToBe = ready
+      }
+      finally {
+        if (!finalized) {
+          binaryMode = binaryModeOld
+          reqSep = reqSepOld
+          nSep = nSepOld
+          iN = iNOld
+          i0 = i0Old
+          delim = delimOld
+          t = tToBe
+          i = iToBe
+          ready = readyToBe
+        }
+      }
+      if (!wrapup(e.sub)(fail)) return null
+    }
+    if (successBuffer != null) Yes(successBuffer.result()) else No(failureBuffer.result())
+  }
+  */
 }
 

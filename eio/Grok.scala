@@ -647,9 +647,11 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
 }
 
 sealed trait GrokHop[X <: Grok] extends Hop[GrokError, X] {
+  def isDormant: Boolean
+  def willPanic: Boolean
   def dormant[A](a: => A): A
   def stackless[A](a: => A): A
-  def terminal[A](a: => A): A
+  def panic[A](a: => A): A
 }
 
 final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {
@@ -668,9 +670,12 @@ final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with G
     myAttitude = newAttitude
     try { a } finally { myAttitude = oldAttitude }
   }
+  
+  def isDormant = myAttitude < 0
+  def willPanic = myAttitude > 0
   def dormant[A](a: => A) = withAttitude(-1)(a)
   def stackless[A](a: => A) = withAttitude(0)(a)
-  def terminal[A](a: => A) = withAttitude(1)(a)
+  def panic[A](a: => A) = withAttitude(1)(a)
 }
 
 abstract class Grok {
@@ -1355,8 +1360,8 @@ abstract class Grok {
   
   def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
 
-  def grokEach[A](delimiter: Delimiter)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]]
-  def grokEach[A](delimiter: Char)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]] = grokEach(new CharDelim(delimiter))(parse)(fail, tag)
+  def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
+  def grokEach[A: ClassTag](delimiter: Char)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)
   
   def apply[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
     val hop = new GrokHopImpl[this.type]

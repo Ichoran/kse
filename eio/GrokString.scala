@@ -27,26 +27,27 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     iN = math.min(string.length, math.max(end, i0))
     i = i0
     t = 0
+    ready = 1
     this
   }
   
-  private final def err(what: Int, who: Int) = GrokError(what.toByte, who.toByte, t, i)(string)
+  private final def err(fail: GrokHop[this.type], what: Int, who: Int) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, t, i)(string) }
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {
       val j = delim(string, i, iN, nSep)
-      if (j < 0) { fail.on(err(e.end, id)); return false }
+      if (j < 0) { err(fail, e.end, id); iN = -1-j; return false }
       i = j
       ready = 1
     }
-    if (iN - i < needed) { fail.on(err(e.end, id)); false } else true
+    if (iN - i < needed) { err(fail, e.end, id); false } else true
   }
   private final def wrapup(id: Int)(fail: GrokHop[this.type]): Boolean = {
     if (reqSep) {
       ready = 1
       val j = delim(string, i, iN, nSep)
-      if (j == i) { fail.on(err(e.delim,id)); false }
-      else if (j < 0) { t += 1; true }
+      if (j == i) { err(fail,e.delim,id); false }
+      else if (j < 0) { t += 1; iN = -1-j; true }
       else { i = j; t += 1; true }
     }
     else { ready = 0; t += 1; true }
@@ -65,10 +66,10 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       if (j < i && (i >= iN || { val c = string.charAt(i); c < '0' || c > '9' })) { error = 0; 0 }
       else { j = i; rawDecimalDigitsUnsigned(string, dig+1) }
     }
-    if (error > 0) { fail.on(err(error,id)); return 0 }
-    if (i-j > dig) { fail.on(err(e.range,id)); return 0 }
+    if (error > 0) { err(fail,error,id); return 0 }
+    if (i-j > dig) { err(fail,e.range,id); return 0 }
     val ans = if (negative) -l else l
-    if (ans < lo || ans > hi) { fail.on(err(e.range,id)); return 0 }
+    if (ans < lo || ans > hi) { err(fail,e.range,id); return 0 }
     if (!wrapup(id)(fail)) return 0
     ans
   }
@@ -85,25 +86,25 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       if (j < i && (i >= iN || { val c = string.charAt(i); c < '0' || c > '9' })) { error = 0; 0 }
       else { j = i; rawDecimalDigitsUnsigned(string, 19) }
     }
-    if (error > 0) { fail.on(err(error,id)); return 0 }
+    if (error > 0) { err(fail,error,id); return 0 }
     val ans = 
       if (unsigned) {
         if (i-j < 19 || i >= iN) l
         else {
           val c = string.charAt(i)-'0'
           if (c < 0 || c > 9) l
-          else if (l > GrokNumber.maxULongPrefix || c > GrokNumber.maxULongLastDigit) { fail.on(err(e.range, id)); return 0 }
+          else if (l > GrokNumber.maxULongPrefix || c > GrokNumber.maxULongLastDigit) { err(fail, e.range, id); return 0 }
           else {
             i += 1
-            if (i < iN && { val c = string.charAt(i); c >= '0' && c <= '9'}) { fail.on(err(e.range, id)); return 0 }
+            if (i < iN && { val c = string.charAt(i); c >= '0' && c <= '9'}) { err(fail, e.range, id); return 0 }
             l*10 + c
           }
         }
       }
       else {
-        if (i-j == 19 && i < iN && { val c = string.charAt(i); c >= '0' && c <= '9'}) { fail.on(err(e.range, id)); return 0 }
+        if (i-j == 19 && i < iN && { val c = string.charAt(i); c >= '0' && c <= '9'}) { err(fail, e.range, id); return 0 }
         val x = if (negative) -l else l
-        if (x != 0 && (x < 0) != negative) { fail.on(err(e.range,id)); return 0 }
+        if (x != 0 && (x < 0) != negative) { err(fail, e.range,id); return 0 }
         x
       }
     if (!wrapup(id)(fail)) return 0
@@ -117,8 +118,8 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       if (j < i && (i >= iN || { val c = string.charAt(i); c < '0' || (c > '9' && ((c&0xDF)<'A' || (c&(0xDF))>'F')) })) { error = 0; 0 }
       else { j = i; rawHexidecimalDigits(string, dig+1) }
     }
-    if (error > 0) { fail.on(err(error,id)); return 0 }
-    if (i-j > dig) { fail.on(err(e.range,id)); return 0 }
+    if (error > 0) { err(fail,error,id); return 0 }
+    if (i-j > dig) { err(fail,e.range,id); return 0 }
     if (!wrapup(id)(fail)) return 0
     ans
   }
@@ -126,20 +127,20 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     error = 0
     var j = 0
     while (j < lowered.length) {
-      if (i >= iN) { fail.on(err(e.end, id)); return }
-      if (lowered.charAt(j) != (string.charAt(i) | 0x20)) { fail.on(err(e.wrong, id)); return }
+      if (i >= iN) { err(fail, e.end, id); return }
+      if (lowered.charAt(j) != (string.charAt(i) | 0x20)) { err(fail, e.wrong, id); return }
       i += 1; j += 1
     }
     ready = 0
   }
   
-  final def customError = err(e.wrong, e.custom)
+  final def customError = GrokError(e.wrong.toByte, e.custom.toByte, t, i)(string)
   
   final def position = {
     if (ready == 0) {
       ready = 1
       val j = delim(string, i, iN, nSep)
-      i = if (j < 0) iN else j
+      i = if (j < 0) { iN = -1-j; iN } else j
     }
     i.toLong
   }
@@ -147,7 +148,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (ready == 0) {
       ready = 1
       val j = delim(string, i, iN, nSep)
-      i = if (j < 0) iN else j
+      i = if (j < 0) { iN = -1-j; iN } else j
     }
     i >= iN
   }
@@ -155,7 +156,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (ready != 2 && i < iN) {
       ready = 2
       val j = delim(string, i, iN, Int.MaxValue)
-      i = if (j < 0) iN else j
+      i = if (j < 0) { iN = -1-j; iN } else j
     }
     this
   }
@@ -163,7 +164,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     error = 0
     val j = (if (ready != 0) delim.tok_(string, i, iN, 0) else delim._tok(string, i, iN, nSep)).inLong.i1
     ready = 0
-    if (j < 0) { fail.on(err(e.end, e.tok)); return this }
+    if (j < 0) { err(fail, e.end, e.tok); iN = -1-j; return this }
     t += 1
     i = j
     this
@@ -180,7 +181,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     val ans = 
       if (c == 'T') { matchAsciiInsensitive("true", e.Z)(fail); true }
       else if (c == 'F') { matchAsciiInsensitive("false", e.Z)(fail); false }
-      else { fail.on(err(e.wrong, e.Z)); return false }
+      else { err(fail, e.wrong, e.Z); return false }
     if (!wrapup(e.Z)(fail)) return false
     ans
   }
@@ -206,19 +207,19 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         false
       case 'O' =>
         i += 1
-        if (i >= iN) { fail.on(err(e.end, e.aZ)); return false }
+        if (i >= iN) { err(fail, e.end, e.aZ); return false }
         val c = string.charAt(i) & 0xDF
         if (c == 'N') { i += 1; true }
         else if (c == 'F') {
           i += 1
-          if (i >= iN) { fail.on(err(e.end, e.aZ)); return false }
-          if ((string.charAt(i) & 0xDF) != 'F') { fail.on(err(e.wrong, e.aZ)); return false }
+          if (i >= iN) { err(fail, e.end, e.aZ); return false }
+          if ((string.charAt(i) & 0xDF) != 'F') { err(fail, e.wrong, e.aZ); return false }
           i += 1
           false
         }
-        else { fail.on(err(e.wrong, e.aZ)); return false }
+        else { err(fail, e.wrong, e.aZ); return false }
       case _ =>
-        fail.on(err(e.wrong, e.aZ)); return false
+        err(fail, e.wrong, e.aZ); return false
     }
     if (!wrapup(e.aZ)(fail)) return false
     ans
@@ -243,10 +244,10 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (c == '-') I(fail)
     else if (c == '+') {
       i += 1
-      if (i+1 >= iN) { fail.on(err(e.end, e.aI)); return 0 }
+      if (i+1 >= iN) { err(fail, e.end, e.aI); return 0 }
       val c = string.charAt(i)
       if (c >= '0' && c <= '9') I(fail)
-      else { fail.on(err(e.wrong, e.aI)); return 0 }
+      else { err(fail, e.wrong, e.aI); return 0 }
     }
     else if (c >= '0' && c <= '9') {
       if (c == '0' && i+2 < iN && (string.charAt(i+1)|0x20)=='x' && { val c = string.charAt(i+2) | 0x20; (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') }) {
@@ -255,7 +256,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       }
       else uI(fail)
     }
-    else { fail.on(err(e.wrong, e.aI)); return 0 }
+    else { err(fail, e.wrong, e.aI); return 0 }
   }
   final def L(implicit fail: GrokHop[this.type]): Long = longNumber(false, e.L)(fail)
   final def uL(implicit fail: GrokHop[this.type]): Long = longNumber(true, e.L)(fail)
@@ -266,29 +267,29 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (c == '-') L(fail)
     else if (c == '+') {
       i += 1
-      if (i+1 >= iN) { fail.on(err(e.end, e.aL)); return 0 }
+      if (i+1 >= iN) { err(fail, e.end, e.aL); return 0 }
       val c = string.charAt(i)
       if (c >= '0' && c <= '9') L(fail)
-      else { fail.on(err(e.wrong, e.aL)); return 0 }
+      else { err(fail, e.wrong, e.aL); return 0 }
     }
     else if (c >= '0' && c <= '9') {
       if (c == '0' && i+1 < iN && (string.charAt(i+1)|0x20)=='x') {
-        if (i+2 >= iN) { fail.on(err(e.end, e.aL)); return 0 }
+        if (i+2 >= iN) { err(fail, e.end, e.aL); return 0 }
         i += 2
         xL(fail)
       }
       else uL(fail)
     }
-    else { fail.on(err(e.wrong, e.aI)); return 0 }
+    else { err(fail, e.wrong, e.aI); return 0 }
   }
   final def F(implicit fail: GrokHop[this.type]): Float = D(fail).toFloat
-  final def xF(implicit fail: GrokHop[this.type]): Float = { fail(err(e.missing, e.xF)); 0 }
+  final def xF(implicit fail: GrokHop[this.type]): Float = { err(fail, e.missing, e.xF); tok; 0 }
   final def D(implicit fail: GrokHop[this.type]): Double = {
     import GrokNumber._
     if (!prepare(1, e.D)(fail)) return parseErrorNaN
     val iOld = i
     val j = rawParseDoubleDigits(string, '.')
-    if (error > 0) { ready = 0; fail(err(error, e.D)); return parseErrorNaN }
+    if (error > 0) { ready = 0; err(fail, error, e.D); return parseErrorNaN }
     else {
       ready = 0
       val ans = error match {
@@ -299,18 +300,18 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
           catch { case _: NumberFormatException => error = e.wrong.toByte; parseErrorNaN }
         case _ => java.lang.Double.longBitsToDouble(j)
       }
-      if (error > 0) { fail(err(error, e.D)); return parseErrorNaN }
+      if (error > 0) { err(fail, error, e.D); return parseErrorNaN }
       error = 0
       if (!wrapup(e.D)(fail)) return parseErrorNaN
       ans
     }
   }
-  final def xD(implicit fail: GrokHop[this.type]): Double = { fail(err(e.missing, e.xD)); 0 }
+  final def xD(implicit fail: GrokHop[this.type]): Double = { err(fail, e.missing, e.xD); tok; 0 }
   final def peek(implicit fail: GrokHop[this.type]): Int = {
     if (ready == 0) {
       ready = 1
       val j = delim(string, i, iN, nSep)
-      if (j < 0) return -1
+      if (j < 0) { iN = -1-j; return -1 }
       i = j
     }
     string.charAt(i)
@@ -318,14 +319,14 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
   final def peekTok(implicit fail: GrokHop[this.type]): String = {
     val l = (if (ready != 0) delim.tok_(string, i, iN, 0) else delim._tok(string, i, iN, nSep)).inLong
     val a = l.i0
-    if (a == -1) null
+    if (a < 0) { iN = -1-a; null }
     else if (ready != 0) string.substring(i,a)
     else { i = a; ready = 1; string.substring(a, l.i1) }
   }
   final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
     if (ready == 0) {
       val j = delim(string, i, iN, nSep)
-      i = if (j < 0) iN else j
+      i = if (j < 0) { iN = -1-j; iN } else j
       ready = 1
       if (j < 0) return 0
     }
@@ -369,13 +370,13 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         }
         else {
           var n = (x >> 16) & 0xF
-          if (k+n >= iEnd) { fail.on(err(e.wrong, e.quote)); return null }
+          if (k+n >= iEnd) { err(fail, e.wrong, e.quote); return null }
           var l = 0L
           if ((x & 0x100000) != 0) {
             val iOld = i
             i = k+1
             l = rawHexidecimalDigits(string, k+n)
-            if (error != 0) { fail.on(err(error, e.quote)); return null }
+            if (error != 0) { err(fail, error, e.quote); return null }
             i = iOld
           }
           else while (n > 0) { l = (l << 16) | string.charAt(k+n-1); n -= 1 }
@@ -432,13 +433,13 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       }
       i += 1
     }
-    fail.on(err(e.end, e.quote))
+    err(fail, e.end, e.quote)
     null
   }
   final def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(2, e.quote)(fail)) return null
     val c = string.charAt(i)
-    if (c != left) { fail.on(err(e.wrong, e.quote)); return null }
+    if (c != left) { err(fail, e.wrong, e.quote); return null }
     i += 1
     if (left == right && left == esc) return quotedByDegenerately(left)(fail)
     val iStart = i
@@ -455,7 +456,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       }
       i += 1
     }
-    if (depth != 0) { fail.on(err(e.wrong, e.quote)); return null }
+    if (depth != 0) { err(fail, e.wrong, e.quote); return null }
     if (escies > 0) return quotedByWithEscapes(iStart, i-1, left, right, esc, escaper)(fail)
     val ans = string.substring(iStart,i-1)
     if (!wrapup(e.quote)(fail)) return null
@@ -472,7 +473,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     val a = delim.tok_(string, i, iN, 0).inLong.i0
     val buffer = new Array[Byte](((a - i).toLong*3/4).toInt)
     val n = kse.eio.base64.decodeFromBase64String(string, i, a, buffer, 0, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = i - (n+1); fail.on(err(e.wrong, e.b64)); return null }
+    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); return null }
     i = a
     t += 1
     ready = 0
@@ -482,7 +483,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (!prepare(0, e.tok)(fail)) return -1
     val a = delim.tok_(string, i, iN, 0).inLong.i0
     val n = kse.eio.base64.decodeFromBase64String(string, i, a, target, start, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = i - (n+1); fail.on(err(e.wrong, e.b64)); return -1 }
+    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); return -1 }
     i = a
     t += 1
     ready = 0
@@ -490,7 +491,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
   }
   final def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(1, e.exact)(fail)) return null
-    if (string.charAt(i) != c) { fail.on(err(e.wrong, e.exact)); return this }
+    if (string.charAt(i) != c) { err(fail, e.wrong, e.exact); return this }
     i += 1
     if (!wrapup(e.exact)(fail)) return null
     this
@@ -499,7 +500,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
     while (i < iN && k < s.length && string.charAt(i) == s.charAt(k)) { i += 1; k += 1 }
-    if (k < s.length) { fail.on(err(e.wrong, e.exact)); return this }
+    if (k < s.length) { err(fail, e.wrong, e.exact); return this }
     if (!wrapup(e.exact)(fail)) return null
     this
   }
@@ -515,7 +516,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         else elevateCase(c) == elevateCase(cc)
       }
     }) { i += 1; k += 1 }
-    if (k < s.length) { fail.on(err(e.wrong, e.exact)); return this }
+    if (k < s.length) { err(fail, e.wrong, e.exact); return this }
     if (!wrapup(e.exact)(fail)) return null
     this
   }
@@ -535,7 +536,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       n += 1
     }
     i = a
-    fail.on(err(e.wrong, e.oneOf))
+    err(fail, e.wrong, e.oneOf)
     null
   }
   final def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String = {
@@ -562,7 +563,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       n += 1
     }
     i = a
-    fail.on(err(e.wrong, e.oneOf))
+    err(fail, e.wrong, e.oneOf)
     null
   }
   final def binary(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
@@ -572,7 +573,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       var j = 0
       while (j < n) {
         val c = string.charAt(i)
-        if (c > 255) { fail.on(err(e.wrong, e.bin)); return null }
+        if (c > 255) { err(fail, e.wrong, e.bin); return null }
         buf(j) = c.toByte
         i += 1
         j += 1
@@ -588,7 +589,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     val end = start + n
     while (j < end) {
       val c = string.charAt(i)
-      if (c > 255) { fail.on(err(e.wrong, e.bin)); return this }
+      if (c > 255) { err(fail, e.wrong, e.bin); return this }
       target(j) = c.toByte
       i += 1
       j += 1
@@ -673,7 +674,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         reqSep = reqSepOld
         nSep = nSepOld
         delim = delimOld
-      }  
+      }
       ans.result()
     }
     finally {
@@ -683,7 +684,13 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     }
   }
   
-  def grokEach[A](delimiter: Delimiter)(parse: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Ok[Array[Ok[GrokError,A]], Array[A]] = {
+  def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = {
+    implicit val fail = new GrokHopImpl[this.type]
+    val name = delim match {
+      case _: WhiteDelim => "word "
+      case _: LineDelim => "line "
+      case _ => "entry "
+    }
     var tToBe = t
     var iToBe = i
     var readyToBe = ready
@@ -693,16 +700,17 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     val nSepOld = nSep
     val reqSepOld = reqSep
     var successBuffer = Array.newBuilder[A]
-    lazy val failureBuffer = Array.newBuilder[Ok[GrokError,A]]
-    var hitEnd, finalized = false
-    val delimNew = delimiter.terminatedBy(delim){ x => hitEnd = true; iN = x }
+    lazy val failureBuffer = Array.newBuilder[GrokError]
+    var failures, finalized = false
+    var index = 0
+    val delimNew = delimiter terminatedBy delim
     while (!isEmpty) {
-      if (!prepare(0, e.exact)(fail)) return null
+      index += 1
       try {
-        hitEnd = false
+        if (!prepare(0, e.exact)(fail)) return null
         finalized = false
         delim = delimNew
-        val ans = parse
+        val ans = f(fail)
         tToBe = t
         iToBe = i
         ready = 0
@@ -712,18 +720,15 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         i0 = i0Old
         delim = delimOld
         finalized = true
-        if (!hitEnd && i < iN) skip
+        if (i < iN && delimOld(string, i, iN, 1) == i) skip
+        else { tToBe += 1; ready = 0 }
+        if (!wrapup(e.sub)(fail)) return null
         readyToBe = ready
-        if (successBuffer != null) successBuffer += ans else failureBuffer += Yes(ans)
+        successBuffer += ans
       }
       catch { case x if fail is x =>
-        if (successBuffer != null) {
-          val buf = successBuffer.result()
-          var i = 0
-          while (i < buf.length) { failureBuffer += Yes(buf(i)); i += 1 }
-          successBuffer = null
-        }
-        failureBuffer += No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as x value) :: Nil)(string) )
+        failures = true
+        failureBuffer += GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, name+index, (fail as x value) :: Nil)(string)
         reqSep = reqSepOld
         nSep = nSepOld
         iN = iNOld
@@ -733,7 +738,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
         i = iToBe
         delim = delimOld
         finalized = true
-        skip
+        fail.dormant{ skip }
         readyToBe = ready
       }
       finally {
@@ -748,8 +753,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
           ready = readyToBe
         }
       }
-      if (!wrapup(e.sub)(fail)) return null
     }
-    if (successBuffer != null) Yes(successBuffer.result()) else No(failureBuffer.result())
+    if (!failures) Yes(successBuffer.result()) else No((successBuffer.result(), failureBuffer.result()))
   }
 }
