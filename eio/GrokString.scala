@@ -569,7 +569,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     error = e.wrong
     null
   }
-  final def binary(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
+  final def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
     if (!prepare(n, e.bin)(fail)) return null
     val ans = {
       val buf = new Array[Byte](n)
@@ -586,7 +586,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     if (!wrapup(e.bin)(fail)) return null
     ans
   }
-  final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
+  final def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(n, e.bin)(fail)) return null
     var j = start
     val end = start + n

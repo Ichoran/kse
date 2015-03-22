@@ -14,13 +14,17 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
   import kse.eio.{GrokErrorCodes => e}
 
   private[this] var t = 0
-  private[this] var binaryMode = false
+  private[this] var binaryMode = java.nio.ByteOrder.nativeOrder match { case java.nio.ByteOrder.BIG_ENDIAN => 2; case _ => 1 }
+  
   i0 = math.max(0, math.min(initialStart, buffer.length))
   iN = math.min(buffer.length, math.max(initialEnd, i0))
   delim = initialDelimiter
   nSep = math.max(1, initialnSep)
   reqSep = initialReqSep
   ready = 1
+  
+  def binary(mode: Boolean): this.type = { binaryMode = if (mode) binaryMode | 0x80000000 else binaryMode & 0x7FFFFFFF; this }
+  def bigEnd(mode: Boolean): this.type = { binaryMode = if (mode) (binaryMode | 2) & 0xFFFFFFFE else (binaryMode | 1) & 0xFFFFFFFD; this }
   
   def input(newInput: Array[Byte], start: Int = 0, end: Int = Int.MaxValue): this.type = {
     buffer = newInput
@@ -576,7 +580,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     error = e.wrong
     null
   }
-  final def binary(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
+  final def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
     if (!prepare(n, e.bin)(fail)) return null
     val ans = {
       val buf = new Array[Byte](n)
@@ -591,7 +595,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     if (!wrapup(e.bin)(fail)) return null
     ans
   }
-  final def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
+  final def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(n, e.bin)(fail)) return null
     var j = start
     val end = start + n
@@ -742,8 +746,6 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     val index = i + distance
     if (index < i0 || index >= iN) -1 else buffer(i)    
   }
-  
-  def filterMap[A,B](f: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B] = ???
   
   
   def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A = {

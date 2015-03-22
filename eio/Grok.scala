@@ -1351,8 +1351,8 @@ abstract class Grok {
   def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type
   def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String
   def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String
-  def binary(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
-  def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
+  def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
+  def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
 
   def nonEmpty: Boolean
   def trySkip: Boolean
