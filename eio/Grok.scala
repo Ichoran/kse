@@ -1373,7 +1373,7 @@ abstract class Grok {
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
   
   def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
-  def filterMap[A,B](f: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
+  def filterMap[A,B](parse: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
 
   def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
   def grokEach[A: ClassTag](delimiter: Char)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)

@@ -839,6 +839,69 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
   }
   
+  def filterMap[A,B](parse: => A)(p: A => Boolean)(f: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B] = {
+    val bs = Array.newBuilder[B]
+    var iOld = i
+    var tOld = t
+    var readyOld = ready
+    val i0Old = i0
+    val iNOld = iN
+    val delimOld = delim
+    val nSepOld = nSep
+    val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
+    val bufferOld = buffer
+    try {
+      var pos = position - 1
+      while (nonEmpty && pos != position) {
+        iOld = i
+        tOld = t
+        readyOld = ready
+        val a = parse
+        binaryMode = binaryModeOld
+        reqSep = reqSepOld
+        nSep = nSepOld
+        delim = delimOld
+        iN = iNOld
+        i0 = i0Old
+        if (p(a)) {
+          iOld = i
+          tOld = t
+          bs += f(a)
+          if (buffer ne bufferOld) {
+            i = iOld
+            t = tOld
+            ready = readyOld
+            buffer = bufferOld
+          }
+          binaryMode = binaryModeOld
+          reqSep = reqSepOld
+          nSep = nSepOld
+          delim = delimOld
+          iN = iNOld
+          i0 = i0Old
+        }
+      }
+    }
+    catch { case t if fail is t => val sub = fail as t value; fail( GrokError(e.delim.toByte, e.alt.toByte, tOld, iOld, null, sub :: Nil)(bufferOld) ) }
+    finally {
+      if (buffer ne bufferOld) {
+        i = iOld
+        t = tOld
+        ready = readyOld
+        buffer = bufferOld
+      }
+      binaryMode = binaryModeOld
+      reqSep = reqSepOld
+      nSep = nSepOld
+      delim = delimOld
+      iN = iNOld
+      i0 = i0Old
+    }
+    bs.result()
+  }
+  
+
   def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = {
     implicit val fail = new GrokHopImpl[this.type]
     val name = delim match {
