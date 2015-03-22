@@ -1353,12 +1353,27 @@ abstract class Grok {
   def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String
   def binary(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
   def binaryIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
-  
+
+  def nonEmpty: Boolean
+  def trySkip: Boolean
+  def trySkip(n: Int): Int
+  def oZ: Option[Boolean]
+  def oC: Option[Char]
+  def oI: Option[Int]
+  def oL: Option[Long]
+  def oD: Option[Double]
+  def oTok: Option[String]
+  def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String]
+  def tryExact(c: Char): Boolean
+  def tryExact(s: String): Boolean
+  def peekAt(distance: Int): Int
+
   def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
   
   def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
+  def filterMap[A,B](f: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
 
   def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
   def grokEach[A: ClassTag](delimiter: Char)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)
