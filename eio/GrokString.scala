@@ -616,7 +616,7 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
   }
   
   final def trySkip(n: Int): Int = {
-    var k = 0
+    var k = n
     while (k < 0 && trySkip) k += 1
     k
   }
@@ -736,8 +736,8 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
       if (j < 0) { iN = -1-j; return -1 }
       i = j
     }
-    val index = i + distance
-    if (index < i0 || index >= iN) -1 else string.charAt(i)    
+    val index = i + distance.toLong
+    if (index < i0 || index >= iN) -1 else string.charAt(index.toInt)    
   }
   
 
