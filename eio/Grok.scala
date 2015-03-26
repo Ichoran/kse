@@ -678,7 +678,7 @@ final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with G
   def panic[A](a: => A) = withAttitude(1)(a)
 }
 
-trait Grok {
+abstract class Grok {
   def delimit(required: Boolean): this.type
   def delimit(required: Boolean, count: Int): this.type
   def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type
@@ -766,7 +766,7 @@ trait Grok {
   
 }
 
-private[eio] abstract class AbstractGrok extends Grok {
+private[eio] abstract class GrokWorker extends Grok {
   import kse.eio.{GrokErrorCodes => e}
   protected var i = 0
   protected var i0 = 0

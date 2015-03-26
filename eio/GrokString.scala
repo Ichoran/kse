@@ -11,7 +11,7 @@ import kse.flow._
 import kse.coll.packed._
 
 final class GrokString(private[this] var string: String, initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
-extends AbstractGrok {
+extends GrokWorker {
   import kse.eio.{GrokErrorCodes => e}
 
   private[this] var t = 0
