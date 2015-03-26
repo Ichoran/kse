@@ -10,7 +10,8 @@ import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
-final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false) extends Grok {
+final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
+extends AbstractGrok {
   import kse.eio.{GrokErrorCodes => e}
 
   private[this] var t = 0
@@ -37,7 +38,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
   }
   
   // Important to keep everything after this point synced with GrokString.  No good way to do this right now, alas.
-  private final def err(fail: GrokHop[this.type], what: Int, who: Int) { if (fail != null) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, t, i)(buffer) } }
+  private def err(fail: GrokHop[this.type], what: Int, who: Int) { if (fail != null) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, t, i)(buffer) } }
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {
@@ -157,39 +158,9 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     ready = 0
   }
 
-  final def customError = GrokError(e.wrong.toByte, e.custom.toByte, t, i)(buffer)
+  def customError = GrokError(e.wrong.toByte, e.custom.toByte, t, i)(buffer)
   
-  final def position = {
-    if (binaryMode < 0) {
-      if (ready == 0) {
-        ready = 1
-        val j = delim(buffer, i, iN, nSep)
-        i = if (j < 0) { iN = -1-j; iN } else j
-      }
-      i.toLong
-    }
-    else i
-  }
-  final def isEmpty(implicit fail: GrokHop[this.type]) = {
-    if (binaryMode < 0) {
-      if (ready == 0) {
-        ready = 1
-        val j = delim(buffer, i, iN, nSep)
-        i = if (j < 0) { iN = -1-j; iN } else j
-      }
-      i >= iN
-    }
-    else i < iN
-  }
-  final def trim(implicit fail: GrokHop[this.type]): this.type = {
-    if (ready != 2 && i < iN && binaryMode < 0) {
-      ready = 2
-      val j = delim(buffer, i, iN, Int.MaxValue)
-      i = if (j < 0) { iN = -1-j; iN } else j
-    }
-    this
-  }
-  final def skip(implicit fail: GrokHop[this.type]): this.type = {
+  def skip(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
     if (binaryMode < 0) {
       val j = (if (ready != 0) delim.tok_(buffer, i, iN, 0) else delim._tok(buffer, i, iN, nSep)).inLong.i1
@@ -204,7 +175,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
     this
   }
-  final def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type = {
+  def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
     if (binaryMode < 0) {
       var k = n
@@ -216,7 +187,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
     this
   }
-  final def Z(implicit fail: GrokHop[this.type]): Boolean = {
+  def Z(implicit fail: GrokHop[this.type]): Boolean = {
     if (binaryMode < 0) {
       if (!prepare(4, e.Z)(fail)) return false
       var c = buffer(i)&0xDF
@@ -234,7 +205,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       ans
     }
   }
-  final def aZ(implicit fail: GrokHop[this.type]): Boolean =
+  def aZ(implicit fail: GrokHop[this.type]): Boolean =
     if (binaryMode < 0) {
       if (!prepare(1, e.aZ)(fail)) return false
       val ans = (buffer(i)&0xDF) match {
@@ -275,7 +246,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       ans
     }
     else Z
-  final def B(implicit fail: GrokHop[this.type]): Byte = 
+  def B(implicit fail: GrokHop[this.type]): Byte = 
     if (binaryMode < 0) smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
     else {
       if (i >= iN) { err(fail, e.end, e.B); error = e.end; 0 }
@@ -283,16 +254,16 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       i += 1
       ans
     }
-  final def uB(implicit fail: GrokHop[this.type]): Byte =
+  def uB(implicit fail: GrokHop[this.type]): Byte =
     if (binaryMode < 0) smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
     else B
-  final def S(implicit fail: GrokHop[this.type]): Short = 
+  def S(implicit fail: GrokHop[this.type]): Short = 
    if (binaryMode < 0) smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
    else binaryNumber(2, e.S)(fail).toShort
-  final def uS(implicit fail: GrokHop[this.type]): Short =
+  def uS(implicit fail: GrokHop[this.type]): Short =
     if (binaryMode < 0) smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
     else binaryNumber(2, e.S)(fail).toShort
-  final def C(implicit fail: GrokHop[this.type]): Char = 
+  def C(implicit fail: GrokHop[this.type]): Char = 
     if (binaryMode < 0) {
       if (!prepare(1, e.C)(fail)) return 0
       val ans = buffer(i)
@@ -301,16 +272,16 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       ans.toChar
     }
     else ???
-  final def I(implicit fail: GrokHop[this.type]): Int =
+  def I(implicit fail: GrokHop[this.type]): Int =
     if (binaryMode < 0) smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
     else binaryNumber(4, e.I)(fail).toInt
-  final def uI(implicit fail: GrokHop[this.type]): Int =
+  def uI(implicit fail: GrokHop[this.type]): Int =
     if (binaryMode < 0) smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
     else binaryNumber(4, e.I)(fail).toInt
-  final def xI(implicit fail: GrokHop[this.type]): Int =
+  def xI(implicit fail: GrokHop[this.type]): Int =
     if (binaryMode < 0) hexidecimalNumber(8, e.xI)(fail).toInt
     else binaryNumber(4, e.I)(fail).toInt
-  final def aI(implicit fail: GrokHop[this.type]): Int =
+  def aI(implicit fail: GrokHop[this.type]): Int =
     if (binaryMode < 0) {
       if (!prepare(1, e.aI)(fail)) return 0
       val c = buffer(i)
@@ -332,16 +303,16 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
     }
     else binaryNumber(4, e.I)(fail).toInt
-  final def L(implicit fail: GrokHop[this.type]): Long =
+  def L(implicit fail: GrokHop[this.type]): Long =
     if (binaryMode < 0) longNumber(false, e.L)(fail)
     else binaryNumber(8, e.L)(fail)
-  final def uL(implicit fail: GrokHop[this.type]): Long =
+  def uL(implicit fail: GrokHop[this.type]): Long =
     if (binaryMode < 0) longNumber(true, e.L)(fail)
     else binaryNumber(8, e.L)(fail)
-  final def xL(implicit fail: GrokHop[this.type]): Long =
+  def xL(implicit fail: GrokHop[this.type]): Long =
     if (binaryMode < 0) hexidecimalNumber(16, e.xI)(fail)
     else binaryNumber(8, e.L)(fail)
-  final def aL(implicit fail: GrokHop[this.type]): Long = 
+  def aL(implicit fail: GrokHop[this.type]): Long = 
     if (binaryMode < 0) {
       if (!prepare(1, e.aL)(fail)) return 0
       val c = buffer(i)
@@ -364,13 +335,13 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
     }
     else binaryNumber(8, e.L)(fail)
-  final def F(implicit fail: GrokHop[this.type]): Float =
+  def F(implicit fail: GrokHop[this.type]): Float =
     if (binaryMode < 0) D(fail).toFloat
     else java.lang.Float.intBitsToFloat(binaryNumber(4, e.F)(fail).toInt)
-  final def xF(implicit fail: GrokHop[this.type]): Float =
+  def xF(implicit fail: GrokHop[this.type]): Float =
     if (binaryMode < 0) { err(fail, e.missing, e.xF); error = e.missing; tok; 0 }
     else java.lang.Float.intBitsToFloat(binaryNumber(4, e.F)(fail).toInt)
-  final def D(implicit fail: GrokHop[this.type]): Double = 
+  def D(implicit fail: GrokHop[this.type]): Double = 
     if (binaryMode < 0) {
       import GrokNumber._
       if (!prepare(1, e.D)(fail)) return parseErrorNaN
@@ -394,10 +365,10 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       }
     }
     else java.lang.Double.longBitsToDouble(binaryNumber(8, e.D)(fail))
-  final def xD(implicit fail: GrokHop[this.type]): Double =
+  def xD(implicit fail: GrokHop[this.type]): Double =
     if (binaryMode < 0) { err(fail, e.missing, e.xD); error = e.missing; tok; 0 }
     else java.lang.Double.longBitsToDouble(binaryNumber(8, e.D)(fail))
-  final def peek(implicit fail: GrokHop[this.type]): Int =
+  def peek(implicit fail: GrokHop[this.type]): Int =
     if (binaryMode < 0) {
       if (ready == 0) {
         ready = 1
@@ -409,14 +380,14 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
     else if (i < iN) buffer(i)
     else -1
-  final def peekTok(implicit fail: GrokHop[this.type]): String = {
+  def peekTok(implicit fail: GrokHop[this.type]): String = {
     val l = (if (ready != 0) delim.tok_(buffer, i, iN, 0) else delim._tok(buffer, i, iN, nSep)).inLong
     val a = l.i0
     if (a < 0) { iN = -1-a; null }
     else if (ready != 0) new String(buffer, i, a-i)
     else { i = a; ready = 1; new String(buffer, a, l.i1 - a) }
   }
-  final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
+  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
     if (ready == 0 && binaryMode < 0) {
       val j = delim(buffer, i, iN, nSep)
       i = if (j < 0) { iN = -1-j; iN } else j
@@ -433,7 +404,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
     k - start
   }
-  final def tok(implicit fail: GrokHop[this.type]): String = {
+  def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val a = delim.tok_(buffer, i, iN, 0).inLong.i0
     val ans = new String(buffer, i, a-i)
@@ -442,7 +413,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     i = a
     ans
   }
-  final def quoted(implicit fail: GrokHop[this.type]): String = quotedBy('"', '"', '\\')(fail)
+  def quoted(implicit fail: GrokHop[this.type]): String = quotedBy('"', '"', '\\')(fail)
   private def quotedByWithEscapes(iStart: Int, iEnd: Int, left: Byte, right: Byte, esc: Byte, escaper: GrokEscape)(implicit fail: GrokHop[this.type]): String = {
     val buf = new Array[Char](iEnd - iStart)
     var j = 0
@@ -528,7 +499,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     error = e.end
     null
   }
-  final def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
+  def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(2, e.quote)(fail)) return null
     val c = buffer(i)
     val bleft = left.toByte
@@ -559,13 +530,13 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     if (!wrapup(e.quote)(fail)) return null
     ans
   }
-  final def qtok(implicit fail: GrokHop[this.type]): String = qtokBy('"', '"', '\\')(fail)
-  final def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
+  def qtok(implicit fail: GrokHop[this.type]): String = qtokBy('"', '"', '\\')(fail)
+  def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.quote)(fail)) return null
     val c = buffer(i)
     if (c != left) tok(fail) else quotedBy(left, right, esc, escaper)(fail)
   }
-  final def base64(implicit fail: GrokHop[this.type]): Array[Byte] = {
+  def base64(implicit fail: GrokHop[this.type]): Array[Byte] = {
     if (!prepare(0, e.tok)(fail)) return null
     val a = delim.tok_(buffer, i, iN, 0).inLong.i0
     val buf = new Array[Byte](((a - i).toLong*3/4).toInt)
@@ -576,7 +547,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     ready = 0
     if (n < buffer.length) java.util.Arrays.copyOf(buffer, n) else buffer
   }
-  final def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
+  def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
     if (!prepare(0, e.tok)(fail)) return -1
     val a = delim.tok_(buffer, i, iN, 0).inLong.i0
     val n = kse.eio.base64.decodeFromBase64(buffer, i, a, target, start, kse.eio.base64.Url64.decoder)
@@ -586,7 +557,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     ready = 0
     n
   }
-  final def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = 
+  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = 
     if (binaryMode < 0) {
       if (!prepare(1, e.exact)(fail)) return null
       if (buffer(i) != c) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
@@ -595,7 +566,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
       this
     }
     else ???
-  final def exact(s: String)(implicit fail: GrokHop[this.type]): this.type = {
+  def exact(s: String)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
     while (i < iN && k < s.length && buffer(i) == s.charAt(k)) { i += 1; k += 1 }
@@ -603,7 +574,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     if (!wrapup(e.exact)(fail)) return null
     this
   }
-  final def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type = {
+  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type = {
     import GrokCharacter._
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
@@ -620,7 +591,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     if (!wrapup(e.exact)(fail)) return null
     this
   }
-  final def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String = {
+  def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.exact)(fail)) return null
     val a = delim.tok_(buffer, i, iN, 0).inLong.i0
     ready = 0
@@ -640,7 +611,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     error = e.wrong
     null
   }
-  final def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String = {
+  def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String = {
     import GrokCharacter._
     if (!prepare(0, e.exact)(fail)) return null
     val a = delim.tok_(buffer, i, iN, 0).inLong.i0
@@ -669,7 +640,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     error = e.wrong
     null
   }
-  final def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
+  def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
     if (binaryMode < 0 && !prepare(n, e.bin)(fail)) return null
     val ans = {
       val buf = new Array[Byte](n)
@@ -684,7 +655,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     if (!wrapup(e.bin)(fail)) return null
     ans
   }
-  final def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
+  def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
     if (binaryMode < 0 && !prepare(n, e.bin)(fail)) return null
     var j = start
     val end = start + n
@@ -697,10 +668,35 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     this
   }
   
+  private def localPosition = {
+    if (binaryMode < 0 && ready == 0) {
+      ready = 1
+      val j = delim(buffer, i, iN, nSep)
+      i = if (j < 0) { iN = -1-j; iN } else j
+    }
+    i
+  }
+  
+  def position = localPosition.toLong
+  
+  def isEmpty = position >= iN
+  
+  def nonEmpty = position < iN
+  
+  def trim: Int = {
+    if (ready != 2 && i < iN && binaryMode < 0) {
+      ready = 2
+      val j = delim(buffer, i, iN, Int.MaxValue)
+      val iOld = i
+      i = if (j < 0) { iN = -1-j; iN } else j
+      i - iOld
+    }
+    0
+  }
+  def trimmed: this.type = { trim; this }
+  
 
-  final def nonEmpty: Boolean = !isEmpty(null)
-
-  final def trySkip: Boolean = 
+  def trySkip: Boolean = 
     if (binaryMode < 0) {
       val j = (if (ready != 0) delim.tok_(buffer, i, iN, 0) else delim._tok(buffer, i, iN, nSep)).inLong.i1
       if (j < 0) { iN = -1-j; ready = 1; false }
@@ -717,7 +713,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
     else false
   
-  final def trySkip(n: Int): Int = 
+  def trySkip(n: Int): Int = 
     if (binaryMode < 0) {
       var k = n
       while (k < 0 && trySkip) k += 1
@@ -731,7 +727,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     }
       
   
-  final def oZ: Option[Boolean] = {
+  def oZ: Option[Boolean] = {
     val iStart = i
     val tStart = t
     val b = aZ(null)
@@ -743,7 +739,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else Some(b)
   }
   
-  final def oC: Option[Char] = {
+  def oC: Option[Char] = {
     val iStart = i
     val tStart = t
     val c = C(null)
@@ -755,7 +751,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else Some(c)
   }
   
-  final def oI: Option[Int] = {
+  def oI: Option[Int] = {
     val iStart = i
     val tStart = t
     val n = aI(null)
@@ -767,7 +763,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else Some(n)
   }
   
-  final def oL: Option[Long] = {
+  def oL: Option[Long] = {
     val iStart = i
     val tStart = t
     val l = aL(null)
@@ -779,7 +775,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else Some(l)
   }
   
-  final def oD: Option[Double] = {
+  def oD: Option[Double] = {
     val iStart = i
     val tStart = t
     val d = D(null)
@@ -791,7 +787,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else Some(d)
   }
   
-  final def oTok: Option[String] = {
+  def oTok: Option[String] = {
     val iStart = i
     val tStart = t
     val tk = tok(null)
@@ -803,7 +799,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else Some(tk)
   }
   
-  final def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String] = {
+  def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String] = {
     val iStart = i
     val tStart = t
     val qt = quotedBy(left, right, esc, escaper)(null)
@@ -815,7 +811,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else Some(qt)
   }
   
-  final def tryExact(c: Char): Boolean = {
+  def tryExact(c: Char): Boolean = {
     val iStart = i
     val tStart = t
     val u = exact(c)(null)
@@ -827,7 +823,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else true
   }
   
-  final def tryExact(s: String): Boolean = {
+  def tryExact(s: String): Boolean = {
     val iStart = i
     val tStart = t
     val u = exact(s)(null)
@@ -839,7 +835,7 @@ final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int,
     else true
   }
   
-  final def peekAt(distance: Int): Int = 
+  def peekAt(distance: Int): Int = 
     if (binaryMode < 0) {
       if (ready == 0) {
         ready = 1

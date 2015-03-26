@@ -25,6 +25,8 @@ Kse.jar : \
   kse/eio/Delimiter.class \
   kse/eio/Grok.class \
   kse/eio/GrokString.class \
+  kse/eio/GrokBuffer.class \
+  kse/eio/GrokBufferable.class \
   kse/eio/package.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
@@ -77,8 +79,9 @@ kse/eio/Grok.class : \
   kse/eio/Delimiter.class \
   eio/Grok.scala \
   eio/GrokString.scala \
-  eio/GrokBuffer.scala
-	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala
+  eio/GrokBuffer.scala \
+  eio/GrokBufferable.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBufferable.scala
 
 kse/eio/GrokString.class : \
   kse/flow/Ok.class \
@@ -86,8 +89,9 @@ kse/eio/GrokString.class : \
   kse/eio/Delimiter.class \
   eio/Grok.scala \
   eio/GrokString.scala \
-  eio/GrokBuffer.scala
-	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala
+  eio/GrokBuffer.scala \
+  eio/GrokBufferable.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBufferable.scala
 
 kse/eio/GrokBuffer.class : \
   kse/flow/Ok.class \
@@ -95,8 +99,9 @@ kse/eio/GrokBuffer.class : \
   kse/eio/Delimiter.class \
   eio/Grok.scala \
   eio/GrokString.scala \
-  eio/GrokBuffer.scala
-	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala
+  eio/GrokBuffer.scala \
+  eio/GrokBufferable.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBufferable.scala
 
 kse/eio/package.class : \
   kse/flow/Ok.class \

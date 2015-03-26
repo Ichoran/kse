@@ -10,7 +10,8 @@ import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
-final class GrokString(private[this] var string: String, initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false) extends Grok {
+final class GrokString(private[this] var string: String, initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
+extends AbstractGrok {
   import kse.eio.{GrokErrorCodes => e}
 
   private[this] var t = 0
@@ -136,31 +137,6 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
   
   final def customError = GrokError(e.wrong.toByte, e.custom.toByte, t, i)(string)
   
-  final def position = {
-    if (ready == 0) {
-      ready = 1
-      val j = delim(string, i, iN, nSep)
-      i = if (j < 0) { iN = -1-j; iN } else j
-    }
-    i.toLong
-  }
-  final def isEmpty(implicit fail: GrokHop[this.type]) = {
-    // Warning: nonEmpty calls this code with the fail parameter as null!
-    if (ready == 0) {
-      ready = 1
-      val j = delim(string, i, iN, nSep)
-      i = if (j < 0) { iN = -1-j; iN } else j
-    }
-    i >= iN
-  }
-  final def trim(implicit fail: GrokHop[this.type]): this.type = {
-    if (ready != 2 && i < iN) {
-      ready = 2
-      val j = delim(string, i, iN, Int.MaxValue)
-      i = if (j < 0) { iN = -1-j; iN } else j
-    }
-    this
-  }
   final def skip(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
     val j = (if (ready != 0) delim.tok_(string, i, iN, 0) else delim._tok(string, i, iN, nSep)).inLong.i1
@@ -601,8 +577,32 @@ final class GrokString(private[this] var string: String, initialStart: Int, init
     this
   }
   
+  private final def localPosition = {
+    if (ready == 0) {
+      ready = 1
+      val j = delim(string, i, iN, nSep)
+      i = if (j < 0) { iN = -1-j; iN } else j
+    }
+    i
+  }
   
-  final def nonEmpty: Boolean = !isEmpty(null)
+  final def position = localPosition.toLong
+  
+  final def isEmpty = localPosition >= iN
+  
+  final def nonEmpty = localPosition < iN
+  
+  final def trim: Int = {
+    if (ready != 2 && i < iN) {
+      ready = 2
+      val j = delim(string, i, iN, Int.MaxValue)
+      val iOld = i
+      i = if (j < 0) { iN = -1-j; iN } else j
+      i - iOld
+    }
+    0
+  }
+  final def trimmed: this.type = { trim; this }
 
   final def trySkip: Boolean = {
     val j = (if (ready != 0) delim.tok_(string, i, iN, 0) else delim._tok(string, i, iN, nSep)).inLong.i1
