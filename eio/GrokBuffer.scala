@@ -17,6 +17,8 @@ extends Grok {
   private[this] var t = 0
   private[this] var binaryMode = java.nio.ByteOrder.nativeOrder match { case java.nio.ByteOrder.BIG_ENDIAN => 2; case _ => 1 }
   
+  private[eio] def inspectBinaryMode = binaryMode
+  
   i0 = math.max(0, math.min(initialStart, buffer.length))
   iN = math.min(buffer.length, math.max(initialEnd, i0))
   delim = initialDelimiter
