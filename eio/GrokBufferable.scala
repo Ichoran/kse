@@ -10,7 +10,36 @@ import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
-final class GrokBufferable {}
+final class GrokBufferable/*(more: (Int, Array[Byte], Int) => Int, goto: (Long => Long) => Boolean, initialStart: Long, initialEnd: Long, maxBufferSize: Int, knownSize: Option[Long])
+extends Grok {
+  private[this] var myPosition = 0L
+  private[this] var myStart = math.max(0, knownSize match { case Some(x) => math.min(initialStart, x); case _ => initialStart })
+  private[this] var myEnd = math.max(myStart, knownSize match { case Some(x) => math.min(initialEnd, x); case _ => initialEnd })
+  private[this] var buffer = new Array[Byte](
+    if (knownSize.isEmpty) GrokBufferable.InitialBufferSize
+    else math.max(GrokBufferable.InitialBufferSize, math.min(maxBufferSize, myEnd - myStart)).toInt
+  )
+  if (myStart > 0 && myEnd > myStart) {
+    var skip = myStart
+    while (skip > 0) {
+      val n = more( (math.min(0x40000000, skip), null, -1) )
+      if (n <= 0) skip = 0
+      else {
+        myPosition += n
+        skip -= n
+      }
+    }
+  }
+  if (myPosition == myStart) {
+    val n = more(math.min(buffer.length, myEnd - myStart).toInt, buffer, 0)
+    if (n > 0) iN = n
+  }
+  delim = Delimiter.zero
+  nSep = 1
+  reqSep = false
+  private[this] val myGrok = new GrokBuffer(buffer, 0, iN, delim, 0, false)
+  
+}*/
 
 /*
 final class GrokBufferable(
@@ -149,9 +178,9 @@ extends Grok {
   def xL: ((implicit fail: kse.eio.GrokHop[_63.type])Long) forSome { val _63: kse.eio.GrokBufferable } = ???
 */
 }
+*/
 object GrokBufferable {
   private[eio] val EmptyByteArray = new Array[Byte](0)
   private[eio] final val InitialSize = 0x200            // 512b
   private[eio] final val TypicalMaximumSize = 0x100000  // 1M
 }
-*/

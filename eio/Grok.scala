@@ -679,94 +679,6 @@ final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with G
 }
 
 abstract class Grok {
-  def delimit(required: Boolean): this.type
-  def delimit(required: Boolean, count: Int): this.type
-  def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type
-  def delimit(required: Boolean, count: Int, delimiter: Char): this.type
-  def delimit(count: Int): this.type
-  def delimit(count: Int, delimiter: Delimiter): this.type
-  def delimit(count: Int, delimiter: Char): this.type
-  def delimit(delimiter: Delimiter): this.type
-  def delimit(delimiter: Char): this.type
-
-  def customError: GrokError
-  def errorCode: Int
-  
-  def skip(implicit fail: GrokHop[this.type]): this.type
-  def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type
-  def Z(implicit fail: GrokHop[this.type]): Boolean
-  def aZ(implicit fail: GrokHop[this.type]): Boolean
-  def B(implicit fail: GrokHop[this.type]): Byte
-  def uB(implicit fail: GrokHop[this.type]): Byte
-  def S(implicit fail: GrokHop[this.type]): Short
-  def uS(implicit fail: GrokHop[this.type]): Short
-  def C(implicit fail: GrokHop[this.type]): Char
-  def I(implicit fail: GrokHop[this.type]): Int
-  def uI(implicit fail: GrokHop[this.type]): Int
-  def xI(implicit fail: GrokHop[this.type]): Int
-  def aI(implicit fail: GrokHop[this.type]): Int
-  def L(implicit fail: GrokHop[this.type]): Long
-  def uL(implicit fail: GrokHop[this.type]): Long
-  def xL(implicit fail: GrokHop[this.type]): Long
-  def aL(implicit fail: GrokHop[this.type]): Long
-  def F(implicit fail: GrokHop[this.type]): Float
-  def xF(implicit fail: GrokHop[this.type]): Float
-  def D(implicit fail: GrokHop[this.type]): Double
-  def xD(implicit fail: GrokHop[this.type]): Double
-  def peek(implicit fail: GrokHop[this.type]): Int
-  def peekTok(implicit fail: GrokHop[this.type]): String
-  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
-  def tok(implicit fail: GrokHop[this.type]): String
-  def quoted(implicit fail: GrokHop[this.type]): String
-  def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
-  def qtok(implicit fail: GrokHop[this.type]): String
-  def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
-  def base64(implicit fail: GrokHop[this.type]): Array[Byte]
-  def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
-  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type
-  def exact(s: String)(implicit fail: GrokHop[this.type]): this.type
-  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type
-  def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String
-  def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String
-  def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
-  def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
-
-  def position: Long
-  def isEmpty: Boolean
-  def nonEmpty: Boolean
-  def trim: Int
-  def trimmed: this.type
-  def trySkip: Boolean
-  def trySkip(n: Int): Int
-  def oZ: Option[Boolean]
-  def oC: Option[Char]
-  def oI: Option[Int]
-  def oL: Option[Long]
-  def oD: Option[Double]
-  def oTok: Option[String]
-  def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String]
-  def tryExact(c: Char): Boolean
-  def tryExact(s: String): Boolean
-  def peekAt(distance: Int): Int
-
-  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
-  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
-  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
-  
-  def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
-  def filterMap[A,B](parse: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
-
-  def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
-  def grokEach[A: ClassTag](delimiter: Char)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)
-  
-  def apply[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
-    val hop = new GrokHopImpl[this.type]
-    try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
-  }
-  
-}
-
-private[eio] abstract class GrokWorker extends Grok {
   import kse.eio.{GrokErrorCodes => e}
   protected var i = 0
   protected var i0 = 0
@@ -1398,6 +1310,80 @@ private[eio] abstract class GrokWorker extends Grok {
   
   
   final def errorCode: Int = error
+  def customError: GrokError
+  
+  def skip(implicit fail: GrokHop[this.type]): this.type
+  def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type
+  def Z(implicit fail: GrokHop[this.type]): Boolean
+  def aZ(implicit fail: GrokHop[this.type]): Boolean
+  def B(implicit fail: GrokHop[this.type]): Byte
+  def uB(implicit fail: GrokHop[this.type]): Byte
+  def S(implicit fail: GrokHop[this.type]): Short
+  def uS(implicit fail: GrokHop[this.type]): Short
+  def C(implicit fail: GrokHop[this.type]): Char
+  def I(implicit fail: GrokHop[this.type]): Int
+  def uI(implicit fail: GrokHop[this.type]): Int
+  def xI(implicit fail: GrokHop[this.type]): Int
+  def aI(implicit fail: GrokHop[this.type]): Int
+  def L(implicit fail: GrokHop[this.type]): Long
+  def uL(implicit fail: GrokHop[this.type]): Long
+  def xL(implicit fail: GrokHop[this.type]): Long
+  def aL(implicit fail: GrokHop[this.type]): Long
+  def F(implicit fail: GrokHop[this.type]): Float
+  def xF(implicit fail: GrokHop[this.type]): Float
+  def D(implicit fail: GrokHop[this.type]): Double
+  def xD(implicit fail: GrokHop[this.type]): Double
+  def peek(implicit fail: GrokHop[this.type]): Int
+  def peekTok(implicit fail: GrokHop[this.type]): String
+  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
+  def tok(implicit fail: GrokHop[this.type]): String
+  def quoted(implicit fail: GrokHop[this.type]): String
+  def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
+  def qtok(implicit fail: GrokHop[this.type]): String
+  def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
+  def base64(implicit fail: GrokHop[this.type]): Array[Byte]
+  def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
+  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type
+  def exact(s: String)(implicit fail: GrokHop[this.type]): this.type
+  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type
+  def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String
+  def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String
+  def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
+  def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
+
+  def position: Long
+  def isEmpty: Boolean
+  def nonEmpty: Boolean
+  def trim: Int
+  def trimmed: this.type
+  def trySkip: Boolean
+  def trySkip(n: Int): Int
+  def oZ: Option[Boolean]
+  def oC: Option[Char]
+  def oI: Option[Int]
+  def oL: Option[Long]
+  def oD: Option[Double]
+  def oTok: Option[String]
+  def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String]
+  def tryExact(c: Char): Boolean
+  def tryExact(s: String): Boolean
+  def peekAt(distance: Int): Int
+
+  def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
+  def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
+  def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
+  
+  def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
+  def filterMap[A,B](parse: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
+
+  def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
+  def grokEach[A: ClassTag](delimiter: Char)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)
+  
+  def apply[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
+    val hop = new GrokHopImpl[this.type]
+    try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
+  }
+  
 }
 
 

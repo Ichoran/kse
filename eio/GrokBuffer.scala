@@ -11,7 +11,7 @@ import kse.flow._
 import kse.coll.packed._
 
 final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
-extends GrokWorker {
+extends Grok {
   import kse.eio.{GrokErrorCodes => e}
 
   private[this] var t = 0
