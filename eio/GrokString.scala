@@ -471,27 +471,18 @@ extends Grok {
     if (!prepare(0, e.exact)(fail)) return null
     val a = delim.not(string, i, iN)
     ready = 0
-    if (a <= i) {
-      var j = 0
-      while (j < s.length) {
-        if (s(j).isEmpty) { t += 1; return s(j) }
-        j += 1
+    var n = 0
+    while (n < s.length) {
+      if (a - i == s(n).length) {
+        var j = 0
+        var k = i
+        val sn = s(n)
+        while (k < a && sn.charAt(j) == string.charAt(k)) { k += 1; j += 1 }
+        if (k == a) { i = a; t += 1; return sn }
       }
+      n += 1
     }
-    else {
-      var n = 0
-      while (n < s.length) {
-        if (a - i == s(n).length) {
-          var j = 0
-          var k = i
-          val sn = s(n)
-          while (k < a && sn.charAt(j) == string.charAt(k)) { k += 1; j += 1 }
-          if (k == a) { i = a; t += 1; return sn }
-        }
-        n += 1
-      }
-      i = a
-    }
+    i = a
     err(fail, e.wrong, e.oneOf)
     error = e.wrong
     null
