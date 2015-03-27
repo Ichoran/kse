@@ -10,7 +10,7 @@ import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
-final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
+final class GrokBuffer/*(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
 extends Grok {
   import kse.eio.{GrokErrorCodes => e}
 
@@ -1100,3 +1100,4 @@ extends Grok {
     if (!failures) Yes(successBuffer.result()) else No((successBuffer.result(), failureBuffer.result()))
   }
 }
+*/

@@ -417,7 +417,7 @@ extends Grok {
     if (!prepare(0, e.tok)(fail)) return null
     val j = delim.not(string, i, iN)
     if (j <= i) { ready = 0; t += 1; return new Array[Byte](0) }
-    val buffer = new Array[Byte](((a - i).toLong*3/4).toInt)
+    val buffer = new Array[Byte](((j - i).toLong*3/4).toInt)
     val n = kse.eio.base64.decodeFromBase64String(string, i, j, buffer, 0, kse.eio.base64.Url64.decoder)
     if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); error = e.wrong; return null }
     i = j
@@ -429,7 +429,7 @@ extends Grok {
     if (!prepare(0, e.tok)(fail)) return -1
     val j = delim.not(string, i, iN)
     if (j <= i) { ready = 0; t += 1; return 0 }
-    val n = kse.eio.base64.decodeFromBase64String(string, i, a, target, start, kse.eio.base64.Url64.decoder)
+    val n = kse.eio.base64.decodeFromBase64String(string, i, j, target, start, kse.eio.base64.Url64.decoder)
     if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); error = e.wrong; return -1 }
     i = j
     t += 1
@@ -594,7 +594,7 @@ extends Grok {
 
   final def trySkip: Boolean = {
     if (ready == 0) {
-      val j = delim(string, i, iN)
+      val j = delim(string, i, iN, nSep)
       if (j < 0) { iN = i; return false }
       i = j
     }
@@ -682,6 +682,16 @@ extends Grok {
     else Some(tk)
   }
   
+  final def indexTok: Long = {
+    val l = peekIndices
+    if (l != -1) {
+      val x = new LongAsBox(l)
+      i = x.i1
+      ready = 0
+    }
+    l
+  }
+  
   final def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String] = {
     val iStart = i
     val tStart = t
@@ -718,7 +728,7 @@ extends Grok {
     else true
   }
   
-  final def peek(implicit fail: GrokHop[this.type]): Int = {
+  final def peek: Int = {
     if (ready == 0) {
       val j = delim(string, i, iN, nSep)
       if (j < 0) { iN = i; return -1 }
@@ -754,15 +764,15 @@ extends Grok {
     val l = peekIndices
     if (l == -1) null
     else {
-      val x = new PackedLong(l)
+      val x = new LongAsBox(l)
       string.substring(x.i0, x.i1)
     }
   }
   
-  final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
+  final def peekBinIn(n: Int, target: Array[Byte], start: Int): Int = {
     if (ready == 0) {
       val j = delim(string, i, iN, nSep)
-      if (j < 0) { iN = i; return null }
+      if (j < 0) { iN = i; return -1 }
       ready = 1
       i = j
     }
