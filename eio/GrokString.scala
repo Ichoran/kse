@@ -139,11 +139,17 @@ extends Grok {
   
   final def skip(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
-    val j = (if (ready != 0) delim.tok_(string, i, iN, 0) else delim._tok(string, i, iN, nSep)).inLong.i1
-    ready = 0
-    if (j < 0) { err(fail, e.end, e.tok); iN = -1-j; error = e.end; return this }
+    if (ready == 0) {
+      val j = delim(string, i, iN, nSep)
+      if (j < 0) { err(fail, e.end, e.tok); iN = -1-j; error = e.end; return this }
+      if (j > i) ready = 1
+      i = j
+    }
+    val j = delim.not(string, i, iN)
+    if (j < 0 && ready == 0) { err(fail, e.end, e.tok); iN = -1-j; error = e.end; return this }
     t += 1
     i = j
+    ready = 0
     this
   }
   final def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type = { 
@@ -294,11 +300,16 @@ extends Grok {
     string.charAt(i)
   }
   final def peekTok(implicit fail: GrokHop[this.type]): String = {
-    val l = (if (ready != 0) delim.tok_(string, i, iN, 0) else delim._tok(string, i, iN, nSep)).inLong
-    val a = l.i0
-    if (a < 0) { iN = -1-a; null }
-    else if (ready != 0) string.substring(i,a)
-    else { i = a; ready = 1; string.substring(a, l.i1) }
+    if (ready == 0) {
+      val j = delim(string, i, iN, nSep)
+      if (j < 0) { iN = -1-a; return null }
+      if (j > i) ready = 1
+      i = j
+    }
+    val j = delim.not(string, i, iN)
+    if (j > i) string.substring(i,j)
+    else if (ready != 0) ""
+    else null
   }
   final def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
     if (ready == 0) {
