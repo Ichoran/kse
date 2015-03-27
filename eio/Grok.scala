@@ -1333,9 +1333,6 @@ abstract class Grok {
   def xF(implicit fail: GrokHop[this.type]): Float
   def D(implicit fail: GrokHop[this.type]): Double
   def xD(implicit fail: GrokHop[this.type]): Double
-  def peek(implicit fail: GrokHop[this.type]): Int
-  def peekTok(implicit fail: GrokHop[this.type]): String
-  def peekBinIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
   def tok(implicit fail: GrokHop[this.type]): String
   def quoted(implicit fail: GrokHop[this.type]): String
   def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
@@ -1364,10 +1361,15 @@ abstract class Grok {
   def oL: Option[Long]
   def oD: Option[Double]
   def oTok: Option[String]
+  def indexTok: Long
   def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String]
   def tryExact(c: Char): Boolean
   def tryExact(s: String): Boolean
+  def peek: Int
   def peekAt(distance: Int): Int
+  def peekIndices: Long
+  def peekTok: String
+  def peekBinIn(n: Int, target: Array[Byte], start: Int): Int
 
   def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
@@ -1408,6 +1410,7 @@ object GrokErrorCodes {
   final val range = 3           ; whyErrorBuilder += ((range, "out of range"))
   final val delim = 4           ; whyErrorBuilder += ((delim, "incomplete"))
   final val missing = 5         ; whyErrorBuilder += ((missing, "no implementation"))
+  final val io = 6              ; whyErrorBuilder += ((io, "IO error"))
   final val imprecise = -1
   final val coded = -2
   final val whole = -3

@@ -44,6 +44,7 @@ extends Grok {
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {
+      if (i == iN) { err(fail, e.end, id); error = e.end; return false }
       val j = delim(buffer, i, iN, nSep)
       if (j < 0) { err(fail, e.end, id); iN = -1-j; error = e.end; return false }
       i = j
