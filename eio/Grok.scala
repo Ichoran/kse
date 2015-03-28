@@ -1394,11 +1394,9 @@ object Grok {
   def apply(s: String, d: Delimiter) = new GrokString(s, 0, s.length, d)
   def apply(s: String, c: Char): Grok = new GrokString(s, 0, s.length, new CharDelim(c))
   
-  def text(ab: Array[Byte]) = new GrokBuffer(ab, 0, ab.length, Delimiter.white).binary(false)
-  def text(ab: Array[Byte], d: Delimiter) = new GrokBuffer(ab, 0, ab.length, d).binary(false)
-  def text(ab: Array[Byte], c: Char) = new GrokBuffer(ab, 0, ab.length, new CharDelim(c)).binary(false)
-  
-  def binary(ab: Array[Byte]) = new GrokBuffer(ab, 0, ab.length, Delimiter.zero)
+  def text(ab: Array[Byte]) = new GrokBuffer(ab, 0, ab.length, Delimiter.white)
+  def text(ab: Array[Byte], d: Delimiter) = new GrokBuffer(ab, 0, ab.length, d)
+  def text(ab: Array[Byte], c: Char) = new GrokBuffer(ab, 0, ab.length, new CharDelim(c))
 }
 
 

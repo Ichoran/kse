@@ -26,7 +26,7 @@ Kse.jar : \
   kse/eio/Grok.class \
   kse/eio/GrokString.class \
   kse/eio/GrokBuffer.class \
-  kse/eio/GrokBufferable.class \
+  kse/eio/GrokBinary.class \
   kse/eio/package.class
 	jar cf Kse.jar ${KSE_JAR_PATH}
 
@@ -80,8 +80,8 @@ kse/eio/Grok.class : \
   eio/Grok.scala \
   eio/GrokString.scala \
   eio/GrokBuffer.scala \
-  eio/GrokBufferable.scala
-	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBufferable.scala
+  eio/GrokBinary.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBinary.scala
 
 kse/eio/GrokString.class : \
   kse/flow/Ok.class \
@@ -90,8 +90,8 @@ kse/eio/GrokString.class : \
   eio/Grok.scala \
   eio/GrokString.scala \
   eio/GrokBuffer.scala \
-  eio/GrokBufferable.scala
-	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBufferable.scala
+  eio/GrokBinary.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBinary.scala
 
 kse/eio/GrokBuffer.class : \
   kse/flow/Ok.class \
@@ -100,8 +100,18 @@ kse/eio/GrokBuffer.class : \
   eio/Grok.scala \
   eio/GrokString.scala \
   eio/GrokBuffer.scala \
-  eio/GrokBufferable.scala
-	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBufferable.scala
+  eio/GrokBinary.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBinary.scala
+
+kse/eio/GrokBinary.class : \
+  kse/flow/Ok.class \
+  kse/flow/Hop.class \
+  kse/eio/Delimiter.class \
+  eio/Grok.scala \
+  eio/GrokString.scala \
+  eio/GrokBuffer.scala \
+  eio/GrokBinary.scala
+	${F} eio/Grok.scala eio/GrokString.scala eio/GrokBuffer.scala eio/GrokBinary.scala
 
 kse/eio/package.class : \
   kse/flow/Ok.class \

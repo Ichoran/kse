@@ -10,11 +10,14 @@ import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
-final class GrokBuffer(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
+final class GrokBinary /*(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int, initialDelimiter: Delimiter, initialnSep: Int = 1, initialReqSep: Boolean = false)
 extends Grok {
   import kse.eio.{GrokErrorCodes => e}
 
   private[this] var t = 0
+  private[this] var binaryMode = java.nio.ByteOrder.nativeOrder match { case java.nio.ByteOrder.BIG_ENDIAN => 2; case _ => 1 }
+  
+  private[eio] def inspectBinaryMode = binaryMode
   
   i0 = math.max(0, math.min(initialStart, buffer.length))
   iN = math.min(buffer.length, math.max(initialEnd, i0))
@@ -23,7 +26,10 @@ extends Grok {
   reqSep = initialReqSep
   ready = 1
   
-  // Ready states: 0 = consume whitespace if any; 1 = whitespace consumed; 2 = all whitespace consumed
+  // Ready states: 0 = consume whitespace if any; 1 = whitespace consumed; 2 = all whitespace consumed  
+  
+  def binary(mode: Boolean): this.type = { binaryMode = if (mode) binaryMode & 0x7FFFFFFF else binaryMode | 0x80000000; this }
+  def bigEnd(mode: Boolean): this.type = { binaryMode = if (mode) (binaryMode | 2) & 0xFFFFFFFE else (binaryMode | 1) & 0xFFFFFFFD; this }
   
   def input(newInput: Array[Byte], start: Int = 0, end: Int = Int.MaxValue): this.type = {
     buffer = newInput
@@ -61,6 +67,23 @@ extends Grok {
     else { ready = 0; t += 1; true }
   }
   
+  private final def binaryNumber(dig: Int, id: Int)(fail: GrokHop[this.type]): Long = {
+    if (dig < 0 || i + dig.toLong >= iN) { err(fail, e.end, id.toByte); error = e.end; return 0 }
+    error = 0
+    if ((binaryMode & 2) != 0) {
+      var ans = 0L
+      val ix = i + dig
+      while (i < ix) { ans = (ans << 8) | buffer(i); i += 1 }
+      ans
+    }
+    else {
+      var ans = 0L
+      var ix = i + dig - 1
+      while (ix >= i) { ans = (ans << 8) | buffer(ix); ix -= 1 }
+      i += dig
+      ans
+    }
+  }
   private final def smallNumber(dig: Int, lo: Long, hi: Long, id: Int)(fail: GrokHop[this.type]): Long = {
     if (!prepare(1, id)(fail)) return 0
     val negative = {
@@ -146,150 +169,211 @@ extends Grok {
   
   def skip(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
-    if (!prepare(0, e.tok)(fail)) return this
-    i = delim.not(buffer, i, iN)
-    t += 1
-    ready = 0
+    if (binaryMode < 0) {
+      if (!prepare(0, e.tok)(fail)) return this
+      i = delim.not(buffer, i, iN)
+      t += 1
+      ready = 0
+    }
+    else {
+      if (i >= iN) { err(fail, e.end, e.B); error = e.end; return this }
+      i += 1
+    }
     this
   }
   def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
-    var k = n
-    while (k > 0 && error == 0) { skip(fail); k -= 1 }
+    if (binaryMode < 0) {
+      var k = n
+      while (k > 0 && error == 0) { skip(fail); k -= 1 }
+    }
+    else if (n > 0) {
+      if (i + n.toLong >= iN) { err(fail, e.end, e.B); error = e.end; return this }
+      i += n
+    }
     this
   }
   def Z(implicit fail: GrokHop[this.type]): Boolean = {
-    if (!prepare(4, e.Z)(fail)) return false
-    var c = buffer(i)&0xDF
-    val ans = 
-      if (c == 'T') { matchAsciiInsensitive("true", e.Z)(fail); true }
-      else if (c == 'F') { matchAsciiInsensitive("false", e.Z)(fail); false }
-      else { err(fail, e.wrong, e.Z); error = e.wrong; return false }
-    if (!wrapup(e.Z)(fail)) return false
-    ans
-  }
-  def aZ(implicit fail: GrokHop[this.type]): Boolean = {
-    if (!prepare(1, e.aZ)(fail)) return false
-    val ans = (buffer(i)&0xDF) match {
-      case 16 | 17 => smallNumber(1, 0, 1, e.aZ)(fail) == 1
-      case 'T' =>
-        i += 1
-        if (i < iN && (buffer(i)&0xDF) == 'R') { i -= 1; matchAsciiInsensitive("true", e.aZ)(fail) }
-        true
-      case 'F' =>
-        i += 1
-        if (i < iN && (buffer(i)&0xDF) == 'A') { i -= 1; matchAsciiInsensitive("false", e.aZ)(fail) }
-        false
-      case 'Y' =>
-        i += 1
-        if (i < iN && (buffer(i)&0xDF) == 'E') { i -= 1; matchAsciiInsensitive("yes", e.aZ)(fail) }
-        true
-      case 'N' =>
-        i += 1
-        if (i < iN && (buffer(i)&0xDF) == 'O') i += 1
-        false
-      case 'O' =>
-        i += 1
-        if (i >= iN) { err(fail, e.end, e.aZ); error = e.end; return false }
-        val c = buffer(i) & 0xDF
-        if (c == 'N') { i += 1; true }
-        else if (c == 'F') {
-          i += 1
-          if (i >= iN) { err(fail, e.end, e.aZ); error = e.end; return false }
-          if ((buffer(i) & 0xDF) != 'F') { err(fail, e.wrong, e.aZ); error = e.wrong; return false }
-          i += 1
-          false
-        }
-        else { err(fail, e.wrong, e.aZ); error = e.wrong; return false }
-      case _ =>
-        err(fail, e.wrong, e.aZ); error = e.wrong; return false
+    if (binaryMode < 0) {
+      if (!prepare(4, e.Z)(fail)) return false
+      var c = buffer(i)&0xDF
+      val ans = 
+        if (c == 'T') { matchAsciiInsensitive("true", e.Z)(fail); true }
+        else if (c == 'F') { matchAsciiInsensitive("false", e.Z)(fail); false }
+        else { err(fail, e.wrong, e.Z); error = e.wrong; return false }
+      if (!wrapup(e.Z)(fail)) return false
+      ans
     }
-    if (!wrapup(e.aZ)(fail)) return false
-    ans
-  }
-  def B(implicit fail: GrokHop[this.type]): Byte = smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
-  def uB(implicit fail: GrokHop[this.type]): Byte = smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
-  def S(implicit fail: GrokHop[this.type]): Short = smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
-  def uS(implicit fail: GrokHop[this.type]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
-  def C(implicit fail: GrokHop[this.type]): Char = {
-    if (!prepare(1, e.C)(fail)) return 0
-    val ans = buffer(i)
-    i += 1
-    if (!wrapup(e.C)(fail)) return 0
-    ans.toChar
-  }
-  def I(implicit fail: GrokHop[this.type]): Int = smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
-  def uI(implicit fail: GrokHop[this.type]): Int = smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
-  def xI(implicit fail: GrokHop[this.type]): Int = hexidecimalNumber(8, e.xI)(fail).toInt
-  def aI(implicit fail: GrokHop[this.type]): Int = {
-    if (!prepare(1, e.aI)(fail)) return 0
-    val c = buffer(i)
-    if (c == '-') I(fail)
-    else if (c == '+') {
-      i += 1
-      if (i+1 >= iN) { err(fail, e.end, e.aI); error = e.end; return 0 }
-      val c = buffer(i)
-      if (c >= '0' && c <= '9') I(fail)
-      else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
-    }
-    else if (c >= '0' && c <= '9') {
-      if (c == '0' && i+2 < iN && (buffer(i+1)|0x20)=='x' && { val c = buffer(i+2) | 0x20; (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') }) {
-        i += 2
-        xI(fail)
-      }
-      else uI(fail)
-    }
-    else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
-  }
-  def L(implicit fail: GrokHop[this.type]): Long = longNumber(false, e.L)(fail)
-  def uL(implicit fail: GrokHop[this.type]): Long = longNumber(true, e.L)(fail)
-  def xL(implicit fail: GrokHop[this.type]): Long = hexidecimalNumber(16, e.xI)(fail)
-  def aL(implicit fail: GrokHop[this.type]): Long = {
-    if (!prepare(1, e.aL)(fail)) return 0
-    val c = buffer(i)
-    if (c == '-') L(fail)
-    else if (c == '+') {
-      i += 1
-      if (i+1 >= iN) { err(fail, e.end, e.aL); error = e.end; return 0 }
-      val c = buffer(i)
-      if (c >= '0' && c <= '9') L(fail)
-      else { err(fail, e.wrong, e.aL); error = e.wrong; return 0 }
-    }
-    else if (c >= '0' && c <= '9') {
-      if (c == '0' && i+1 < iN && (buffer(i+1)|0x20)=='x') {
-        if (i+2 >= iN) { err(fail, e.end, e.aL); error = e.end; return 0 }
-        i += 2
-        xL(fail)
-      }
-      else uL(fail)
-    }
-    else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
-  }
-  def F(implicit fail: GrokHop[this.type]): Float = D(fail).toFloat
-  def xF(implicit fail: GrokHop[this.type]): Float = { err(fail, e.missing, e.xF); error = e.missing; tok; 0 }
-  def D(implicit fail: GrokHop[this.type]): Double = {
-    import GrokNumber._
-    if (!prepare(1, e.D)(fail)) return parseErrorNaN
-    val iOld = i
-    val j = rawParseDoubleDigits(buffer, '.')
-    if (error > 0) { ready = 0; err(fail, error, e.D); return parseErrorNaN }
     else {
-      ready = 0
-      val ans = error match {
-        case e.whole => j.toDouble
-        case e.coded => if (j == 0) Double.NaN else if (j < 0) Double.NegativeInfinity else Double.PositiveInfinity
-        case e.imprecise =>
-          try { java.lang.Double.parseDouble(new String(buffer, iOld, i - iOld)) }
-          catch { case _: NumberFormatException => error = e.wrong.toByte; parseErrorNaN }
-        case _ => java.lang.Double.longBitsToDouble(j)
-      }
-      if (error > 0) { err(fail, error, e.D); return parseErrorNaN }
-      error = 0
-      if (!wrapup(e.D)(fail)) return parseErrorNaN
+      if (i >= iN) { err(fail, e.end, e.Z); error = e.end; return false }
+      val ans = buffer(i) != 0
+      i += 1
       ans
     }
   }
-  def xD(implicit fail: GrokHop[this.type]): Double = { err(fail, e.missing, e.xD); error = e.missing; tok; 0 }
+  def aZ(implicit fail: GrokHop[this.type]): Boolean =
+    if (binaryMode < 0) {
+      if (!prepare(1, e.aZ)(fail)) return false
+      val ans = (buffer(i)&0xDF) match {
+        case 16 | 17 => smallNumber(1, 0, 1, e.aZ)(fail) == 1
+        case 'T' =>
+          i += 1
+          if (i < iN && (buffer(i)&0xDF) == 'R') { i -= 1; matchAsciiInsensitive("true", e.aZ)(fail) }
+          true
+        case 'F' =>
+          i += 1
+          if (i < iN && (buffer(i)&0xDF) == 'A') { i -= 1; matchAsciiInsensitive("false", e.aZ)(fail) }
+          false
+        case 'Y' =>
+          i += 1
+          if (i < iN && (buffer(i)&0xDF) == 'E') { i -= 1; matchAsciiInsensitive("yes", e.aZ)(fail) }
+          true
+        case 'N' =>
+          i += 1
+          if (i < iN && (buffer(i)&0xDF) == 'O') i += 1
+          false
+        case 'O' =>
+          i += 1
+          if (i >= iN) { err(fail, e.end, e.aZ); error = e.end; return false }
+          val c = buffer(i) & 0xDF
+          if (c == 'N') { i += 1; true }
+          else if (c == 'F') {
+            i += 1
+            if (i >= iN) { err(fail, e.end, e.aZ); error = e.end; return false }
+            if ((buffer(i) & 0xDF) != 'F') { err(fail, e.wrong, e.aZ); error = e.wrong; return false }
+            i += 1
+            false
+          }
+          else { err(fail, e.wrong, e.aZ); error = e.wrong; return false }
+        case _ =>
+          err(fail, e.wrong, e.aZ); error = e.wrong; return false
+      }
+      if (!wrapup(e.aZ)(fail)) return false
+      ans
+    }
+    else Z
+  def B(implicit fail: GrokHop[this.type]): Byte = 
+    if (binaryMode < 0) smallNumber(3, Byte.MinValue, Byte.MaxValue, e.B)(fail).toByte
+    else {
+      if (i >= iN) { err(fail, e.end, e.B); error = e.end; 0 }
+      val ans = buffer(i)
+      i += 1
+      ans
+    }
+  def uB(implicit fail: GrokHop[this.type]): Byte =
+    if (binaryMode < 0) smallNumber(3, 0, 0xFFL, e.uB)(fail).toByte
+    else B
+  def S(implicit fail: GrokHop[this.type]): Short = 
+   if (binaryMode < 0) smallNumber(5, Short.MinValue, Short.MaxValue, e.S)(fail).toShort
+   else binaryNumber(2, e.S)(fail).toShort
+  def uS(implicit fail: GrokHop[this.type]): Short =
+    if (binaryMode < 0) smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
+    else binaryNumber(2, e.S)(fail).toShort
+  def C(implicit fail: GrokHop[this.type]): Char = 
+    if (binaryMode < 0) {
+      if (!prepare(1, e.C)(fail)) return 0
+      val ans = buffer(i)
+      i += 1
+      if (!wrapup(e.C)(fail)) return 0
+      ans.toChar
+    }
+    else ???
+  def I(implicit fail: GrokHop[this.type]): Int =
+    if (binaryMode < 0) smallNumber(10, Int.MinValue, Int.MaxValue, e.I)(fail).toInt
+    else binaryNumber(4, e.I)(fail).toInt
+  def uI(implicit fail: GrokHop[this.type]): Int =
+    if (binaryMode < 0) smallNumber(10, 0, 0xFFFFFFFFL, e.uI)(fail).toInt
+    else binaryNumber(4, e.I)(fail).toInt
+  def xI(implicit fail: GrokHop[this.type]): Int =
+    if (binaryMode < 0) hexidecimalNumber(8, e.xI)(fail).toInt
+    else binaryNumber(4, e.I)(fail).toInt
+  def aI(implicit fail: GrokHop[this.type]): Int =
+    if (binaryMode < 0) {
+      if (!prepare(1, e.aI)(fail)) return 0
+      val c = buffer(i)
+      if (c == '-') I(fail)
+      else if (c == '+') {
+        i += 1
+        if (i+1 >= iN) { err(fail, e.end, e.aI); error = e.end; return 0 }
+        val c = buffer(i)
+        if (c >= '0' && c <= '9') I(fail)
+        else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
+      }
+      else if (c >= '0' && c <= '9') {
+        if (c == '0' && i+2 < iN && (buffer(i+1)|0x20)=='x' && { val c = buffer(i+2) | 0x20; (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') }) {
+          i += 2
+          xI(fail)
+        }
+        else uI(fail)
+      }
+      else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
+    }
+    else binaryNumber(4, e.I)(fail).toInt
+  def L(implicit fail: GrokHop[this.type]): Long =
+    if (binaryMode < 0) longNumber(false, e.L)(fail)
+    else binaryNumber(8, e.L)(fail)
+  def uL(implicit fail: GrokHop[this.type]): Long =
+    if (binaryMode < 0) longNumber(true, e.L)(fail)
+    else binaryNumber(8, e.L)(fail)
+  def xL(implicit fail: GrokHop[this.type]): Long =
+    if (binaryMode < 0) hexidecimalNumber(16, e.xI)(fail)
+    else binaryNumber(8, e.L)(fail)
+  def aL(implicit fail: GrokHop[this.type]): Long = 
+    if (binaryMode < 0) {
+      if (!prepare(1, e.aL)(fail)) return 0
+      val c = buffer(i)
+      if (c == '-') L(fail)
+      else if (c == '+') {
+        i += 1
+        if (i+1 >= iN) { err(fail, e.end, e.aL); error = e.end; return 0 }
+        val c = buffer(i)
+        if (c >= '0' && c <= '9') L(fail)
+        else { err(fail, e.wrong, e.aL); error = e.wrong; return 0 }
+      }
+      else if (c >= '0' && c <= '9') {
+        if (c == '0' && i+1 < iN && (buffer(i+1)|0x20)=='x') {
+          if (i+2 >= iN) { err(fail, e.end, e.aL); error = e.end; return 0 }
+          i += 2
+          xL(fail)
+        }
+        else uL(fail)
+      }
+      else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
+    }
+    else binaryNumber(8, e.L)(fail)
+  def F(implicit fail: GrokHop[this.type]): Float =
+    if (binaryMode < 0) D(fail).toFloat
+    else java.lang.Float.intBitsToFloat(binaryNumber(4, e.F)(fail).toInt)
+  def xF(implicit fail: GrokHop[this.type]): Float =
+    if (binaryMode < 0) { err(fail, e.missing, e.xF); error = e.missing; tok; 0 }
+    else java.lang.Float.intBitsToFloat(binaryNumber(4, e.F)(fail).toInt)
+  def D(implicit fail: GrokHop[this.type]): Double = 
+    if (binaryMode < 0) {
+      import GrokNumber._
+      if (!prepare(1, e.D)(fail)) return parseErrorNaN
+      val iOld = i
+      val j = rawParseDoubleDigits(buffer, '.')
+      if (error > 0) { ready = 0; err(fail, error, e.D); return parseErrorNaN }
+      else {
+        ready = 0
+        val ans = error match {
+          case e.whole => j.toDouble
+          case e.coded => if (j == 0) Double.NaN else if (j < 0) Double.NegativeInfinity else Double.PositiveInfinity
+          case e.imprecise =>
+            try { java.lang.Double.parseDouble(new String(buffer, iOld, i - iOld)) }
+            catch { case _: NumberFormatException => error = e.wrong.toByte; parseErrorNaN }
+          case _ => java.lang.Double.longBitsToDouble(j)
+        }
+        if (error > 0) { err(fail, error, e.D); return parseErrorNaN }
+        error = 0
+        if (!wrapup(e.D)(fail)) return parseErrorNaN
+        ans
+      }
+    }
+    else java.lang.Double.longBitsToDouble(binaryNumber(8, e.D)(fail))
+  def xD(implicit fail: GrokHop[this.type]): Double =
+    if (binaryMode < 0) { err(fail, e.missing, e.xD); error = e.missing; tok; 0 }
+    else java.lang.Double.longBitsToDouble(binaryNumber(8, e.D)(fail))
   def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val j = delim.not(buffer, i, iN)
@@ -443,13 +527,15 @@ extends Grok {
     ready = 0
     n
   }
-  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = {
-    if (!prepare(1, e.exact)(fail)) return null
-    if (buffer(i) != c) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
-    i += 1
-    if (!wrapup(e.exact)(fail)) return null
-    this
-  }
+  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = 
+    if (binaryMode < 0) {
+      if (!prepare(1, e.exact)(fail)) return null
+      if (buffer(i) != c) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+      i += 1
+      if (!wrapup(e.exact)(fail)) return null
+      this
+    }
+    else ???
   def exact(s: String)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
@@ -525,7 +611,7 @@ extends Grok {
     null
   }
   def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
-    if (!prepare(n, e.bin)(fail)) return null
+    if (binaryMode < 0 && !prepare(n, e.bin)(fail)) return null
     val ans = {
       val buf = new Array[Byte](n)
       var j = 0
@@ -540,7 +626,7 @@ extends Grok {
     ans
   }
   def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
-    if (!prepare(n, e.bin)(fail)) return null
+    if (binaryMode < 0 && !prepare(n, e.bin)(fail)) return null
     var j = start
     val end = start + n
     while (j < end) {
@@ -553,7 +639,7 @@ extends Grok {
   }
   
   private def localPosition: Int = {
-    if (ready == 0) {
+    if (binaryMode < 0 && ready == 0) {
       val j = delim(buffer, i, iN, nSep)
       if (j < 0) { iN = i; return iN }
       i = j
@@ -569,35 +655,48 @@ extends Grok {
   def nonEmpty = position < iN
   
   def trim: Int = {
-    if (ready != 2 && i < iN) {
+    if (ready != 2 && i < iN && binaryMode < 0) {
       ready = 2
       val j = delim(buffer, i, iN, Int.MaxValue)
       val iOld = i
       i = if (j < 0) { iN = -1-j; iN } else j
       i - iOld
     }
-    else 0
+    0
   }
   def trimmed: this.type = { trim; this }
   
 
-  def trySkip: Boolean = {
-    if (ready == 0) {
-      val j = delim(buffer, i, iN, nSep)
-      if (j < 0) { iN = i; return false }
-      i = j
+  def trySkip: Boolean = 
+    if (binaryMode < 0) {
+      if (ready == 0) {
+        val j = delim(buffer, i, iN, nSep)
+        if (j < 0) { iN = i; return false }
+        i = j
+      }
+      i = delim.not(buffer, i, iN)
+      ready = 0
+      t += 1
+      true
     }
-    i = delim.not(buffer, i, iN)
-    ready = 0
-    t += 1
-    true
-  }
+    else if (i < iN) {
+      i += 1
+      true
+    }
+    else false
   
-  def trySkip(n: Int): Int = {
-    var k = n
-    while (k < 0 && trySkip) k += 1
-    k
-  }
+  def trySkip(n: Int): Int = 
+    if (binaryMode < 0) {
+      var k = n
+      while (k < 0 && trySkip) k += 1
+      k
+    }
+    else {
+      val j = math.min(iN, math.max(i + n.toLong, i))
+      val ans = (j-i).toInt
+      i = j.toInt
+      ans
+    }
       
   
   def oZ: Option[Boolean] = {
@@ -718,26 +817,34 @@ extends Grok {
     else true
   }
   
-  def peek: Int = {
-    if (ready == 0) {
-      val j = delim(buffer, i, iN, nSep)
-      if (j < 0) { iN = i; return -1 }
-      ready = 1
-      i = j
+  def peek: Int =
+    if (binaryMode < 0) {
+      if (ready == 0) {
+        val j = delim(buffer, i, iN, nSep)
+        if (j < 0) { iN = i; return -1 }
+        ready = 1
+        i = j
+      }
+      buffer(i)
     }
-    buffer(i) & 0xFF
-  }
+    else if (i < iN) buffer(i)
+    else -1
     
-  def peekAt(distance: Int): Int = {
-    if (ready == 0) {
-      val j = delim(buffer, i, iN, nSep)
-      if (j < 0) { iN = i; return -1 }
-      ready = 1
-      i = j
+  def peekAt(distance: Int): Int = 
+    if (binaryMode < 0) {
+      if (ready == 0) {
+        val j = delim(buffer, i, iN, nSep)
+        if (j < 0) { iN = i; return -1 }
+        ready = 1
+        i = j
+      }
+      val index = i + distance.toLong
+      if (index < i0 || index >= iN) -1 else buffer(index.toInt)    
     }
-    val index = i + distance.toLong
-    if (index < i0 || index >= iN) -1 else buffer(index.toInt) & 0xFF
-  }
+    else {
+      val index = i + distance.toLong
+      if (index < i0 || index >= iN) -1 else buffer(index.toInt)
+    }
 
   final def peekIndices: Long = {
     if (ready == 0) {
@@ -760,7 +867,7 @@ extends Grok {
   }
   
   def peekBinIn(n: Int, target: Array[Byte], start: Int): Int = {
-    if (ready == 0) {
+    if (ready == 0 && binaryMode < 0) {
       val j = delim(buffer, i, iN, nSep)
       if (j < 0) { iN = i; return -1 }
       ready = 1
@@ -794,6 +901,7 @@ extends Grok {
     val delimOld = delim
     val nSepOld = nSep
     val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
     val bufferOld = buffer
     try {
       val ans = parse
@@ -807,6 +915,7 @@ extends Grok {
     catch { case t if fail is t => No( GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, null, (fail as t value) :: Nil)(bufferOld) ) }
     finally {
       buffer = bufferOld
+      binaryMode = binaryModeOld
       reqSep = reqSepOld
       nSep = nSepOld
       delim = delimOld
@@ -827,11 +936,13 @@ extends Grok {
     val nSepOld = nSep
     val reqSepOld = reqSep
     val readyOld = ready
+    val binaryModeOld = binaryMode
     val bufferOld = buffer
     try { parse }
     catch { case t if fail is t => val sub = fail as t value; fail( GrokError(e.delim.toByte, e.alt.toByte, tOld, iOld, null, sub :: Nil)(bufferOld) ) }
     finally {
       buffer = bufferOld
+      binaryMode = binaryModeOld
       ready = readyOld
       reqSep = reqSepOld
       nSep = nSepOld
@@ -847,10 +958,12 @@ extends Grok {
     val delimOld = delim
     val nSepOld = nSep
     val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
     try {
       val ans = Array.newBuilder[A]
       while (!isEmpty) {
         ans += parse
+        binaryMode = binaryModeOld
         reqSep = reqSepOld
         nSep = nSepOld
         delim = delimOld
@@ -858,6 +971,7 @@ extends Grok {
       ans.result()
     }
     finally {
+      binaryMode = binaryModeOld
       reqSep = reqSepOld
       nSep = nSepOld
       delim = delimOld
@@ -874,6 +988,7 @@ extends Grok {
     val delimOld = delim
     val nSepOld = nSep
     val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
     val bufferOld = buffer
     try {
       var pos = position - 1
@@ -882,6 +997,7 @@ extends Grok {
         tOld = t
         readyOld = ready
         val a = parse
+        binaryMode = binaryModeOld
         reqSep = reqSepOld
         nSep = nSepOld
         delim = delimOld
@@ -897,6 +1013,7 @@ extends Grok {
             ready = readyOld
             buffer = bufferOld
           }
+          binaryMode = binaryModeOld
           reqSep = reqSepOld
           nSep = nSepOld
           delim = delimOld
@@ -913,6 +1030,7 @@ extends Grok {
         ready = readyOld
         buffer = bufferOld
       }
+      binaryMode = binaryModeOld
       reqSep = reqSepOld
       nSep = nSepOld
       delim = delimOld
@@ -938,6 +1056,7 @@ extends Grok {
     val iNOld = iN
     val nSepOld = nSep
     val reqSepOld = reqSep
+    val binaryModeOld = binaryMode
     var successBuffer = Array.newBuilder[A]
     lazy val failureBuffer = Array.newBuilder[GrokError]
     var failures, finalized = false
@@ -953,6 +1072,7 @@ extends Grok {
         tToBe = t
         iToBe = i
         ready = 0
+        binaryMode = binaryModeOld
         reqSep = reqSepOld
         nSep = nSepOld
         iN = iNOld
@@ -968,6 +1088,7 @@ extends Grok {
       catch { case x if fail is x =>
         failures = true
         failureBuffer += GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, name+index, (fail as x value) :: Nil)(buffer)
+        binaryMode = binaryModeOld
         reqSep = reqSepOld
         nSep = nSepOld
         iN = iNOld
@@ -982,6 +1103,7 @@ extends Grok {
       }
       finally {
         if (!finalized) {
+          binaryMode = binaryModeOld
           reqSep = reqSepOld
           nSep = nSepOld
           iN = iNOld
@@ -996,3 +1118,4 @@ extends Grok {
     if (!failures) Yes(successBuffer.result()) else No((successBuffer.result(), failureBuffer.result()))
   }
 }
+*/

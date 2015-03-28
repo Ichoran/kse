@@ -10,7 +10,7 @@ import scala.reflect.ClassTag
 import kse.flow._
 import kse.coll.packed._
 
-final class GrokBufferable/*(more: (Int, Array[Byte], Int) => Int, goto: (Long => Long) => Boolean, initialStart: Long, initialEnd: Long, maxBufferSize: Int, knownSize: Option[Long])
+final class GrokBufferable(more: (Int, Array[Byte], Int) => Int, goto: (Long => Long) => Boolean, initialStart: Long, initialEnd: Long, maxBufferSize: Int, knownSize: Option[Long])
 extends Grok {
   private[this] var t = 0L
   private[this] var myPosition = 0L
