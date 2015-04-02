@@ -23,6 +23,20 @@ extends Grok {
   reqSep = initialReqSep
   ready = 1
   
+  private[eio] def adoptState(b: Array[Byte], j0: Int, jN: Int, j: Int, d: Delimiter, ns: Int, rs: Boolean) {
+    buffer = b
+    i0 = j0
+    iN = jN
+    i = j
+    delim = d
+    nSep = ns
+    reqSep = rs
+    ready = 1
+    t = 0
+  }
+  
+  private[eio] def bufferIsExactly(b: Array[Byte]) = (buffer eq b)
+  
   // Ready states: 0 = consume whitespace if any; 1 = whitespace consumed; 2 = all whitespace consumed
   
   def input(newInput: Array[Byte], start: Int = 0, end: Int = Int.MaxValue): this.type = {
