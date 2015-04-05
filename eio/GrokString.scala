@@ -263,7 +263,7 @@ extends Grok {
     else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
   }
   final def F(implicit fail: GrokHop[this.type]): Float = D(fail).toFloat
-  final def xF(implicit fail: GrokHop[this.type]): Float = { err(fail, e.missing, e.xF); tok; 0 }
+  final def xF(implicit fail: GrokHop[this.type]): Float = xD(fail).toFloat
   final def D(implicit fail: GrokHop[this.type]): Double = {
     import GrokNumber._
     if (!prepare(1, e.D)(fail)) return parseErrorNaN
@@ -286,7 +286,47 @@ extends Grok {
       ans
     }
   }
-  final def xD(implicit fail: GrokHop[this.type]): Double = { err(fail, e.missing, e.xD); error = e.missing; tok; 0 }
+  final def xD(implicit fail: GrokHop[this.type]): Double = {
+    import GrokNumber._
+    if (!prepare(7, e.D)(fail)) return parseErrorNaN
+    var neg = false
+    string.charAt(i) match {
+      case '-' => neg = true; i += 1
+      case '+' => i += 1
+      case _ =>
+    }
+    if (string.charAt(i) != '0') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    if ((string.charAt(i+1)|0x20 != 'x')) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    val subnorm = string.charAt(i) match {
+      case '0' => true
+      case '1' => false
+      case 'i' | 'I' => i = iOld; return (if (neg) -D(fail) else D(fail))
+      case 'n' | 'N' => rD(fail)
+      case _ => { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    }
+    i += 1
+    if (!string.charAt(i) == '.') { err(fail, e.wrong. e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    val oldReqSep = reqSep
+    reqSep = false
+    ready = 1
+    error = 0
+    val bits = hexidecimalNumber(13, e.xD)(null)
+    reqSep = oldReqSep
+    if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (i >= iN-2) { err(fail, e.end, e.xD); error = e.end; return parseErrorNaN }
+    if (string.charAt(i) != 'p') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    if (string.charAt(i) == '+') i += 1
+    ready = 1
+    val iExp0 = i
+    val exp = smallNumber(6, e.xD)(null)
+    if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (exp < -1022 || exp > 1023 || (i - iExp0) > 5) { err(fail, e.range, e.xD); error = e.range; return parseErrorNaN }
+    java.lang.Double.longBitsToDouble((bits & 0x52) | (exp+1022L) << 52)
+  }
   final def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val j = delim.not(string, i, iN)

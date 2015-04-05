@@ -227,7 +227,7 @@ extends Grok {
   def uS(implicit fail: GrokHop[this.type]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
   def C(implicit fail: GrokHop[this.type]): Char = {
     if (!prepare(1, e.C)(fail)) return 0
-    val ans = buffer(i)
+    val ans = buffer(i) & 0xFF
     i += 1
     if (!wrapup(e.C)(fail)) return 0
     ans.toChar
@@ -459,7 +459,7 @@ extends Grok {
   }
   def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(1, e.exact)(fail)) return null
-    if (buffer(i) != c) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+    if ((buffer(i) & 0xFF) != c) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
     i += 1
     if (!wrapup(e.exact)(fail)) return null
     this
@@ -472,23 +472,48 @@ extends Grok {
     if (!wrapup(e.exact)(fail)) return null
     this
   }
-  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type = {
+  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type =  ???
+  /*{
     import GrokCharacter._
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
     while (i < iN && k < s.length && {
-      val c = buffer(i)
+      val c = buffer(i) & 0xFF
       val cc = s.charAt(k)
-      (c == cc) || {
-        ???
-        // if (k > 0 && Character.isLowSurrogate(c)) Character.toUpperCase(buffer.codePointAt(i-1)) == Character.toUpperCase(s.codePointAt(k-1))
-        // else elevateCase(c) == elevateCase(cc)
-      }
+      (c == cc) || ((c & 0x80) != 0 && {
+        val code = 
+          if ((c & 0xE0) == 0xC0) {
+            if (i >= iN-1) { err(fail, e.end, e.exact); error = e.end; return this }
+            val c2 = buffer(i+1) & 0xFF
+            i += 1
+            if ((c2&0xC0) != 0x80) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+            ((c & 0x1F) << 6) | (c2 & 0x3F)
+          }
+          else if ((c & 0xF0) == 0xE0) {
+            if (i >= iN-2) { err(fail, e.end, e.exact); error = e.end; return this }
+            val c2 = buffer(i+1) & 0xFF
+            val c3 = buffer(i+2) & 0xFF
+            i += 2
+            if (((c2&0xC0) | (c3&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+            ((c & 0xF) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F)
+          }
+          else if ((c & 0xF4) == 0xF0) {
+            if (i >= iN-3) { err(fail, e.end, e.exact); error = e.end; return this }
+            val c2 = buffer(i+1) & 0xFF
+            val c3 = buffer(i+2) & 0xFF
+            val c4 = buffer(i+3) & 0xFF
+            i += 3
+            if (((c2&0xC0) | (c3&0xC0) | (c4&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+            ((c & 0x7) << 18) | ((c2 & 0x3F) << 12) | ((c3 &0x3F) << 6) | (c4 & 0x3F)
+          }
+          else { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+        
+      })
     }) { i += 1; k += 1 }
     if (k < s.length) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
     if (!wrapup(e.exact)(fail)) return null
     this
-  }
+  }*/
   def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.exact)(fail)) return null
     val a = delim.not(buffer, i, iN)
