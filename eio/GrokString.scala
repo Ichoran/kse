@@ -340,6 +340,20 @@ extends Grok {
     if (!wrapup(e.xD)(fail)) return parseErrorNaN
     java.lang.Double.longBitsToDouble(bits | (exp+1022L + (if (subnorm) 0 else 1)) << 52)
   }
+  def aD(implicit fail: GrokHop[this.type]): Double = {
+    import GrokNumber._
+    if (!prepare(1, e.D)(fail)) return parseErrorNaN
+    string.charAt(i) match {
+      case '+' | '-' =>
+        if (i < iN-1) string.charAt(i+1) match {
+          case '0' => if (i < iN-2 && ((string.charAt(i+2)|0x20) == 'x')) xD(fail) else D(fail)
+          case _ => D(fail)
+        }
+        else D(fail)
+      case '0' => if (i < iN-1 && ((string.charAt(i+1)|0x20) == 'x')) xD(fail) else D(fail)
+      case _ => D(fail)
+    }
+  }
   final def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val j = delim.not(string, i, iN)

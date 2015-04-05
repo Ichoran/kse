@@ -1333,6 +1333,7 @@ abstract class Grok {
   def xF(implicit fail: GrokHop[this.type]): Float
   def D(implicit fail: GrokHop[this.type]): Double
   def xD(implicit fail: GrokHop[this.type]): Double
+  def aD(implicit fail: GrokHop[this.type]): Double
   def tok(implicit fail: GrokHop[this.type]): String
   def quoted(implicit fail: GrokHop[this.type]): String
   def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String

@@ -105,6 +105,7 @@ extends Grok {
   def xF(implicit fail: GrokHop[this.type]): Float = F
   def D(implicit fail: GrokHop[this.type]): Double = java.lang.Double.longBitsToDouble(binaryNumber(8, e.D)(fail))
   def xD(implicit fail: GrokHop[this.type]): Double = D
+  def aD(implicit fail: GrokHop[this.type]): Double = D
   def tok(implicit fail: GrokHop[this.type]): String = {
     val j = Delimiter.zero.not(buffer, i, iN)
     if (j < 0) { err(fail, e.end, e.tok); error = e.end; return null }

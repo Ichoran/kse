@@ -280,7 +280,7 @@ extends Grok {
     else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
   }
   def F(implicit fail: GrokHop[this.type]): Float = D(fail).toFloat
-  def xF(implicit fail: GrokHop[this.type]): Float = { err(fail, e.missing, e.xF); error = e.missing; tok; 0 }
+  def xF(implicit fail: GrokHop[this.type]): Float = xD(fail).toFloat
   def D(implicit fail: GrokHop[this.type]): Double = {
     import GrokNumber._
     if (!prepare(1, e.D)(fail)) return parseErrorNaN
@@ -303,7 +303,74 @@ extends Grok {
       ans
     }
   }
-  def xD(implicit fail: GrokHop[this.type]): Double = { err(fail, e.missing, e.xD); error = e.missing; tok; 0 }
+  def xD(implicit fail: GrokHop[this.type]): Double = {
+    import GrokNumber._
+    if (!prepare(7, e.D)(fail)) return parseErrorNaN
+    var neg = false
+    buffer(i) match {
+      case '-' => neg = true; i += 1
+      case '+' => i += 1
+      case _ =>
+    }
+    println(i)
+    if (buffer(i) != '0') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    println(i)
+    if ((buffer(i)|0x20) != 'x') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    println(i)
+    val subnorm = buffer(i) match {
+      case '0' => true
+      case '1' => false
+      case 'i' | 'I' => return (if (neg) -D(fail) else D(fail))
+      case 'n' | 'N' => return D(fail)
+      case _ => { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    }
+    i += 1
+    println(i)
+    if (buffer(i) != '.') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    println(i)
+    val oldReqSep = reqSep
+    reqSep = false
+    ready = 1
+    error = 0
+    val bits = hexidecimalNumber(13, e.xD)(null)
+    println(bits.toHexString)
+    reqSep = oldReqSep
+    if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    println(i)
+    if (i >= iN-1) { err(fail, e.end, e.xD); error = e.end; return parseErrorNaN }
+    println(i)
+    if ((buffer(i)|0x20) != 'p') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    i += 1
+    if (buffer(i) == '+') i += 1
+    println(i)
+    val iExp0 = i
+    ready = 1
+    reqSep = false
+    val exp = smallNumber(6, -1022, 1023, e.xD)(null)
+    println(i)
+    reqSep = oldReqSep
+    if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if ((i - iExp0) > 5) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (!wrapup(e.xD)(fail)) return parseErrorNaN
+    java.lang.Double.longBitsToDouble(bits | (exp+1022L + (if (subnorm) 0 else 1)) << 52)
+  }
+  def aD(implicit fail: GrokHop[this.type]): Double = {
+    import GrokNumber._
+    if (!prepare(1, e.D)(fail)) return parseErrorNaN
+    buffer(i) match {
+      case '+' | '-' =>
+        if (i < iN-1) buffer(i+1) match {
+          case '0' => if (i < iN-2 && ((buffer(i+2)|0x20) == 'x')) xD(fail) else D(fail)
+          case _ => D(fail)
+        }
+        else D(fail)
+      case '0' => if (i < iN-1 && ((buffer(i+1)|0x20) == 'x')) xD(fail) else D(fail)
+      case _ => D(fail)
+    }
+  }
   def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val j = delim.not(buffer, i, iN)
