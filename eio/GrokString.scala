@@ -295,10 +295,13 @@ extends Grok {
       case '+' => i += 1
       case _ =>
     }
+    println(i)
     if (string.charAt(i) != '0') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
-    if ((string.charAt(i+1)|0x20) != 'x') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    println(i)
+    if ((string.charAt(i)|0x20) != 'x') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
+    println(i)
     val subnorm = string.charAt(i) match {
       case '0' => true
       case '1' => false
@@ -307,28 +310,35 @@ extends Grok {
       case _ => { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     }
     i += 1
+    println(i)
     if (string.charAt(i) != '.') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
+    println(i)
     val oldReqSep = reqSep
     reqSep = false
     ready = 1
     error = 0
     val bits = hexidecimalNumber(13, e.xD)(null)
+    println(bits.toHexString)
     reqSep = oldReqSep
     if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
-    if (i >= iN-2) { err(fail, e.end, e.xD); error = e.end; return parseErrorNaN }
+    println(i)
+    if (i >= iN-1) { err(fail, e.end, e.xD); error = e.end; return parseErrorNaN }
+    println(i)
     if ((string.charAt(i)|0x20) != 'p') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
     if (string.charAt(i) == '+') i += 1
+    println(i)
     val iExp0 = i
     ready = 1
     reqSep = false
     val exp = smallNumber(6, -1022, 1023, e.xD)(null)
+    println(i)
     reqSep = oldReqSep
     if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     if ((i - iExp0) > 5) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     if (!wrapup(e.xD)(fail)) return parseErrorNaN
-    java.lang.Double.longBitsToDouble((bits & 0x52) | (exp+1022L) << 52)
+    java.lang.Double.longBitsToDouble(bits | (exp+1022L + (if (subnorm) 0 else 1)) << 52)
   }
   final def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
