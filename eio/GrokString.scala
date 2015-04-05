@@ -297,17 +297,17 @@ extends Grok {
     }
     if (string.charAt(i) != '0') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
-    if ((string.charAt(i+1)|0x20 != 'x')) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if ((string.charAt(i+1)|0x20) != 'x') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
     val subnorm = string.charAt(i) match {
       case '0' => true
       case '1' => false
-      case 'i' | 'I' => i = iOld; return (if (neg) -D(fail) else D(fail))
-      case 'n' | 'N' => rD(fail)
+      case 'i' | 'I' => return (if (neg) -D(fail) else D(fail))
+      case 'n' | 'N' => return D(fail)
       case _ => { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     }
     i += 1
-    if (!string.charAt(i) == '.') { err(fail, e.wrong. e.xD); error = e.wrong; return parseErrorNaN }
+    if (string.charAt(i) != '.') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
     val oldReqSep = reqSep
     reqSep = false
@@ -317,14 +317,17 @@ extends Grok {
     reqSep = oldReqSep
     if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     if (i >= iN-2) { err(fail, e.end, e.xD); error = e.end; return parseErrorNaN }
-    if (string.charAt(i) != 'p') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if ((string.charAt(i)|0x20) != 'p') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
     if (string.charAt(i) == '+') i += 1
-    ready = 1
     val iExp0 = i
-    val exp = smallNumber(6, e.xD)(null)
+    ready = 1
+    reqSep = false
+    val exp = smallNumber(6, -1022, 1023, e.xD)(null)
+    reqSep = oldReqSep
     if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
-    if (exp < -1022 || exp > 1023 || (i - iExp0) > 5) { err(fail, e.range, e.xD); error = e.range; return parseErrorNaN }
+    if ((i - iExp0) > 5) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (!wrapup(e.xD)(fail)) return parseErrorNaN
     java.lang.Double.longBitsToDouble((bits & 0x52) | (exp+1022L) << 52)
   }
   final def tok(implicit fail: GrokHop[this.type]): String = {
