@@ -341,9 +341,6 @@ package object flow extends Priority1HopSpecs {
     /** If `p` is true, send the value as an implicit `Hop`; otherwise return self */
     @inline def hopIf(p: A => Boolean)(implicit hop: Hop[A]) = { if (p(underlying)) hop(underlying); underlying }
 
-    /** If `p` is true, send the value as an implicit `Hop` with the given type key; otherwise return self */
-    @inline def hopKeyIf[X](p: A => Boolean)(implicit hop: HopKey[A, X]) = { if (p(underlying)) hop(underlying); underlying }
-
     /** Perform a side-effect `g`, typically to clean up a resource, after
       * transforming self according to `f`. 
       * Example: {{{ scala.io.Source.fromFile(file).tidy(_.close)( _.getLines.toVector ) }}}
@@ -480,10 +477,10 @@ package object flow extends Priority1HopSpecs {
     impl.hopKeyOut(f)
   
   /** Assists with creating a block of code with a `Hop` using the `okay` method. */
-  sealed trait OkayDispatcher[N] { def apply[Y](f: HopKey[N, this.type] => Y): Ok[N,Y] }
+  sealed trait OkayDispatcher[N] { def apply[Y](f: Hop[N] => Y): Ok[N,Y] }
   private val GenericOkayDispatch = new OkayDispatcher[Any] {
-    def apply[Y](f: HopKey[Any, this.type] => Y): Ok[Any, Y] = {
-      val hop = (new HopImpl[Any]).reKey[this.type]
+    def apply[Y](f: Hop[Any] => Y): Ok[Any, Y] = {
+      val hop = (new HopImpl[Any]): Hop[Any]
       try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
     }
   }
@@ -501,7 +498,16 @@ package object flow extends Priority1HopSpecs {
     */
   def okay[N] = GenericOkayDispatch.asInstanceOf[OkayDispatcher[N]]
   
-  //def hopless[N, Y, X](f: Hop[N, X] => Y)(implicit hop: Hop[N, X]): Ok[N,Y] = try{ Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
+  sealed trait OkayKeyDispatcher[N, X] { def apply[Y](f: HopKey[N, X] => Y): Ok[N, Y] }
+  private val GenericOkayKeyDispatch = new OkayKeyDispatcher[Any, Any] {
+    def apply[Y](f: HopKey[Any, Any] => Y): Ok[Any, Y] = {
+      val hop = (new HopImpl[Any]).reKey[Any]
+      try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
+    }
+  }
+  
+  /** Like `okay` but uses a keyed hop. */
+  def okayKey[N, X] = GenericOkayKeyDispatch.asInstanceOf[OkayKeyDispatcher[N, X]]
   
   /** Equivalent to `Try{...}` but stores exceptions in an [[Ok]] instead of a `Try`. */
   def safe[A](a: => A): Ok[Throwable, A] = try { Yes(a) } catch { case t if NonFatal(t) => No(t) }
@@ -509,11 +515,21 @@ package object flow extends Priority1HopSpecs {
   /** Equivalent to `Try{...}.toOption` */
   def safeOption[A](a: => A): Option[A] = try { Some(a) } catch { case t if NonFatal(t) => None }
   
-  /** Assists with creating a block of code with a `Hop` using the `safe` method. */
-  sealed trait SafeDispatcher { def apply[N, Y](no: Throwable => N)(yes: HopKey[N, this.type] => Y): Ok[N,Y] }
-  private val GenericSafeDispatcher = new SafeDispatcher {
-    def apply[N, Y](no: Throwable => N)(yes: HopKey[N, this.type] => Y): Ok[N,Y] = {
-      val hop = (new HopImpl[N]).reKey[this.type]
+  /** Equivalent to `Try{...}` but maps exceptions or hops into a disfavored value and stores results in an [[Ok]]. */
+  def safeHop[N, Y](no: Throwable => N)(yes: Hop[N] => Y): Ok[N, Y] = {
+    val hop = (new HopImpl[N]): Hop[N]
+    try{ Yes(yes(hop)) }
+    catch {
+      case t if hop is t => No(hop as t value)
+      case t if NonFatal(t) => No(no(t))
+    }
+  }
+  
+  /** Assists with creating a block of code with a `HopKey` using the `safeKeyHop` method. */
+  sealed trait SafeDispatcher[X] { def apply[N, Y](no: Throwable => N)(yes: HopKey[N, X] => Y): Ok[N,Y] }
+  private val GenericSafeDispatcher = new SafeDispatcher[Any] {
+    def apply[N, Y](no: Throwable => N)(yes: HopKey[N, Any] => Y): Ok[N,Y] = {
+      val hop = (new HopImpl[N]).reKey[Any]
       try{ Yes(yes(hop)) }
       catch {
         case t if hop is t => No(hop as t value)
@@ -522,18 +538,6 @@ package object flow extends Priority1HopSpecs {
     }
   }
   
-  /** Equivalent to `Try{...}` but maps exceptions or hops into a disfavored value and stores results in an [[Ok]]. */
-  def safeHop: SafeDispatcher = GenericSafeDispatcher
-  
-  /** Same as `safeHop` but uses `Unit` for the marker trait. */
-  /*
-  def safeHop[N, Y](no: Throwable => N)(yes: Hop[N] => Y): Ok[N, Y] = {
-    val hop =  new HopImpl[N]
-    try{ Yes(yes(hop)) }
-    catch {
-      case t if hop is t => No((hop as t value).asInstanceOf[N])
-      case t if NonFatal(t) => No(no(t))
-    }
-  }
-  */
+  /** The same as `safeHop` but uses a type key for the hop instance. */
+  def safeHopKey[X] = GenericSafeDispatcher.asInstanceOf[SafeDispatcher[X]]
 }

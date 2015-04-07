@@ -44,9 +44,9 @@ trait HopOnly extends HopStackless {
   *   case Some(i) => i
   *   case None => nobody(s)
   * }
-  * okayWith(""){ implicit nobody => who("Joe") }  // Returns Ok[String,Int] = Yes(1)
-  * okayWith(""){ implicit nobody => who("Moe") }  // Returns Ok[String,Int] = No(Moe)
-  * okayWith("?"){ implicit nobody => nobody.hop() }    // Returns Ok[String,Int] = No(?)
+  * okay[String]{ implicit nobody => who("Joe") }  // Returns Ok[String,Int] = Yes(1)
+  * okay[String]{ implicit nobody => who("Moe") }  // Returns Ok[String,Int] = No(Moe)
+  * okay[String]{ implicit nobody => nobody("?") }    // Returns Ok[String,Int] = No(?)
   * }}}
   * 
   * This pattern is particularly useful when performing many operations which
@@ -65,6 +65,7 @@ trait Hop[@specialized(Int, Long) A] extends HopStackless {
     * This method should return null if and only if `is` returns false.
     */
   def as(t: Throwable): Hopped[A]
+  def hopless[B](f: => B): Ok[A, B] = try { Yes(f) } catch { case t if is(t) => No(as(t).value) }
 }
 
 
