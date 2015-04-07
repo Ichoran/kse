@@ -461,6 +461,20 @@ package object flow extends Priority1HopSpecs {
     default
   }
   
+  /** Hops with the implicit `hop` in scope */
+  def HOP[A](value: A)(implicit hop: Hop[A]): Nothing = hop(value)
+  
+  /** Traps the implicit `hop` inside an expression, converting it to an `Ok` */
+  def hopless[A, B](f: => A)(implicit hop: Hop[B]) = hop.hopless(f)
+  
+  trait HoplessDispatcher[X] { def apply[A, B](f: => A)(implicit hop: HopKey[B, X]) }
+  private val GenericHoplessDispatch = new HoplessDispatcher[Any] {
+    def apply[A, B](f: => A)(implicit hop: HopKey[B, Any]) = hop.hopless(f)
+  }
+  
+  /** Traps the implicit `hop` with the specified type key, converting it to an `Ok` */
+  def hoplessKey[X] = GenericHoplessDispatch.asInstanceOf[HoplessDispatcher[X]]
+  
   /** Provides a `Hop` of a different return type given an existing `Hop` and a conversion from the new return type to the old one. */
   @inline def hopOn[@specialized(Int, Long) A, @specialized(Int, Long) B, C](onwards: B => A)(f: Hop[B] => C)(implicit hop: Hop[A], impl: HopSpecAdapter2[A, B]): C =
     impl.hopOn(onwards)(f)(hop)

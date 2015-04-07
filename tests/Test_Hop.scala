@@ -12,35 +12,44 @@ object Test_Hop extends Test_Kse {
     Try { OOPS } match { case Failure(t: OopsException) => true; case _ => false }
   }
 
-  private val myOops = new Hopped[Unit] with Oops {
-    def value = ()
-    def apply()  = { throw this }
-  }
-
   def test_tapOops = {
     var count = 0
     var effect = false
     var affect = false
-    implicit val o = myOops
+    implicit val o = {
+      var temp: Oops = null
+      probably{ oops => temp = oops }  // Never do this!  For testing only!
+      temp
+    }
     try { tapOops{ count += 1 }{ affect = true } } catch { case t if t eq o => count += 2 }
     try { tapOops{ count += 4; OOPS }{ effect = true } } catch { case t if t eq o => count += 8 }
     count == 13 && effect && !affect
   }
 
-  private val myHop = new Hopped[String] with Hop[String] {
-    private[this] var myValue: String = null
-    def value = myValue
-    def value_(v: String): this.type = { myValue = value; this }
-    def valueOp(f: String => String): this.type = { myValue = f(myValue); this }
-    def apply() = { throw this }
-    def apply(s: String) = { myValue = s; throw this }
-  }
+  private val myHop = UnboundHopSupplier.of[String]
 
-  def test_HOP: Boolean = {
-    implicit val h: Hop[String] = myHop
-    try { h("frog") } catch { case t if t eq h => return h.value == "frog" }
-    false
+  def test_Hop: Boolean = {
+    var p = try { myHop(""); true } catch { case t if myHop is t => false }
+    val test0 = !p
+    def f: Hop[String] => Int = h => if (p) 1 else h("frog")
+    val test1 = myHop.hopless{ f(myHop) } == Yes(1)
+    p = !p
+    val test2 = myHop.hopless{ f(myHop) } == No("frog")
+    test0 && test1 && test2
   }
+  
+  def test_HopKey: Boolean = {
+    sealed trait Mark
+    final class A extends Mark {}
+    final class B extends Mark {}
+    var p = false
+    implicit val hop = UnboundHopSupplier.keyed[String, A]
+    implicit val hip = UnboundHopSupplier.keyed[String, B]
+    def set(implicit h: HopKey[String, A]) { if (h eq hop) p = true }
+    set
+    p
+  }
+    
 
   def test_tapHop = {
     implicit val h: Hop[String] = myHop
@@ -53,26 +62,29 @@ object Test_Hop extends Test_Kse {
   }
 
   def test_oopsless: Boolean = {
-    implicit val o = myOops
-    oopsless{ "fish" } == Some("fish") && oopsless[String]{ OOPS } == None
+    probably{ implicit o =>
+      oopsless{ "fish" } == Some("fish") && oopsless[String]{ OOPS } == None
+    } == Some(true)
   }
 
   def test_oopslessOr = {
-    implicit val o = myOops
-    oopslessOr("dog"){ "fish" } == "fish" && oopslessOr("dog"){ OOPS } == "dog"
+    probably{ implicit o =>
+      oopslessOr("dog"){ "fish" } == "fish" && oopslessOr("dog"){ OOPS } == "dog"
+    } == Some(true)
   }
 
   def test_oopslessOrNull = {
-    implicit val o = myOops
-    oopslessOrNull{ "fish" } == "fish" && oopslessOrNull[String]{ OOPS } == null
+    probably{ implicit o =>
+      oopslessOrNull{ "fish" } == "fish" && oopslessOrNull[String]{ OOPS } == null
+    } == Some(true)
   }
 
-  def test_oopslessDo = {
-    implicit val o = myOops
-    var effect = false
-    var affect = false
-    oopslessDo{ effect = true; OOPS; affect = true }
-    effect && !affect
+  def test_oopslessTry = {
+    probably{ implicit o =>
+      var effect = false
+      var affect = false
+      !oopslessTry{ effect = true; OOPS; affect = true } && effect && !affect
+    } == Some(true)
   }
 
   def test_probably = probably{ implicit oops => "fish" } == Some("fish") && probably[String]{ implicit oops => OOPS } == None
@@ -81,11 +93,10 @@ object Test_Hop extends Test_Kse {
 
   def test_probablyOrNull = probablyOrNull{ implicit oops => "fish" } == "fish" && probablyOrNull[String]{ implicit oops => OOPS } == null
 
-  def test_probablyDo = {
+  def test_probablyTry = {
     var effect = false
     var affect = false
-    probablyDo{ implicit oops => effect = true; OOPS; affect = true }
-    effect && !affect
+    !probablyTry{ implicit oops => effect = true; OOPS; affect = true } && effect && !affect
   }
 
   def test_probablyOne = {
@@ -95,39 +106,37 @@ object Test_Hop extends Test_Kse {
     effect && !affect
   }
 
-  def test_hopTo =
-    Seq("fish", "dog").map( x => hopTo[Int]( hop => if (x == "fish") 0 else hop.from((s: String) => s.length).apply(x) ) ) == Seq(0, 3)
-    
-  def test_hopOr =
-    Seq("fish", "dog", "cow").map(x => hopOr("cricket")( hop => if (x == "fish") x else if (x == "cow") hop() else hop("jerboa") )) == Seq("fish", "jerboa", "cricket") &&
-    Seq(1, 2, 3).map(x => hopOr(0)( hop => if (x == 1) x else if (x == 3) hop() else hop(-1) )) == Seq(1, -1, 0)
-    Seq(1L, 2L, 3L).map(x => hopOr(0L)( hop => if (x == 1) x else if (x == 3) hop(); else hop(-1) )) == Seq(1L, -1L, 0L)
-    
-  def test_okay = okay[String]{ _ => "frog" } == Yes("frog") && okay[String]{ hop => hop("dog"); "frog" } == No("dog")
+  def test_hopOut =
+    Seq("fish", "dog").map( x => hopOut[Int]( hop => if (x == "fish") 0 else hop(x.length) ) ) == Seq(0, 3) &&
+    Seq("fish", "dog").map( x => hopOut[Long]( hop => if (x == "fish") -1L else hop(x.length << 33L) ) ) == Seq(-1, 3 << 33L) &&
+    Seq("fish", "dog").map( x => hopOut[String]( hop => if (x == "fish") x else hop("dogfish") ) ) == Seq("fish", "dogfish")
   
-  def test_okayOr =
-    okayOr(0){ _ => "frog" } == Yes("frog") && okayOr(0){ hop => hop(); "frog" } == No(0) &&
-    okayOr(0L){ _ => "frog" } == Yes("frog") && okayOr(0L){ hop => hop(); "frog" } == No(0L) &&
-    okayOr("dog"){ _ => "frog" } == Yes("frog") && okayOr("dog") { hop => hop(); "frog" } == No("dog")
+  def test_hopOn =
+    Seq("fish", "dog").map(x => hopOut[Int]{ implicit hop =>
+      hopOn((s: String) => s.length)(hip => if (x=="fish") 0 else hip("dogfish"))
+    }) == Seq(0, 7) &&
+    Seq("fish", "dog").map(x => hopOut[Int]{ implicit hop =>
+      hopOn((l: Long) => (l-1).toInt)(hip => if (x=="fish") 0 else hip(7L))
+    }) == Seq(0, 6) &&
+    Seq("fish", "dog").map(x => hopOut[Int]{ implicit hop =>
+      hopOn((i: Int) => -i)(hip => if (x=="fish") 0 else hip(1))
+    }) == Seq(0, -1)
   
-  def test_okayLazy = {
-    var count = 0
-    val correct =
-      okayLazy{ count += 1; "grasshopper" }(_ => "frog") == Yes("frog") &&
-      okayLazy{ count += 2; "grasshopper" }{ hop => hop(); "dog" } == No("grasshopper")
-    correct && count == 2
+  def test_hopKeyOnOut = {
+    trait A {}
+    trait B {}
+    def hai(implicit hop: HopKey[Int, A]) { hop(1) }
+    def hbi(implicit hop: HopKey[Int, B]) { hop(2) }
+    def hal(implicit hop: HopKey[Long, A]) { hop(-1L) }
+    def hbl(implicit hop: HopKey[Long, B]) { hop(1 << 33L) }
+    def hao(implicit hop: HopKey[Object, A]) { hop(null) }
+    def hbo(implicit hop: HopKey[Object, B]) { hop("") }
+    Seq("fish", "dog").map(x => hopKeyOut[Int, A]{ implicit hop => hopKeyOut[Int, B]{ implicit hip => if (x=="frog") hai else hbi; 0 } }) == Seq(1,2) &&
+    Seq("fish", "dog").map(x => hopKeyOut[Long, A]{ implicit hop => hopKeyOut[Long, B]{ implicit hip => if (x=="frog") hal else hbl; 0L } }) == Seq(-1L, 1 << 33L) &&
+    Seq("fish", "dog").map(x => hopKeyOut[Object, A]{ implicit hop => hopKeyOut[Object, B]{ implicit hip => if (x=="frog") hao else hbo; 'x } }) == Seq(null, "")
   }
   
-  def test_okayWith =
-    Seq("fish", "dog", "cow").map(x => okayWith("cricket")( hop => if (x == "fish") x else if (x == "cow") hop() else hop("jerboa") )) == Seq(Yes("fish"), No("jerboa"), No("cricket")) &&
-    Seq(1, 2, 3).map(x => okayWith(0)( hop => if (x == 1) x else if (x == 3) hop() else hop(-1) )) == Seq(Yes(1), No(-1), No(0))
-    Seq(1L, 2L, 3L).map(x => okayWith(0L)( hop => if (x == 1) x else if (x == 3) hop(); else hop(-1) )) == Seq(Yes(1L), No(-1L), No(0L))
+  def test_okay = okay[String]{ _ => "frog" } == Yes("frog") && okay[String]{ hop => hop("dog"); "frog" } == No("dog")
   
-  def test_okayHere =
-    okayWith("fish")(implicit hop => okayHere((_: Hop[String]) => "frog")) == Yes(Yes("frog")) &&
-    okayWith("fish")(implicit hop => okayHere{(_: Hop[String]) => hop("jerboa"); "frog"}) == Yes(No("jerboa")) &&
-    okayWith("fish")(implicit hop => okayHere{(_: Hop[String]) => hop(); "frog" }) == Yes(No("fish")) &&
-    okayWith("fish"){ implicit hop => hop(); okayHere((_: Hop[String]) => "frog") } == No("fish")
-
   def main(args: Array[String]) { typicalMain(args) }
 }
