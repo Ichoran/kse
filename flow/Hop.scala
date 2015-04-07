@@ -58,16 +58,22 @@ trait HopOnly extends HopStackless {
   * handle every failing branch.  The result, when used in the correct context, is
   * safe, performant, uncluttered code.
   */
-trait Hop[@specialized(Int, Long) A, B] extends HopStackless {
+trait Hop[@specialized(Int, Long) A] extends HopStackless {
   /** Throws a stackless exception, carrying the supplied value */
   def apply(a: A): Nothing
-  /** Typically throws a stackless exception with the supplied value, but may be overridden to not throw or only sometimes throw */
-  def on(a: A): Unit
   /** Detects whether a throwable is in fact this Hop, and if so returns a Hopped; if not, return null.
     * This method should return null if and only if `is` returns false.
     */
   def as(t: Throwable): Hopped[A]
 }
+
+
+/** `HopKey` is a type of `Hop` which has a type parameter that lets it distinguish itself at compile time
+  * from other hops that return the same type.  Note that `HopKey` is a subtrait of `Hop`, so it can
+  * be used in any context where an unkeyed `Hop` is required.
+  */
+trait HopKey[@specialized(Int, Long)A, X] extends Hop[A] {}
+
 
 /** A trait specifically to handle errors that have no information.
   * Example:
@@ -84,4 +90,3 @@ trait Oops extends HopOnly {}
 
 /** Thrown by special Oops instance that will throw real exceptions instead of itself. */
 class OopsException extends RuntimeException("Uncaught Oops.") {}
-

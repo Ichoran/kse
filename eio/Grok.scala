@@ -646,12 +646,13 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
   override def toString = toTextLines.mkString("\n")
 }
 
-sealed trait GrokHop[X <: Grok] extends Hop[GrokError, X] {
+sealed trait GrokHop[X <: Grok] extends HopKey[GrokError, X] {
   def isDormant: Boolean
   def willPanic: Boolean
   def dormant[A](a: => A): A
   def stackless[A](a: => A): A
   def panic[A](a: => A): A
+  def on(err: GrokError): Unit
 }
 
 final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {

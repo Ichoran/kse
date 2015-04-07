@@ -37,21 +37,221 @@ import scala.util.control.NonFatal
   * decorated variable names (valueFn, valueOp, etc.).
   */
 package flow {
-  /** Provides default behavior for validating an [[Ok]], namely to throw an exception if a disfavored value is found. */
-  trait LowPriorityOkValidation {
-    private[flow] val genericInvalidOkThrowsException = new Ok.ValidateOkay[Any] { def incorrect(any: Any) { throw new NotOkException(any) } }
-    @inline implicit def defaultInvalidOkThrowsException[N]: Ok.ValidateOkay[N] = genericInvalidOkThrowsException.asInstanceOf[Ok.ValidateOkay[N]]
+  
+  private[flow] final class HopImpl[A] extends Hopped[A] with HopKey[A, Unit] {
+    protected var myValue: A = null.asInstanceOf[A]
+    final def value = myValue
+    final def apply(a: A) = { myValue = a; throw this }
+    final def is(t: Throwable): Boolean = this eq t
+    final def as(t: Throwable): Hopped[A] = if (this eq t) this else null
+    final def reKey[X] = this.asInstanceOf[HopKey[A, X]]
+  }
+
+  private[flow] final class HopImplInt extends Hopped[Int] with HopKey[Int, Unit] {
+    protected var myValue = 0
+    final def value = myValue
+    final def apply(a: Int) = { myValue = a; throw this }
+    final def is(t: Throwable): Boolean = this eq t
+    final def as(t: Throwable): Hopped[Int] = if (this eq t) this else null
+    final def reKey[X] = this.asInstanceOf[HopKey[Int, X]]
+  }
+
+  private[flow] final class HopImplLong extends Hopped[Long] with HopKey[Long, Unit] {
+    protected var myValue = 0L
+    final def value = myValue
+    def apply(a: Long) = { myValue = a; throw this }
+    final def is(t: Throwable): Boolean = this eq t
+    final def as(t: Throwable): Hopped[Long] = if (this eq t) this else null
+    final def reKey[X] = this.asInstanceOf[HopKey[Long, X]]
+  }
+  
+  object UnboundHopSupplier {
+    def of[@specialized(Int, Long) A](implicit impl: HopSpecAdapter1[A]): Hop[A] = impl.create()
+    def keyed[@specialized(Int, Long) A, X](implicit impl: HopSpecAdapter1[A]): HopKey[A, X] = impl.keyed[X]
+  }
+  
+  trait HopSpecAdapter1[@specialized(Int, Long) A] { 
+    private[flow] def hopOut(f: Hop[A] => A): A
+    private[flow] def hopKeyOut[X](f: HopKey[A, X] => A): A
+    private[flow] def create(): Hop[A]
+    private[flow] def keyed[X]: HopKey[A, X]
+  }
+  
+  private final class HopSpec1Any[A] extends HopSpecAdapter1[A] {
+    def hopOut(f: Hop[A] => A): A = {
+      val hop: Hop[A] = new HopImpl[A]
+      try { f(hop) } catch { case t if hop is t => hop as t value }
+    }
+    def hopKeyOut[X](f: HopKey[A, X] => A): A = {
+      val hop: HopKey[A, X] = (new HopImpl[A]).reKey[X]
+      try { f(hop) } catch { case t if hop is t => hop as t value }
+    }
+    def create(): Hop[A] = new HopImpl[A]
+    def keyed[X]: HopKey[A, X] = (new HopImpl[A]).reKey[X]
+  }
+  
+  private final class HopSpec1Int extends HopSpecAdapter1[Int] {
+    def hopOut(f: Hop[Int] => Int): Int = {
+      val hop: Hop[Int] = new HopImplInt
+      try { f(hop) } catch { case t if hop is t => hop as t value }
+    }
+    def hopKeyOut[X](f: HopKey[Int, X] => Int): Int = {
+      val hop: HopKey[Int, X] = (new HopImplInt).reKey[X]
+      try{ f(hop) } catch { case t if hop is t => hop as t value }
+    }
+    def create(): Hop[Int] = new HopImplInt
+    def keyed[X]: HopKey[Int, X] = (new HopImplInt).reKey[X]
+  }
+  
+  private final class HopSpec1Long extends HopSpecAdapter1[Long] {
+    def hopOut(f: Hop[Long] => Long): Long = {
+      val hop: Hop[Long] = new HopImplLong
+      try { f(hop) } catch { case t if hop is t => hop as t value }
+    }
+    def hopKeyOut[X](f: HopKey[Long, X] => Long): Long = {
+      val hop: HopKey[Long, X] = (new HopImplLong).reKey[X]
+      try{ f(hop) } catch { case t if hop is t => hop as t value }
+    }
+    def create(): Hop[Long] = new HopImplLong
+    def keyed[X]: HopKey[Long, X] = (new HopImplLong).reKey[X]
+  }
+  
+  trait HopSpecAdapter2[@specialized(Int, Long) A, @specialized(Int, Long) B] {
+    private[flow] def hopOn[C](onwards: B => A)(f: Hop[B] => C)(hop: Hop[A]): C
+    private[flow] def hopKeyOn[C, X](onwards: B => A)(f: HopKey[B, X] => C)(hop: HopKey[A, X]): C
+  }
+  
+  private final class HopSpec2AnyAny[A, B] extends HopSpecAdapter2[A, B] {
+    def hopOn[C](onwards: B => A)(f: Hop[B] => C)(hop: Hop[A]): C = {
+      val hip = hop match { case _: HopImpl[_] => hop.asInstanceOf[Hop[B]]; case _ => (new HopImpl[B]): Hop[B] }
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: B => A)(f: HopKey[B, X] => C)(hop: HopKey[A, X]): C = {
+      val hip: HopKey[B, X] = hop match { case _: HopImpl[_] => hop.asInstanceOf[HopKey[B, X]]; case _ => (new HopImpl[B]).reKey[X] }
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+  }
+  
+  private final class HopSpec2IntAny[B] extends HopSpecAdapter2[Int, B] {
+    def hopOn[C](onwards: B => Int)(f: Hop[B] => C)(hop: Hop[Int]): C = {
+      val hip = (new HopImpl[B]): Hop[B]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: B => Int)(f: HopKey[B, X] => C)(hop: HopKey[Int, X]): C = {
+      val hip = (new HopImpl[B]).reKey[X]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+  }
+  
+  private final class HopSpec2LongAny[B] extends HopSpecAdapter2[Long, B] {
+    def hopOn[C](onwards: B => Long)(f: Hop[B] => C)(hop: Hop[Long]): C = {
+      val hip = (new HopImpl[B]): Hop[B]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: B => Long)(f: HopKey[B, X] => C)(hop: HopKey[Long, X]): C = {
+      val hip = (new HopImpl[B]).reKey[X]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+  }
+  
+  private final class HopSpec2AnyInt[A] extends HopSpecAdapter2[A, Int] {
+    def hopOn[C](onwards: Int => A)(f: Hop[Int] => C)(hop: Hop[A]): C = {
+      val hip = (new HopImplInt): Hop[Int]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: Int => A)(f: HopKey[Int, X] => C)(hop: HopKey[A, X]): C = {
+      val hip = (new HopImplInt).reKey[X]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+  }
+  
+  private final class HopSpec2AnyLong[A] extends HopSpecAdapter2[A, Long] {
+    def hopOn[C](onwards: Long => A)(f: Hop[Long] => C)(hop: Hop[A]): C = {
+      val hip = (new HopImplLong): Hop[Long]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: Long => A)(f: HopKey[Long, X] => C)(hop: HopKey[A, X]): C = {
+      val hip = (new HopImplLong).reKey[X]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+  }
+  
+  private final class HopSpec2IntInt extends HopSpecAdapter2[Int, Int] {
+    def hopOn[C](onwards: Int => Int)(f: Hop[Int] => C)(hop: Hop[Int]): C = {
+      try { f(hop) } catch { case t if hop is t => hop(onwards(hop as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: Int => Int)(f: HopKey[Int, X] => C)(hop: HopKey[Int, X]): C = {
+      try { f(hop) } catch { case t if hop is t => hop(onwards(hop as t value)) }
+    }
+  }
+  
+  private final class HopSpec2IntLong extends HopSpecAdapter2[Int, Long] {
+    def hopOn[C](onwards: Long => Int)(f: Hop[Long] => C)(hop: Hop[Int]): C = {
+      val hip = (new HopImplLong): Hop[Long]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: Long => Int)(f: HopKey[Long, X] => C)(hop: HopKey[Int, X]): C = {
+      val hip = (new HopImplLong).reKey[X]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+  }
+  
+  private final class HopSpec2LongInt extends HopSpecAdapter2[Long, Int] {
+    def hopOn[C](onwards: Int => Long)(f: Hop[Int] => C)(hop: Hop[Long]): C = {
+      val hip = (new HopImplInt): Hop[Int]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: Int => Long)(f: HopKey[Int, X] => C)(hop: HopKey[Long, X]): C = {
+      val hip = (new HopImplInt).reKey[X]
+      try { f(hip) } catch { case t if hip is t => hop(onwards(hip as t value)) }
+    }
+  }
+  
+  private final class HopSpec2LongLong extends HopSpecAdapter2[Long, Long] {
+    def hopOn[C](onwards: Long => Long)(f: Hop[Long] => C)(hop: Hop[Long]): C = {
+      try { f(hop) } catch { case t if hop is t => hop(onwards(hop as t value)) }
+    }
+    def hopKeyOn[C, X](onwards: Long => Long)(f: HopKey[Long, X] => C)(hop: HopKey[Long, X]): C = {
+      try { f(hop) } catch { case t if hop is t => hop(onwards(hop as t value)) }
+    }
+  }
+  
+  trait Priority3HopSpecs {
+    private val myImpl_HopSpec2AnyAny = new HopSpec2AnyAny[Any, Any]
+    implicit def impl_HopSpec2AnyAny[A, B] = myImpl_HopSpec2AnyAny.asInstanceOf[HopSpecAdapter2[A, B]]
+  }
+  trait Priority2HopSpecs {
+    private val myImpl_HopSpec1Any = new HopSpec1Any[Any]
+    implicit def impl_HopSpec1Any[A]: HopSpecAdapter1[A] = myImpl_HopSpec1Any.asInstanceOf[HopSpecAdapter1[A]]
+    
+    private val myImpl_HopSpec2AnyInt = new HopSpec2AnyInt[Any]
+    private val myImpl_HopSpec2AnyLong = new HopSpec2AnyLong[Any]
+    private val myImpl_HopSpec2IntAny = new HopSpec2IntAny[Any]
+    private val myImpl_HopSpec2LongAny = new HopSpec2LongAny[Any]
+    implicit def impl_HopSpec2AnyInt[A] = myImpl_HopSpec2AnyInt.asInstanceOf[HopSpecAdapter2[A, Int]]
+    implicit def impl_HopSpec2AnyLong[A] = myImpl_HopSpec2AnyLong.asInstanceOf[HopSpecAdapter2[A, Long]]
+    implicit def impl_HopSpec2IntAny[A] = myImpl_HopSpec2IntAny.asInstanceOf[HopSpecAdapter2[Int, A]]
+    implicit def impl_HopSpec2LongAny[A] = myImpl_HopSpec2LongAny.asInstanceOf[HopSpecAdapter2[Long, A]]
+  }
+  trait Priority1HopSpecs extends Priority2HopSpecs {
+    implicit val impl_HopSpec1Int: HopSpecAdapter1[Int] = new HopSpec1Int
+    implicit val impl_HopSpec1Long: HopSpecAdapter1[Long] = new HopSpec1Long
+    
+    implicit val impl_HopSpec2IntInt: HopSpecAdapter2[Int, Int] = new HopSpec2IntInt
+    implicit val impl_HopSpec2IntLong: HopSpecAdapter2[Int, Long] = new HopSpec2IntLong
+    implicit val impl_HopSpec2LongInt: HopSpecAdapter2[Long, Int] = new HopSpec2LongInt
+    implicit val impl_HopSpec2LongLong: HopSpecAdapter2[Long, Long] = new HopSpec2LongLong
   }
 }
 
 /** A nice tutorial should go here.  For now, just browse everything. */
-package object flow extends LowPriorityOkValidation {
+package object flow extends Priority1HopSpecs {
   /** Allows `grab` as an alternative to `get` on `Option`: `grab` will throw an available `Oops` if the `Option` is empty. */
   implicit class OptionCanHop[A](private val underlying: Option[A]) extends AnyVal {
     /** Retrieve the value from this option or throw an `Oops` otherwise. */
     @inline def grab(implicit oops: Oops): A = if (underlying.isDefined) underlying.get else oops.hop()
     /** Retrieve the value from this option or hop with specified value. */
-    @inline def orHop[B, X](default: => B)(implicit hop: Hop[B, X]): A = underlying match { case Some(a) => a; case None => hop(default); null.asInstanceOf[A] }
+    @inline def orHop[B](default: => B)(implicit hop: Hop[B]): A = underlying match { case Some(a) => a; case None => hop(default); null.asInstanceOf[A] }
     /** Convert to [[Ok]] with `Unit` for the disfavored branch. */
     @inline def toOk: Ok[Unit, A] = underlying match { case Some(a) => Yes(a); case _ => Ok.UnitNo }
   }
@@ -64,7 +264,7 @@ package object flow extends LowPriorityOkValidation {
       case _ => oops.hop()
     }
     /** Throws a `Failure` value with an available `Hop`; gives the `Success` value otherwise. */
-    @inline def orHop[B, X](f: Throwable => B)(implicit hop: Hop[B, X]): A = underlying match {
+    @inline def orHop[B](f: Throwable => B)(implicit hop: Hop[B]): A = underlying match {
       case scala.util.Success(a) => a
       case scala.util.Failure(t) => hop(f(t)); null.asInstanceOf[A]
     }
@@ -89,7 +289,7 @@ package object flow extends LowPriorityOkValidation {
     /** Throws an available `Oops` if the [[Ok]] is a `No`, gives the `Yes` value otherwise. */
     @inline def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops.hop()
     /** Throws a `No` value with an available `Hop`; gives the `Yes` value otherwise. */
-    @inline def orHop[X](implicit hop: Hop[N, X]): Y = if (underlying.isOk) underlying.yes else { hop(underlying.no); null.asInstanceOf[Y] }
+    @inline def orHop(implicit hop: Hop[N]): Y = if (underlying.isOk) underlying.yes else { hop(underlying.no); null.asInstanceOf[Y] }
   }
   
   
@@ -139,7 +339,10 @@ package object flow extends LowPriorityOkValidation {
     @inline def must(p: A => Boolean)(implicit oops: Oops) = if (p(underlying)) underlying else oops.hop()
 
     /** If `p` is true, send the value as an implicit `Hop`; otherwise return self */
-    @inline def hopIf[X](p: A => Boolean)(implicit hop: Hop[A, X]) = { if (p(underlying)) hop(underlying); underlying }
+    @inline def hopIf(p: A => Boolean)(implicit hop: Hop[A]) = { if (p(underlying)) hop(underlying); underlying }
+
+    /** If `p` is true, send the value as an implicit `Hop` with the given type key; otherwise return self */
+    @inline def hopKeyIf[X](p: A => Boolean)(implicit hop: HopKey[A, X]) = { if (p(underlying)) hop(underlying); underlying }
 
     /** Perform a side-effect `g`, typically to clean up a resource, after
       * transforming self according to `f`. 
@@ -201,7 +404,7 @@ package object flow extends LowPriorityOkValidation {
   def tapOops[A, U](f: => A)(sideEffect: => U)(implicit oops: Oops): A = try{ f } catch { case t if t eq oops => sideEffect; throw t }
   
   /** Execute a side-effect when a non-local `Hop` is thrown inside `f`, but allow it to continue. */
-  def tapHop[A, B, U, X](f: => A)(sideEffect: B => U)(implicit hop: Hop[B, X]): A = try { f } catch { case t if hop is t => sideEffect(hop as t value); throw t }
+  def tapHop[A, B, U](f: => A)(sideEffect: B => U)(implicit hop: Hop[B]): A = try { f } catch { case t if hop is t => sideEffect(hop as t value); throw t }
 
 
   /** Catch any `Oops`es that happen within this block and convert to `Option`. */
@@ -261,105 +464,26 @@ package object flow extends LowPriorityOkValidation {
     default
   }
   
+  /** Provides a `Hop` of a different return type given an existing `Hop` and a conversion from the new return type to the old one. */
+  @inline def hopOn[@specialized(Int, Long) A, @specialized(Int, Long) B, C](onwards: B => A)(f: Hop[B] => C)(implicit hop: Hop[A], impl: HopSpecAdapter2[A, B]): C =
+    impl.hopOn(onwards)(f)(hop)
   
-  private sealed class HopImplRef[A <: AnyRef, B] extends Hopped[A] with Hop[A,B] {
-    protected var myValue: A = null.asInstanceOf[A]
-    final def value = myValue
-    final def apply(a: A) = { myValue = a; throw this }
-    def on(a: A) { myValue = a; throw this }
-    final def is(t: Throwable): Boolean = this eq t
-    final def as(t: Throwable): Hopped[A] = if (this eq t) this else null
-  }
-
-  private sealed class HopImplInt[B] extends Hopped[Int] with Hop[Int,B] {
-    protected var myValue = 0
-    final def value = myValue
-    final def apply(a: Int) = { myValue = a; throw this }
-    def on(a: Int) { myValue = a; throw this }
-    final def is(t: Throwable): Boolean = this eq t
-    final def as(t: Throwable): Hopped[Int] = if (this eq t) this else null
-  }
-
-  private sealed class HopImplLong[B] extends Hopped[Long] with Hop[Long,B] {
-    protected var myValue = 0L
-    final def value = myValue
-    def apply(a: Long) = { myValue = a; throw this }
-    def on(a: Long) { myValue = a; throw this }
-    final def is(t: Throwable): Boolean = this eq t
-    final def as(t: Throwable): Hopped[Long] = if (this eq t) this else null
-  }
-  
-  private final class HoplessImplRef[A <: AnyRef, B] extends HopImplRef[A, B] {
-    override def on(a: A) { myValue = a }
-  }
-  
-  private final class HoplessImplInt[B] extends HopImplInt[B] {
-    override def on(a: Int) { myValue = a }
-  }
-  
-  private final class HoplessImplLong[B] extends HopImplLong[B] {
-    override def on(a: Long) { myValue = a }
-  }
-  
-  object UnboundHopSupplier {
-    def of[A <: AnyRef,X]: Hop[A, X] = new HopImplRef[A,X]
-    def ofInt[X]: Hop[Int,X] = new HopImplInt[X]
-    def ofLong[X]: Hop[Long,X] = new HopImplLong[X]
-    def not[A <: AnyRef,X]: Hop[A,X] = new HoplessImplRef[A,X]
-    def notInt[X]: Hop[Int,X] = new HoplessImplInt[X]
-    def notLong[X]: Hop[Long,X] = new HoplessImplLong[X]
-  }
-  
-  def hopOn[A <: AnyRef, B <: AnyRef, C, X](onwards: B => A)(f: Hop[B, X] => C)(implicit hop: Hop[A, X]) = {
-    val fake = hop.asInstanceOf[Hop[B, X]]
-    try { f(fake) } catch { case t if fake is t => hop(onwards(fake as t value)) }
-  }
-  
-  def hopIntTo[A <: AnyRef, C, X](onwards: Int => A)(f: Hop[Int, X] => C)(implicit hop: Hop[A, X]) = {
-    val inner = new HopImplInt[X]
-    try { f(inner) } catch { case t if inner is t => hop(onwards(inner as t value)) }
-  }
-  
-  def hopLongTo[A <: AnyRef, C, X](onwards: Long => A)(f: Hop[Long, X] => C)(implicit hop: Hop[A, X]) = {
-    val inner = new HopImplLong[X]
-    try{ f(inner) } catch { case t if inner is t => hop(onwards(inner as t value)) }
-  }
-  
-  def hopOnInt[C, X](onwards: Int => Int)(f: Hop[Int, X] => C)(implicit hop: Hop[Int, X]) = {
-    try { f(hop) } catch { case t if hop is t => hop(onwards(hop as t value)) }
-  }
-  
-  def hopIntToLong[C, X](onwards: Int => Long)(f: Hop[Int, X] => C)(implicit hop: Hop[Long, X]) = {
-    val inner = new HopImplInt[X]
-    try { f(inner) } catch { case t if inner is t => hop(onwards(inner as t value)) }
-  }
-  
-  def hopOnLong[C, X](onwards: Long => Long)(f: Hop[Long, X] => C)(implicit hop: Hop[Long, X]) = {
-    try { f(hop) } catch { case t if hop is t => hop(onwards(hop as t value)) }
-  }
-  
+  /** The same as `hopOn` except with a marker type parameter. */
+  @inline def hopKeyOn[@specialized(Int, Long) A, @specialized(Int, Long) B, C, X](onwards: B => A)(f: HopKey[B, X] => C)(implicit hop: HopKey[A, X], impl: HopSpecAdapter2[A, B]): C =
+    impl.hopKeyOn(onwards)(f)(hop)
   
   /** Provides a `Hop` shortcut to return from a block of code. */
-  def hopOut[A <: AnyRef, X](f: Hop[A, X] => A): A = {
-    val hop = new HopImplRef[A, X]
-    try { f(hop) } catch { case t if t eq hop => hop.value }
-  }
-  /** Provides a `Hop` shortcut to return from a block of code that returns an `Int`. */
-  def hopInt[X](f: Hop[Int, X] => Int): Int = {
-    val hop = new HopImplInt[X]
-    try { f(hop) } catch { case t if t eq hop => hop.value }
-  }
-  /** Provides a `Hop` shortcut, with an initial value, to return from a block of code that returns a 'Long`. */
-  def hopLong[X](f: Hop[Long, X] => Long): Long = {
-    val hop = new HopImplLong[X]
-    try { f(hop) } catch { case t if t eq hop => hop.value }
-  }
+  @inline def hopOut[@specialized(Int, Long) A](f: Hop[A] => A)(implicit impl: HopSpecAdapter1[A]): A = 
+    impl.hopOut(f)
+    
+  @inline def hopKeyOut[@specialized(Int, Long) A, X](f: HopKey[A, X] => A)(implicit impl: HopSpecAdapter1[A]): A =
+    impl.hopKeyOut(f)
   
   /** Assists with creating a block of code with a `Hop` using the `okay` method. */
-  trait OkayDispatcher[N] { def apply[Y](f: Hop[N, this.type] => Y): Ok[N,Y] }
+  sealed trait OkayDispatcher[N] { def apply[Y](f: HopKey[N, this.type] => Y): Ok[N,Y] }
   private val GenericOkayDispatch = new OkayDispatcher[Any] {
-    def apply[Y](f: Hop[Any, this.type] => Y): Ok[Any, Y] = {
-      val hop = (new HopImplRef[AnyRef, this.type]).asInstanceOf[Hop[Any, this.type]]
+    def apply[Y](f: HopKey[Any, this.type] => Y): Ok[Any, Y] = {
+      val hop = (new HopImpl[Any]).reKey[this.type]
       try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
     }
   }
@@ -372,10 +496,12 @@ package object flow extends LowPriorityOkValidation {
     *   file.length
     * }
     * }}}
+    * Note: the return values are not specialized.
+    * Note: the hop instance is type-keyed to the particular invocation so they won't cross-contaminate.
     */
   def okay[N] = GenericOkayDispatch.asInstanceOf[OkayDispatcher[N]]
   
-  def hopless[N, Y, X](f: Hop[N, X] => Y)(implicit hop: Hop[N, X]): Ok[N,Y] = try{ Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
+  //def hopless[N, Y, X](f: Hop[N, X] => Y)(implicit hop: Hop[N, X]): Ok[N,Y] = try{ Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
   
   /** Equivalent to `Try{...}` but stores exceptions in an [[Ok]] instead of a `Try`. */
   def safe[A](a: => A): Ok[Throwable, A] = try { Yes(a) } catch { case t if NonFatal(t) => No(t) }
@@ -383,13 +509,31 @@ package object flow extends LowPriorityOkValidation {
   /** Equivalent to `Try{...}.toOption` */
   def safeOption[A](a: => A): Option[A] = try { Some(a) } catch { case t if NonFatal(t) => None }
   
+  /** Assists with creating a block of code with a `Hop` using the `safe` method. */
+  sealed trait SafeDispatcher { def apply[N, Y](no: Throwable => N)(yes: HopKey[N, this.type] => Y): Ok[N,Y] }
+  private val GenericSafeDispatcher = new SafeDispatcher {
+    def apply[N, Y](no: Throwable => N)(yes: HopKey[N, this.type] => Y): Ok[N,Y] = {
+      val hop = (new HopImpl[N]).reKey[this.type]
+      try{ Yes(yes(hop)) }
+      catch {
+        case t if hop is t => No(hop as t value)
+        case t if NonFatal(t) => No(no(t))
+      }
+    }
+  }
+  
   /** Equivalent to `Try{...}` but maps exceptions or hops into a disfavored value and stores results in an [[Ok]]. */
-  def safeHop[N, Y, X](no: Throwable => N)(yes: Hop[N, X] => Y): Ok[N,Y] = {
-    val hop = (new HopImplRef[AnyRef, X]).asInstanceOf[Hop[N, X]]
+  def safeHop: SafeDispatcher = GenericSafeDispatcher
+  
+  /** Same as `safeHop` but uses `Unit` for the marker trait. */
+  /*
+  def safeHop[N, Y](no: Throwable => N)(yes: Hop[N] => Y): Ok[N, Y] = {
+    val hop =  new HopImpl[N]
     try{ Yes(yes(hop)) }
     catch {
       case t if hop is t => No((hop as t value).asInstanceOf[N])
       case t if NonFatal(t) => No(no(t))
     }
   }
+  */
 }
