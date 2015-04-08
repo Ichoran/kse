@@ -1,9 +1,13 @@
 package kse.tests
 
+import language.implicitConversions
+
 import kse.typecheck._
 import kse.flow._
 
 trait Test_Kse { self =>
+  protected implicit def enablePrintedEquals[A](a: A) = new Test_Kse.EnablePrintedEquals(a)
+  
   protected def explainThrowable(t: Throwable)(implicit extraTitle: ImplicitValue[String, Test_Kse]): Vector[String] = {
     val title = t.getClass.getName + Option(t.getMessage).map(": " + _).getOrElse("")
     if (extraTitle.value == null || extraTitle.value == "") title +: t.getStackTrace.map("  " + _).toVector
@@ -68,4 +72,12 @@ object Test_Kse {
   def register(tk: Test_Kse) = { myRegistered += tk; registered.length }
 
   case class TestResult(result: Option[Vector[String]] = None) {}
+
+  class EnablePrintedEquals[A](private val underlying: A) extends AnyVal {
+    def =?=[B](overlying: B) = {
+      val ans = underlying == overlying
+      if (!ans) { println("Not equal:"); println("  "+underlying); println("  "+overlying) }
+      ans
+    }
+  }  
 }

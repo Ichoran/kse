@@ -220,7 +220,7 @@ package flow {
     private val myImpl_HopSpec2AnyAny = new HopSpec2AnyAny[Any, Any]
     implicit def impl_HopSpec2AnyAny[A, B] = myImpl_HopSpec2AnyAny.asInstanceOf[HopSpecAdapter2[A, B]]
   }
-  trait Priority2HopSpecs {
+  trait Priority2HopSpecs extends Priority3HopSpecs {
     private val myImpl_HopSpec1Any = new HopSpec1Any[Any]
     implicit def impl_HopSpec1Any[A]: HopSpecAdapter1[A] = myImpl_HopSpec1Any.asInstanceOf[HopSpecAdapter1[A]]
     
@@ -479,9 +479,17 @@ package object flow extends Priority1HopSpecs {
   @inline def hopOn[@specialized(Int, Long) A, @specialized(Int, Long) B, C](onwards: B => A)(f: Hop[B] => C)(implicit hop: Hop[A], impl: HopSpecAdapter2[A, B]): C =
     impl.hopOn(onwards)(f)(hop)
   
+  trait HopKeyOnDispatcher[X] {
+    def apply[@specialized(Int, Long) A, @specialized(Int, Long) B, C](onwards: B => A)(f: HopKey[B, X] => C)(implicit hop: HopKey[A, X], impl: HopSpecAdapter2[A, B]): C
+  }
+  private val GenericHopKeyOnDispatch = new HopKeyOnDispatcher[Any] {
+    def apply[@specialized(Int, Long) A, @specialized(Int, Long) B, C](onwards: B => A)(f: HopKey[B, Any] => C)(implicit hop: HopKey[A, Any], impl: HopSpecAdapter2[A, B]): C =
+      impl.hopKeyOn(onwards)(f)(hop)
+  }
+  
+  
   /** The same as `hopOn` except with a marker type parameter. */
-  @inline def hopKeyOn[@specialized(Int, Long) A, @specialized(Int, Long) B, C, X](onwards: B => A)(f: HopKey[B, X] => C)(implicit hop: HopKey[A, X], impl: HopSpecAdapter2[A, B]): C =
-    impl.hopKeyOn(onwards)(f)(hop)
+  @inline def hopKeyOn[X] = GenericHopKeyOnDispatch.asInstanceOf[HopKeyOnDispatcher[X]]
   
   /** Provides a `Hop` shortcut to return from a block of code. */
   @inline def hopOut[@specialized(Int, Long) A](f: Hop[A] => A)(implicit impl: HopSpecAdapter1[A]): A = 
