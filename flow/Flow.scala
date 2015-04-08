@@ -264,9 +264,9 @@ package object flow extends Priority1HopSpecs {
       case _ => oops.hop()
     }
     /** Throws a `Failure` value with an available `Hop`; gives the `Success` value otherwise. */
-    @inline def orHop[B](f: Throwable => B)(implicit hop: Hop[B]): A = underlying match {
+    @inline def orHop(implicit hop: Hop[Throwable]): A = underlying match {
       case scala.util.Success(a) => a
-      case scala.util.Failure(t) => hop(f(t)); null.asInstanceOf[A]
+      case scala.util.Failure(t) => hop(t); null.asInstanceOf[A]
     }
     /** Convert to [[Ok]] with `Success` favored. */
     @inline def toOk: Ok[Throwable, A] = underlying match {

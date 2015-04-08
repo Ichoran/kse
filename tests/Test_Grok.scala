@@ -4,6 +4,7 @@ import kse.flow._
 import kse.eio._
 
 object Test_Grok extends Test_Kse {
+/*
   def test_Delimiter: Boolean = {
     var c: Char = 0
     do {
@@ -107,6 +108,6 @@ object Test_Grok extends Test_Kse {
       Iterator.continually(rng.nextDouble).take(10000).forall{ d => val s = "%.18f".format(d); (s.toDouble == Grok(s).D).tap(x => if (!x) println(s)) }
     }.exists(_ == true)
   }
-
+*/
   def main(args: Array[String]) { typicalMain(args) }
 }

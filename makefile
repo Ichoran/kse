@@ -229,12 +229,21 @@ kse/tests/Test_Base64.class : \
   tests/Test_Base64.scala
 	${F} tests/Test_Base64.scala
 
+kse/tests/Test_Delimiter.class : \
+  kse/tests/Test_Kse.class \
+  kse/flow/Ok.class \
+  kse/flow/package.class \
+  eio/Delimiter.scala \
+  tests/Test_Delimiter.scala
+	${F} tests/Test_Delimiter.scala
+
 kse/tests/Test_Grok.class : \
   kse/tests/Test_Kse.class \
   kse/flow/Ok.class \
   kse/flow/package.class \
   kse/eio/base64/package.class \
   kse/eio/base64/Base64.class \
+  kse/eio/Delimiter.class \
   eio/Grok.scala \
   tests/Test_Grok.scala
 	${F} tests/Test_Grok.scala

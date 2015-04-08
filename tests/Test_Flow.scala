@@ -62,11 +62,26 @@ object Test_Flow extends Test_Kse {
   
   def test_safeOption = safeOption{ 1/1 } == Some(1) && safeOption{ 1/0 } == None
 
-  def test_safeOk =
-    safeOk(_ => false){ hop => 1/1 } == Yes(1) &&
-    safeOk(_ => false){ hop => 1/0 } == No(false) &&
-    safeOk(_ => false){ hop => hop(true); 1/1 } == No(true) &&
-    safeOk(_ => false){ hop => hop(true); 1/0 } == No(true)
+  def test_safeHop =
+    safeHop(_ => false){ hop => 1/1 } == Yes(1) &&
+    safeHop(_ => false){ hop => 1/0 } == No(false) &&
+    safeHop(_ => false){ hop => hop(true); 1/1 } == No(true) &&
+    safeHop(_ => false){ hop => hop(true); 1/0 } == No(true)
+  
+  def test_safeHopKey = {
+    trait A {}
+    trait B {}
+    def ha(implicit hop: HopKey[Int, A]) { hop(1) }
+    def hb(implicit hop: HopKey[Int, B]) { hop(2) }
+    Seq(-1.0, 0.0, 1.0, Double.NaN).map(x =>
+      safeHopKey[A](_ => 0){ implicit hop => safeHopKey[B](_ => -1){ implicit hip =>
+        if (x < 0) ha;
+        if (x > 0) hb;
+        if (x.isNaN) throw new IllegalArgumentException
+        x
+      }}
+    ) =?= Seq(No(1), Yes(Yes(0.0)), Yes(No(2)), Yes(No(-1)))
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
