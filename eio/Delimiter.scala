@@ -105,8 +105,8 @@ final class LineDelim extends Delimiter  {
         val c = s.charAt(i);
         if (c == '\n') { i += 1; k -= 1 }
         else if (c == '\r') {
-          i += 1
-          if (i >= iN || s.charAt(i) != '\n') k -= 1
+          if (i >= iN-1 || s.charAt(i+1) == '\n') { i += 2; k -= 1 }
+          else return i
         }
         else return i
       }
@@ -121,8 +121,8 @@ final class LineDelim extends Delimiter  {
         val c = ab(i);
         if (c == '\n') { i += 1; k -= 1 }
         else if (c == '\r') {
-          i += 1
-          if (i >= iN || ab(i) != '\n') k -= 1
+          if (i >= iN-1 || ab(i+1) == '\n') { i += 2; k -= 1 }
+          else return i
         }
         else return i
       }
@@ -130,13 +130,13 @@ final class LineDelim extends Delimiter  {
     }
   final def not(s: String, i0: Int, iN: Int): Int = {
     var i = i0
-    while (i < iN && { val c = s.charAt(i); c != '\n' && c != '\r' }) i += 1
-    i
+    while (i < iN && s.charAt(i) != '\n') i += 1
+    if (i-1 >= i0 && s.charAt(i-1) == '\r') i-1 else i
   }
   final def not(ab: Array[Byte], i0: Int, iN: Int): Int = {
     var i = i0
-    while (i < iN && { val c = ab(i); c != '\n' && c != '\r'}) i += 1
-    i
+    while (i < iN && ab(i) != '\n') i += 1
+    if (i-1 >= i0 && ab(i-1) == '\r') i-1 else i
   }
 }
 

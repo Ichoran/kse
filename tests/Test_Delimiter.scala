@@ -10,41 +10,86 @@ object Test_Delimiter extends Test_Kse {
   val whited = whitey.getBytes()
   val liney = "This\nis\ra\n\rtest\r\nof\n\nnewlines"
   val lined = liney.getBytes()
-  val delimey = ",;: \t\u0000,::\u0000\t  ;;;\t\t\u0000\u0000 "
+  val delimey = ",;: \t\u0000,::\u0000\t  ;\n \n\r;;\t\t\n\u0000\u0000 "
   val delimed = delimey.getBytes()
-  /*
-  def tokenize(d: Delimiter, s: String, n: Int, pre: Boolean): Seq[String] = {
-    import kse.coll._
-    val vs = Vector.newBuilder[String]
-    var i = 0
-    while (i < s.length) {
-      if (pre) {
-        val l = d._tok(s, i, s.length, n).inLong
-        val a = l.i0
-        val b = l.i1
-        vs += s.substring(a,b)
-        i = b
-      }
+  
+  def getDelim(c: Char) = c match {
+    case ' ' => Delimiter.space
+    case '\t' => Delimiter.tab
+    case ',' => Delimiter.comma
+    case ':' => Delimiter.colon
+    case ';' => Delimiter.semi
+    case _ => new CharDelim(c)
+  }
+  
+  def stringDelim(s: String, delim: Delimiter): Seq[Seq[Int]] = {
+    val r = 0 to s.length
+    (for (i <- r) yield {
+      Seq(delim(s, i, s.length, 1), delim(s, i, s.length, Int.MaxValue), delim.not(s, i, s.length))
+    }).transpose
+  }
+  
+  def bufferDelim(ab: Array[Byte], delim: Delimiter): Seq[Seq[Int]] = {
+    val r = 0 to ab.length
+    (for (i <- r) yield {
+      Seq(delim(ab, i, ab.length, 1), delim(ab, i, ab.length, Int.MaxValue), delim.not(ab, i, ab.length))
+    }).transpose
+  }
+  
+  def canonSingle(s: String, p: Char => Boolean) = {
+    val r = 0 to s.length
+    (for (i <- r) yield {
+      Seq(
+        if (i >= s.length) -1 else if (p(s.charAt(i))) i+1 else i,
+        if (i >= s.length) -1
+          else if (!p(s.charAt(i))) i
+          else { val rest = s.substring(i).dropWhile(p); if (rest.nonEmpty) i+s.substring(i).indexOf(rest) else s.length },
+        if (i >= s.length) s.length
+          else if (p(s.charAt(i))) i
+          else { val rest = s.substring(i).dropWhile(c => !p(c)); if (rest.nonEmpty) i + s.substring(i).indexOf(rest) else s.length }
+      )
+    }).transpose
+  }
+  
+  def stringCD(s: String, c: Char): Seq[Seq[Int]] = stringDelim(s, getDelim(c))
+  def bufferCD(ab: Array[Byte], c: Char): Seq[Seq[Int]] = bufferDelim(ab, getDelim(c))
+  def canonCD(s: String, c: Char): Seq[Seq[Int]] = canonSingle(s, _ == c)
+  
+  def stringSpace(s: String) = stringCD(s, ' ')
+  def bufferSpace(ab: Array[Byte]) = bufferCD(ab, ' ')
+  def canonSpace(s: String) = canonCD(s, ' ')
+  
+  def stringWhite(s: String) = stringDelim(s, Delimiter.white)
+  def bufferWhite(ab: Array[Byte]) = bufferDelim(ab, Delimiter.white)
+  def canonWhite(s: String) = canonSingle(s, _.isWhitespace)
+  
+  def canonLine(s: String): Seq[Seq[Int]] = {
+    var idx = -1
+    val aiss = s.linesWithSeparators.toVector.map(_.map(c => (c.toInt, { idx += 1; idx })))
+    val bss = s.lines.toVector
+    val ones = (aiss zip bss).map{ case (ais, bs) => for (i <- ais.indices) yield { if (i < bs.length) ais(i)._2 else ais.last._2+1 } }
+    val nots = (aiss zip bss).map{ case (ais, bs) => for (i <- ais.indices) yield { if (i < bs.length) ais(bs.length-1)._2+1 else ais(i)._2 } }
+    val alls = (aiss zip bss).zipWithIndex.map{ case ((ais, bs), n) => for (i <- ais.indices) yield {
+      if (i < bs.length) ais(i)._2
+      else if (n+1 >= bss.length || bss(n+1).length > 0) ais.last._2+1
       else {
-        val l = d.tok_(s, i, s.length, n).inLong
-        vs += s.substring(i,l.i0)
-        i = l.i1
+        val m = n + bss.drop(n+1).takeWhile(_.isEmpty).length
+        aiss(m).last._2 + 1
       }
-    }
-    vs.result()
+    }}
+    Seq(ones.flatten :+ -1, alls.flatten :+ -1, nots.flatten :+ s.length)
   }
-  */
-  def test_Delimiter: Boolean = {
-    /*
-    import Delimiter._
-    if (space(spacey, 0, spacey.length, 1) != 0) return false
-    if (space(spacey, spacey.indexOf("     "), spacey.length, 1) != spacey.indexOf("    s")) return false
-    if (space(spacey, spacey.indexOf("     "), spacey.length, spacey.length) != spacey.indexOf("spaces")) return false
-    if (tokenize(space, spacey, spacey.length, false) != spacey.split(" +").toVector) return false
-    // TODO: finish
-    */
-    true
+  
+  def checkTrio(s: Seq[Seq[Int]], b: Seq[Seq[Int]], c: Seq[Seq[Int]]) = {
+    (s, c).zipped.forall{ (x,y) => x =?= y } &&
+    (b, c).zipped.forall{ (x,y) => x =?= y }
   }
+
+  def test_Spaces: Boolean = checkTrio(stringSpace(spacey), bufferSpace(spaced), canonSpace(spacey))
+  
+  def test_Whites: Boolean = checkTrio(stringWhite(whitey), bufferWhite(whited), canonWhite(whitey))
+  
+  def test_Newlines: Boolean = checkTrio(stringDelim(liney, Delimiter.newline), bufferDelim(lined, Delimiter.newline), canonLine(liney))
 
   def main(args: Array[String]) { typicalMain(args) }
 }
