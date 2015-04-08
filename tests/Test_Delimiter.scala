@@ -80,6 +80,23 @@ object Test_Delimiter extends Test_Kse {
     Seq(ones.flatten :+ -1, alls.flatten :+ -1, nots.flatten :+ s.length)
   }
   
+  def stringDZero(s: String, delim: Delimiter) = stringDelim(s, delim terminatedBy Delimiter.zero)
+  def bufferDZero(ab: Array[Byte], delim: Delimiter) = bufferDelim(ab, delim terminatedBy Delimiter.zero)
+  
+  def canonDZero(s: String, canon: String => Seq[Seq[Int]]) = {
+    val Seq(onez, allz, notz) = canonSingle(s, _ == '\u0000')
+    def chop(x: String, ns: Seq[Int], sub: Int = 0): Seq[String] = if (x.isEmpty) Seq() else {
+      val i = math.min(x.length, ns(0)+1-sub)
+      val y = x.substring(0,i)
+      y +: chop(x.substring(i), ns.drop(i), sub+i)
+    }
+    val parts = chop(s, notz)
+    val incs = parts.scanLeft(0)(_ + _.length)
+    val subs = parts.map(s => if (s.endsWith("\u0000")) s.dropRight(1) else s)
+    val anss = (subs.map(canon) zip incs).map{ case (xss, n) => xss.map(xs => xs.map{ case x => if (x >= 0) x + n else x }) }
+    anss.transpose.map(_.flatten)
+  } 
+  
   def checkTrio(s: Seq[Seq[Int]], b: Seq[Seq[Int]], c: Seq[Seq[Int]]) = {
     (s, c).zipped.forall{ (x,y) => x =?= y } &&
     (b, c).zipped.forall{ (x,y) => x =?= y }
@@ -90,6 +107,8 @@ object Test_Delimiter extends Test_Kse {
   def test_Whites: Boolean = checkTrio(stringWhite(whitey), bufferWhite(whited), canonWhite(whitey))
   
   def test_Newlines: Boolean = checkTrio(stringDelim(liney, Delimiter.newline), bufferDelim(lined, Delimiter.newline), canonLine(liney))
+  
+  def test_ZeroWhite: Boolean = checkTrio(stringDZero(delimey, Delimiter.white), bufferDZero(delimed, Delimiter.white), canonDZero(delimey, canonWhite))
 
   def main(args: Array[String]) { typicalMain(args) }
 }
