@@ -578,7 +578,9 @@ extends Grok {
   }
 }
 object GrokBinary {
-  private[eio] val unsafe = classOf[sun.misc.Unsafe].getDeclaredConstructor() match {
+  private[eio] final val unsafe = classOf[sun.misc.Unsafe].getDeclaredConstructor() match {
     case c => c.setAccessible(true); c.newInstance().asInstanceOf[sun.misc.Unsafe]
   }
+  private[eio] final val OFS = unsafe.arrayBaseOffset(classOf[Array[Byte]])
 }
+

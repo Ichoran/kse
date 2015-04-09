@@ -122,7 +122,7 @@ kse/eio/package.class : \
 
 clean :
 	${F} -shutdown
-	rm -r ${KSE_JAR_PATH} api
+	rm -r ${KSE_JAR_PATH} api kse/tests 
 
 docs :
 	mkdir -p api
