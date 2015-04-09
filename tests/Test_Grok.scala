@@ -4,6 +4,24 @@ import kse.flow._
 import kse.eio._
 
 object Test_Grok extends Test_Kse {
+  val validBool = Array("true", "false", "True", "False", "TRUE", "FALSE", "trUE", "fAlSe")
+  val invalidBool = Array("treu", "t", "fals", "f")
+  
+  def test_Z = {
+    validBool.forall{ s => val g = Grok(s); g{ implicit fail => g.Z } == Yes(s.toBoolean) } &&
+    invalidBool.forall{ s => val g = Grok(s); !g{ implicit fail => g.Z }.isOk }
+  }
+  
+  val trueAnyBool = Array("yes", "Y", "on", "T", "True", "TRUE", "yeS")
+  val falseAnyBool = Array("no", "Off", "n", "falSe")
+  val invalidAnyBool = Array("ye", "nay", "tr", "tru", "fa", "of", "uh-huh")
+  def test_aZ = {
+    trueAnyBool.forall{s => val g = Grok(s); g{ implicit fail => g.aZ } == Yes(true) } &&
+    falseAnyBool.forall{s => val g = Grok(s); g{ implicit fail => g.aZ } == Yes(false) } && 
+    validBool.forall{s => val g = Grok(s); g{ implicit fail => g.aZ } == Yes(s.toBoolean) } &&
+    invalidAnyBool.forall{ s => val g = Grok(s).delimit(true); !g{ implicit fail => g.aZ }.isOk } &&
+    invalidAnyBool.forall{ s => val g = Grok(s); !g{implicit fail => g.aZ}.isOk || g.position == 1 }
+  }
 /*
   def test_Delimiter: Boolean = {
     var c: Char = 0
