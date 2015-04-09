@@ -240,8 +240,8 @@ extends Grok {
     else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
   }
   final def L(implicit fail: GrokHop[this.type]): Long = longNumber(false, e.L)(fail)
-  final def uL(implicit fail: GrokHop[this.type]): Long = longNumber(true, e.L)(fail)
-  final def xL(implicit fail: GrokHop[this.type]): Long = hexidecimalNumber(16, e.xI)(fail)
+  final def uL(implicit fail: GrokHop[this.type]): Long = longNumber(true, e.uL)(fail)
+  final def xL(implicit fail: GrokHop[this.type]): Long = hexidecimalNumber(16, e.xL)(fail)
   final def aL(implicit fail: GrokHop[this.type]): Long = {
     if (!prepare(1, e.aL)(fail)) return 0
     val c = string.charAt(i)
@@ -261,7 +261,7 @@ extends Grok {
       }
       else uL(fail)
     }
-    else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
+    else { err(fail, e.wrong, e.aL); error = e.wrong; return 0 }
   }
   final def F(implicit fail: GrokHop[this.type]): Float = D(fail).toFloat
   final def xF(implicit fail: GrokHop[this.type]): Float = xD(fail).toFloat

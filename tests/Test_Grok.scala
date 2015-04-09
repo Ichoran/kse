@@ -90,7 +90,7 @@ object Test_Grok extends Test_Kse {
   def test_xI = mkGroks.forall{ mkGrok =>
     validSignedInts.forall{ i => val g = mkGrok((i & 0xFFFFFFFFL).toHexString); g{ implicit fail => g.xI } == Yes(i) } &&
     invalidHexInts.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.xI }, Set(e.xI), Set(e.range, e.wrong)) } &&
-    notevenNumbers.forall{ i => val g = mkGrok(i); val ans = g{ implicit fail => g.uI }; (ans == Yes(0xF) && g.position == 1) || isNo(ans, e.uI, e.wrong) }
+    notevenNumbers.forall{ i => val g = mkGrok(i); val ans = g{ implicit fail => g.xI }; (ans == Yes(0xF) && g.position == 1) || isNo(ans, e.xI, e.wrong) }
   }
   
   val invalidAnyInts = Array[String]((Int.MinValue-1L).toString, (1L << 32).toString, "0x100000000", "0xFFFFFFFFF")
@@ -102,6 +102,39 @@ object Test_Grok extends Test_Kse {
     invalidAnyInts.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.aI }, Set(e.aI, e.I, e.xI, e.uI), Set(e.range)) } &&
     notevenNumbers.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.aI }, e.aI, e.wrong) }
   }
+  
+  val validSignedLongs = Array[Long](0, 1, -9815, 198751, -9175498191732L, 12341982791571L, Long.MaxValue, Long.MinValue)
+  val invalidSignedLongs = Array[BigInt](BigInt("1111111111111111111111111111199"), BigInt(Long.MinValue)-1, BigInt(Long.MaxValue)+1)
+  def test_L = mkGroks.forall{ mkGrok =>
+    validSignedLongs.forall{ l => val g = mkGrok(l.toString); g{ implicit fail => g.L } == Yes(l) } &&
+    invalidSignedLongs.forall{ l => val g = mkGrok(l.toString); isNo(g{ implicit fail => g.L }, e.L, e.range) } &&
+    notevenNumbers.forall{ l => val g = mkGrok(l); isNo(g{ implicit fail => g.L }, e.L, e.wrong) }
+  }
+  
+  val invalidUnsignedLongs = Array[BigInt](BigInt("-1"), BigInt("11111111111111111111111199"), BigInt(1) << 64)
+  def test_uL = mkGroks.forall{ mkGrok =>
+    validSignedLongs.forall{ l => val g = mkGrok((BigInt(l) & ((BigInt(1)<<64)-1)).toString); g{ implicit fail => g.uL } == Yes(l) } &&
+    invalidUnsignedLongs.forall{ l => val g = mkGrok(l.toString); isNo(g{ implicit fail => g.uL }, Set(e.uL), Set(e.range, e.wrong)) } &&
+    notevenNumbers.forall{ l => val g = mkGrok(l); isNo(g{ implicit fail => g.uL }, e.uL, e.wrong) }
+  }
+  
+  val invalidHexLongs = Array[String]("10000000000000000", "-1", "fffffffffffffffff")
+  def test_xL = mkGroks.forall{ mkGrok =>
+    validSignedLongs.forall{ l => val g = mkGrok((BigInt(l) & ((BigInt(1)<<64)-1)).toString(16)); g{ implicit fail => g.xL } == Yes(l) } &&
+    invalidHexLongs.forall{ l => val g = mkGrok(l); isNo(g{ implicit fail => g.xL }, Set(e.xL), Set(e.range, e.wrong)) } &&
+    notevenNumbers.forall{ l => val g = mkGrok(l); val ans = g{ implicit fail => g.xL }; (ans == Yes(0xF) && g.position == 1) || isNo(ans, e.xL, e.wrong) }
+  }
+  
+  val invalidAnyLongs = Array[String]((BigInt(Long.MinValue)-1).toString, (BigInt(1) << 64).toString, "1111111111111111111111111111199", "0x10000000000000000", "0xFffffFFFFffffFFFF")
+  def test_aL = mkGroks.forall{ mkGrok =>
+    validSignedLongs.forall{ l => val g = mkGrok(l.toString); g{ implicit fail => g.aL } == Yes(l) } &&
+    validSignedLongs.forall{ l => val g = mkGrok((BigInt(l) & ((BigInt(1)<<64)-1)).toString); g{ implicit fail => g.aL } == Yes(l) } &&
+    validSignedLongs.forall{ l => val g = mkGrok("0x" + (BigInt(l) & ((BigInt(1)<<64)-1)).toString(16)); g{ implicit fail => g.aL } == Yes(l) } &&
+    validSignedLongs.forall{ l => val g = mkGrok("0X" + (BigInt(l) & ((BigInt(1)<<64)-1)).toString(16)); g{ implicit fail => g.aL } == Yes(l) } &&
+    invalidAnyLongs.forall{ l => val g = mkGrok(l); isNo(g{ implicit fail => g.aL }, Set(e.aL, e.L, e.xL, e.uL), Set(e.range)) } &&
+    notevenNumbers.forall{ l => val g = mkGrok(l); isNo(g{ implicit fail => g.aL }, e.aL, e.wrong) }
+  }  
+  
   
   def main(args: Array[String]) { typicalMain(args) }
 }
