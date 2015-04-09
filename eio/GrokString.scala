@@ -210,6 +210,7 @@ extends Grok {
   final def uS(implicit fail: GrokHop[this.type]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
   final def C(implicit fail: GrokHop[this.type]): Char = {
     if (!prepare(1, e.C)(fail)) return 0
+    if (delim.not(string, i, i+1) == i) { err(fail, e.wrong, e.C); error = e.wrong; return 0 }
     val ans = string.charAt(i)
     i += 1
     if (!wrapup(e.C)(fail)) return 0
