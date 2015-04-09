@@ -71,5 +71,37 @@ object Test_Grok extends Test_Kse {
     invalidCharacters.forall{ c => val g = Grok(c); isNo( g{ implicit fail => g.C } , e.C, if (c.isEmpty) e.end else e.wrong ) }
   }
   
+  val validSignedInts = Array[Int](0, 1, -92751, 2519875, Int.MaxValue, Int.MinValue)
+  val invalidSignedInts = Array[Long](11111111111199L, Int.MaxValue + 1L, Int.MinValue -1L)
+  def test_I = mkGroks.forall{ mkGrok =>
+    validSignedInts.forall{ i => val g = mkGrok(i.toString); g{ implicit fail => g.I } == Yes(i) } &&
+    invalidSignedInts.forall{ i => val g = mkGrok(i.toString); isNo(g{ implicit fail => g.I }, e.I, e.range) } &&
+    notevenNumbers.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.I }, e.I, e.wrong) }
+  }
+  
+  val invalidUnsignedInts = Array[Long](-1L, 1L << 32, 11111111111199L)
+  def test_uI = mkGroks.forall{ mkGrok =>
+    validSignedInts.forall{ i => val g = mkGrok((i & 0xFFFFFFFFL).toString); g{ implicit fail => g.uI } == Yes(i) } &&
+    invalidUnsignedInts.forall{ i => val g = mkGrok(i.toString); isNo(g{ implicit fail => g.uI }, Set(e.uI), Set(e.range, e.wrong)) } &&
+    notevenNumbers.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.uI }, e.uI, e.wrong) }
+  }
+  
+  val invalidHexInts = Array[String]("100000000", "-1", "ffffffffff")
+  def test_xI = mkGroks.forall{ mkGrok =>
+    validSignedInts.forall{ i => val g = mkGrok((i & 0xFFFFFFFFL).toHexString); g{ implicit fail => g.xI } == Yes(i) } &&
+    invalidHexInts.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.xI }, Set(e.xI), Set(e.range, e.wrong)) } &&
+    notevenNumbers.forall{ i => val g = mkGrok(i); val ans = g{ implicit fail => g.uI }; (ans == Yes(0xF) && g.position == 1) || isNo(ans, e.uI, e.wrong) }
+  }
+  
+  val invalidAnyInts = Array[String]((Int.MinValue-1L).toString, (1L << 32).toString, "0x100000000", "0xFFFFFFFFF")
+  def test_aI = mkGroks.forall{ mkGrok =>
+    validSignedInts.forall{ i => val g = mkGrok(i.toString); g{ implicit fail => g.aI } == Yes(i) } &&
+    validSignedInts.forall{ i => val g = mkGrok((i & 0xFFFFFFFFL).toString); g{ implicit fail => g.aI } == Yes(i) } &&
+    validSignedInts.forall{ i => val g = mkGrok("0x" + (i & 0xFFFFFFFFL).toHexString); g{ implicit fail => g.aI } == Yes(i) } &&
+    validSignedInts.forall{ i => val g = mkGrok("0X" + (i & 0xFFFFFFFFL).toHexString); g{ implicit fail => g.aI } == Yes(i) } &&
+    invalidAnyInts.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.aI }, Set(e.aI, e.I, e.xI, e.uI), Set(e.range)) } &&
+    notevenNumbers.forall{ i => val g = mkGrok(i); isNo(g{ implicit fail => g.aI }, e.aI, e.wrong) }
+  }
+  
   def main(args: Array[String]) { typicalMain(args) }
 }
