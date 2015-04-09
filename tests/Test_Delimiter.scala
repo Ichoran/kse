@@ -101,6 +101,10 @@ object Test_Delimiter extends Test_Kse {
     (s, c).zipped.forall{ (x,y) => x =?= y } &&
     (b, c).zipped.forall{ (x,y) => x =?= y }
   }
+  
+  def checkAll(ss: Seq[Seq[Seq[Int]]]) = ss.headOption.forall{ s =>
+    ss.drop(1).forall{ t => (s, t).zipped.forall{ (x,y) => x =?= y } }
+  }
 
   def test_Spaces: Boolean = checkTrio(stringSpace(spacey), bufferSpace(spaced), canonSpace(spacey))
   
@@ -108,7 +112,24 @@ object Test_Delimiter extends Test_Kse {
   
   def test_Newlines: Boolean = checkTrio(stringDelim(liney, Delimiter.newline), bufferDelim(lined, Delimiter.newline), canonLine(liney))
   
+  def test_Various: Boolean = ":;,\t~".forall{ c =>
+    checkTrio(stringCD(delimey, c), bufferCD(delimed, c), canonCD(delimey, c))
+  }    
+  
   def test_ZeroWhite: Boolean = checkTrio(stringDZero(delimey, Delimiter.white), bufferDZero(delimed, Delimiter.white), canonDZero(delimey, canonWhite))
+
+  def test_ZeroNewline: Boolean = checkTrio(stringDZero(delimey, Delimiter.newline), bufferDZero(delimed, Delimiter.newline), canonDZero(delimey, canonLine))
+  
+  def test_ZeroVarious: Boolean = " :;,\t~".forall{ c =>
+    checkTrio(stringDZero(delimey, new CharDelim(c)), bufferDZero(delimed, new CharDelim(c)), canonDZero(delimey, canonCD(_, c)))
+  }
+  
+  def test_ConsistentDoubleDeep: Boolean = checkAll(Seq(
+    stringDelim(delimey, Delimiter.colon.terminatedBy( Delimiter.tab terminatedBy Delimiter.zero )),
+    bufferDelim(delimed, Delimiter.colon.terminatedBy( Delimiter.tab terminatedBy Delimiter.zero )),
+    stringDelim(delimey, (Delimiter.colon terminatedBy Delimiter.tab).terminatedBy(Delimiter.zero)),
+    bufferDelim(delimed, (Delimiter.colon terminatedBy Delimiter.tab).terminatedBy(Delimiter.zero))
+  ))
 
   def main(args: Array[String]) { typicalMain(args) }
 }

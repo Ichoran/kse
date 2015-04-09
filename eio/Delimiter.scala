@@ -153,7 +153,7 @@ final class TerminatedDelim(tokenizer: Delimiter, terminator: Delimiter) extends
     }
   }
   private def loadCaches(ab: Array[Byte], i0: Int, iN: Int) {
-    if (!(ab eq cachedData) || (cachedStart > i0)) {
+    if (!(ab eq cachedData) || (cachedStart > i0) || (cachedEnd < i0)) {
       cachedData = ab
       cachedStart = i0
       cachedEnd = terminator.not(ab, i0, iN) match { case x => if (x < 0) i0 else x }

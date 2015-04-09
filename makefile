@@ -233,7 +233,7 @@ kse/tests/Test_Delimiter.class : \
   kse/tests/Test_Kse.class \
   kse/flow/Ok.class \
   kse/flow/package.class \
-  eio/Delimiter.scala \
+  kse/eio/Delimiter.class \
   tests/Test_Delimiter.scala
 	${F} tests/Test_Delimiter.scala
 
