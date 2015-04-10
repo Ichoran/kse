@@ -305,6 +305,15 @@ object Test_Grok extends Test_Kse {
   }
   
   def test_customError = mkGroks.forall{ mkGrok => val g = mkGrok(" "); g.customError.whyError == e.wrong && g.customError.whoError == e.custom }
+  
+  val positionableString = """1 22 333 4444 55555 666666 7777777"""
+  def positionIndices = Seq(0, 2, 5, 9, 14, 20, 27, positionableString.length)
+  def test_position = mkGroks.forall{ mkGrok =>
+    val g = mkGrok(positionableString)
+    val i = positionIndices.iterator
+    g.position =?= i.next && i.forall{ _ =?= { g{ implicit fail => g.I }; g.position } } && g.position =?= positionableString.length
+  }
+
 
   def main(args: Array[String]) { typicalMain(args) }
 }
