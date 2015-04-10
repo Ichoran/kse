@@ -221,5 +221,47 @@ object Test_Grok extends Test_Kse {
     }
   }
   
+  val exactThings = Array("exactly", "EXACTLY!!!", "")
+  val wrongThings = Array("EXACTLY", "EX", "?")
+  def test_exact = mkGroks.forall{ mkGrok =>
+    exactThings.forall{ s => val g = mkGrok(s); g{ implicit fail => g.exact(s) }.isOk } &&
+    exactThings.filter(_.length > 0).forall{ s => val g = mkGrok(s); g{ implicit fail => g.exact(s.charAt(0)) }.isOk } &&
+    (exactThings.filter(_.length > 0) zip wrongThings).forall{ case (s,w) => val g = mkGrok(w); isNo(g{ implicit fail => g.exact(s) }, e.exact, e.wrong) } &&
+    exactThings.filter(_.length > 0).forall{ case s => val g = mkGrok(s); isNo(g{ implicit fail => g.exact(wrongThings.last.charAt(0)) }, e.exact, e.wrong) }
+  }
+  
+  val exactCaseOne = Array("exact", "EXaCt", "EXACT")
+  val exactCaseTwo = Array("EXAct", "EXACT", "exact")
+  val inexactCase = Array("exatc", "?", "salmon")
+  def test_exactNoCase = mkGroks.forall{ mkGrok =>
+    mkGrok("") match {
+      case _: GrokString =>
+        (exactCaseOne zip exactCaseTwo).forall{ case (a,b) => val g = mkGrok(a); g{ implicit fail => g exactNoCase b }.isOk } &&
+        (exactCaseOne zip inexactCase).forall{ case (a,b) => val g = mkGrok(a); isNo(g{ implicit fail => g exactNoCase b }, e.exact, e.wrong) }
+      case _ => true
+    }
+  }
+  // TODO - get buffered case working
+  
+  val actualStrings = Array("salmon", "cod", "herring")
+  val possibleStrings = Array(Array("perch", "salmon"), Array("herring", "pike", "cod"), Array("herring"))
+  val impossibleStrings = Array(Array[String](), Array("salmon", "herring"), Array("?????", "!!!!!", ".....", ","))
+  def test_oneOf = mkGroks.forall{ mkGrok =>
+    (actualStrings zip possibleStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOf(bs: _*) }.isOk } &&
+    (actualStrings zip impossibleStrings).forall{ case (a,bs) => val g = mkGrok(a); isNo(g{ implicit fail => g.oneOf(bs: _*) }, e.oneOf, e.wrong) }
+  }
+  
+  val actualCaseStrings = Array("Salmon", "COD", "herring")
+  val possibleCaseStrings = Array(Array("peRCH", "saLMon"), Array("herring", "pike", "COD"), Array("hErRiNg"))
+  def test_oneOfNoCase = mkGroks.forall{ mkGrok =>
+    mkGrok("") match {
+      case _: GrokString =>
+        (actualCaseStrings zip possibleCaseStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOfNoCase(bs: _*) }.isOk } &&
+        (actualCaseStrings zip impossibleStrings).forall{ case (a,bs) => val g = mkGrok(a); isNo(g{ implicit fail => g.oneOfNoCase(bs: _*) }, e.oneOf, e.wrong) }
+      case _ => true
+    }
+  }
+  // TODO - get buffered case working
+
   def main(args: Array[String]) { typicalMain(args) }
 }
