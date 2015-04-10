@@ -144,6 +144,14 @@ object Test_Grok extends Test_Kse {
     notevenNumbers.forall{ f => val g = mkGrok(f); isNo(g{ implicit fail => g.F }, Set(e.F, e.D), Set(e.wrong)) }
   }
   
+  /*
+  // TODO - fix xF in Grok
+  def test_xF = mkGroks.forall{ mkGrok =>
+    validExplicitFloats.forall{ f => val g = mkGrok("%a".format(f.toFloat)); g{ implicit fail => g.xF }.map(_.toString) =?= Yes(f.toFloat.toString) } &&
+    notevenNumbers.forall{ f => val g = mkGrok(f); isNo(g{ implicit fail => g.xF }, Set(e.xF, e.xD), Set(e.end, e.wrong)) }
+  }
+  */
+
   val validExplicitDoubles = validExplicitFloats ++ 
     Array("1e-200", "-1.19578178917985e-192", "985917982379851729857198571982982159812", "2.000002e200", "0.000000000000000000000000000000000000000000000000000000000000000000000000000000123e-3") ++
     Array("1.4764606389395946E-308", "-2.0188532403671083E-308", "1.6213519565273E-310", "-6.097892580851617E-309", "1.392111954760543E-308", "-5.59858963445749E-309") ++
@@ -156,12 +164,42 @@ object Test_Grok extends Test_Kse {
     notevenNumbers.forall{ d => val g = mkGrok(d); isNo(g{ implicit fail => g.D }, e.D, e.wrong) }
   }
   
-  /*
-  def test_xF = mkGroks.forall{ mkGrok =>
-    validExplicitFloats.forall{ f => val g = mkGrok("%a".format(f.toFloat)); g{ implicit fail => g.xF }.map(_.toString) =?= Yes(f.toFloat.toString) } &&
-    notevenNumbers.forall{ f => val g = mkGrok(f); isNo(g{ implicit fail => g.xF }, Set(e.xF, e.xD), Set(e.end, e.wrong)) }
+  // TODO - fix xD in Grok and write tests
+  
+  // TODO - write tests for aD once xD is fixed in Grok
+  
+  val validTokens = Array("", " ", "foo bar", "salmon", "incrediblylong"*10000)
+  def test_tok = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ s => val g = mkGrok(s); g{ implicit fail => g.tok } == Yes(s.split(' ').headOption.getOrElse("")) }
   }
-  */
+  
+  val validQuotes = Array("\"fish\"", "\"\"", """"fish are fun friends"""", """"\"\\\""""")
+  val validUnquoted = Array("fish", "", "fish are fun friends", "\"\\\"")
+  val invalidQuoted = Array("\"la la la", "oops")
+  def test_quoted = mkGroks.forall{ mkGrok =>
+    (validQuotes zip validUnquoted).forall{ case (q,u) => val g = mkGrok(q); g{ implicit fail => g.quoted } =?= Yes(u) } &&
+    invalidQuoted.forall{ s => val g = mkGrok(s); isNo(g{ implicit fail => g.quoted }, Set(e.quote), Set(e.end, e.wrong)) }
+  }
+  
+  def test_qtok = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ case q => val g = mkGrok(q); g{ implicit fail => g.qtok } == Yes(q.split(' ').headOption.getOrElse("")) } &&
+    (validQuotes zip validUnquoted).forall{ case (q,u) => val g = mkGrok(q); g{ implicit fail => g.qtok } =?= Yes(u) } &&
+    invalidQuoted.filter(_.startsWith("\"")).forall{ case q => val g = mkGrok(q); isNo(g{ implicit fail => g.qtok }, Set(e.quote), Set(e.end, e.wrong)) }
+  }
+  
+  val validQuotedBy = Array("(fish)", """($($$$))""", "(fish are fun friends)", """("$n$r")""", "(((())))")
+  val validUnquotedBy = Array("fish", "($)", "fish are fun friends", "\"\n\r\"")
+  val invalidQuotedBy = Array("(fish", "oops", "((x)")
+  def test_quotedBy = mkGroks.forall{ mkGrok =>
+    (validQuotedBy zip validUnquotedBy).forall{ case (q,u) => val g = mkGrok(q); g{ implicit fail => g.quotedBy('(', ')', '$') } =?= Yes(u) } &&
+    invalidQuotedBy.forall{ s => val g = mkGrok(s); isNo(g{ implicit fail => g.quotedBy('(', ')', '$') }, Set(e.quote), Set(e.end, e.wrong)) }
+  }
+  
+  def test_qtokBy = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ case q => val g = mkGrok(q); g{ implicit fail => g.qtokBy('(', ')', '$') } == Yes(q.split(' ').headOption.getOrElse("")) } &&
+    (validQuotedBy zip validUnquotedBy).forall{ case (q,u) => val g = mkGrok(q); g{ implicit fail => g.qtokBy('(', ')', '$') } =?= Yes(u) } &&
+    invalidQuotedBy.filter(_.startsWith("(")).forall{ case q => val g = mkGrok(q); isNo(g{ implicit fail => g.qtokBy('(', ')', '$') }, Set(e.quote), Set(e.end, e.wrong)) }
+  }
   
   def main(args: Array[String]) { typicalMain(args) }
 }
