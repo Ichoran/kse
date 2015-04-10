@@ -303,6 +303,8 @@ object Test_Grok extends Test_Kse {
     } &&
     { val g = mkGrok(stringSourceOfBytes); g{ implicit fail => g.bytesIn(12, target, target.length-6) }.isNo(g, e.bin, e.range) }
   }
+  
+  def test_customError = mkGroks.forall{ mkGrok => val g = mkGrok(" "); g.customError.whyError == e.wrong && g.customError.whoError == e.custom }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
