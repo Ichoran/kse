@@ -40,12 +40,13 @@ extends Grok {
   }
   
   // Important to keep everything after this point synced with GrokString.  No good way to do this right now, alas.
-  private def err(fail: GrokHop[this.type], what: Int, who: Int) { 
+  private def err(fail: GrokHop[this.type], what: Int, who: Int) {
+    error = what.toByte
     if (fail != null) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, 0, i)(buffer) }
   }
   
   private final def binaryNumber(dig: Int, id: Int)(fail: GrokHop[this.type]): Long = {
-    if (dig < 0 || i + dig.toLong >= iN) { err(fail, e.end, id.toByte); error = e.end; return 0 }
+    if (dig < 0 || i + dig.toLong >= iN) { err(fail, e.end, id.toByte); return 0 }
     error = 0
     ???
   }
@@ -54,36 +55,36 @@ extends Grok {
   
   def skip(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
-    if (i >= iN) { err(fail, e.end, e.B); error = e.end; return this }
+    if (i >= iN) { err(fail, e.end, e.B); return this }
     i += 1
     this
   }
   def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
-    if (i + n.toLong >= iN) { err(fail, e.end, e.B); error = e.end; return this }
+    if (i + n.toLong >= iN) { err(fail, e.end, e.B); return this }
     i += n
     this
   }
   def Z(implicit fail: GrokHop[this.type]): Boolean = {
-    if (i >= iN) { err(fail, e.end, e.Z); error = e.end; return false }
+    if (i >= iN) { err(fail, e.end, e.Z); return false }
     val ans = buffer(i) match {
       case 0 => false
       case 1 => true
-      case _ => err(fail, e.range, e.Z); error = e.range; return false
+      case _ => err(fail, e.range, e.Z); return false
     }
     i += 1
     error = 0
     ans
   }
   def aZ(implicit fail: GrokHop[this.type]): Boolean = {
-    if (i >= iN) { err(fail, e.end, e.Z); error = e.end; return false }
+    if (i >= iN) { err(fail, e.end, e.Z); return false }
     val ans = buffer(i) != 0
     i += 1
     error = 0
     ans
   }
   def B(implicit fail: GrokHop[this.type]): Byte = {
-    if (i >= iN) { err(fail, e.end, e.B); error = e.end; 0 }
+    if (i >= iN) { err(fail, e.end, e.B); 0 }
     val ans = buffer(i)
     i += 1
     error = 0
@@ -108,7 +109,7 @@ extends Grok {
   def aD(implicit fail: GrokHop[this.type]): Double = D
   def tok(implicit fail: GrokHop[this.type]): String = {
     val j = Delimiter.zero.not(buffer, i, iN)
-    if (j < 0) { err(fail, e.end, e.tok); error = e.end; return null }
+    if (j < 0) { err(fail, e.end, e.tok); return null }
     val ans = new String(buffer, i, j-i)
     error = 0
     i = math.min(iN, j+1L).toInt
@@ -133,7 +134,7 @@ extends Grok {
         }
         else {
           var n = (x >> 16) & 0xF
-          if (k+n >= iEnd) { err(fail, e.wrong, e.quote); error = e.wrong; return null }
+          if (k+n >= iEnd) { err(fail, e.wrong, e.quote); return null }
           var l = 0L
           if ((x & 0x100000) != 0) {
             val iOld = i
@@ -194,17 +195,16 @@ extends Grok {
       i += 1
     }
     err(fail, e.end, e.quote)
-    error = e.end
     null
   }
   def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     error = 0
-    if (i >= iN-2) { err(fail, e.end, e.quote); error = e.end; return null }
+    if (i >= iN-2) { err(fail, e.end, e.quote); return null }
     val c = buffer(i)
     val bleft = left.toByte
     val bright = right.toByte
     val besc = esc.toByte
-    if (c != bleft) { err(fail, e.wrong, e.quote); error = e.wrong; return null }
+    if (c != bleft) { err(fail, e.wrong, e.quote); return null }
     i += 1
     if (bleft == bright && bleft == besc) return quotedByDegenerately(bleft)(fail)
     val iStart = i
@@ -223,14 +223,14 @@ extends Grok {
       }
       i += 1
     }
-    if (depth != 0) { err(fail, e.wrong, e.quote); error = e.wrong; return null }
+    if (depth != 0) { err(fail, e.wrong, e.quote); return null }
     if (escies > 0) return quotedByWithEscapes(iStart, i-1, bleft, bright, besc, escaper)(fail)
     val ans = if (hi) new String(buffer, iStart, i-1-iStart) else new String(buffer, iStart, i-1-iStart, "ASCII")
     ans
   }
   def qtok(implicit fail: GrokHop[this.type]): String = qtokBy('"', '"', '\\')(fail)
   def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
-    if (i >= iN) { err(fail, e.end, e.tok); error = e.end; return null }
+    if (i >= iN) { err(fail, e.end, e.tok); return null }
     val c = buffer(i)
     if (c != left) tok(fail)
     else {
@@ -241,24 +241,24 @@ extends Grok {
   }
   def base64(implicit fail: GrokHop[this.type]): Array[Byte] = {
     val a = Delimiter.zero.not(buffer, i, iN)
-    if (a < 0) { err(fail, e.end, e.b64); error = e.end; return null }
+    if (a < 0) { err(fail, e.end, e.b64); return null }
     val buf = new Array[Byte](((a - i).toLong*3/4).toInt)
     val n = kse.eio.base64.decodeFromBase64(buffer, i, a, buf, 0, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); error = e.wrong; return null }
+    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); return null }
     i = a
     error = 0
     if (n < buffer.length) java.util.Arrays.copyOf(buffer, n) else buffer
   }
   def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
     val a = Delimiter.zero.not(buffer, i, iN)
-    if (a < 0) { err(fail, e.end, e.b64); error = e.end; return -1 }
+    if (a < 0) { err(fail, e.end, e.b64); return -1 }
     val n = kse.eio.base64.decodeFromBase64(buffer, i, a, target, start, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); error = e.wrong; return -1 }
+    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); return -1 }
     i = a
     error = 0
     n
   }
-  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = { if ((B & 0xFF) != c) { err(fail, e.wrong, e.exact); error = e.wrong }; this }
+  def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = { if ((B & 0xFF) != c) { err(fail, e.wrong, e.exact) }; this }
   def exact(s: String)(implicit fail: GrokHop[this.type]): this.type = ???
   def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type = ???
   def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String = ???
@@ -266,7 +266,7 @@ extends Grok {
   def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
     error = 0
     if (n <= 0) return new Array[Byte](0)
-    if (i >= iN-n) { err(fail, e.end, e.bin); error = e.end; return null }
+    if (i >= iN-n) { err(fail, e.end, e.bin); return null }
     val buf = new Array[Byte](n)
     if (n < 16) {
       var j = 0
@@ -285,7 +285,7 @@ extends Grok {
   def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
     error = 0
     if (n <= 0) return this
-    if (i >= iN-n) { err(fail, e.end, e.bin); error = e.end; return null }
+    if (i >= iN-n) { err(fail, e.end, e.bin); return null }
     if (n < 16) {
       var j = 0
       while (j < n) {
@@ -542,7 +542,7 @@ extends Grok {
     while (!isEmpty) {
       index += 1
       try {
-        if (i >= iN) { err(fail, e.end, e.sub); error = e.end; return null }
+        if (i >= iN) { err(fail, e.end, e.sub); return null }
         finalized = false
         delim = delimNew
         val ans = f(fail)

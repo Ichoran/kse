@@ -50,22 +50,22 @@ extends Grok {
   }
   
   // Important to keep everything after this point synced with GrokString.  No good way to do this right now, alas.
-  private def err(fail: GrokHop[this.type], what: Int, who: Int) { if (fail != null) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, t, i)(buffer) } }
+  private def err(fail: GrokHop[this.type], what: Int, who: Int) { error = what.toByte; if (fail != null) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, t, i)(buffer) } }
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {
       val j = delim(buffer, i, iN, nSep)
-      if (j < 0) { err(fail, e.end, id); iN = i; error = e.end; return false }
+      if (j < 0) { err(fail, e.end, id); iN = i; return false }
       i = j
       ready = 1
     }
-    if (iN - i < needed) { err(fail, e.end, id); error = e.end; false } else true
+    if (iN - i < needed) { err(fail, e.end, id); false } else true
   }
   private final def wrapup(id: Int)(fail: GrokHop[this.type]): Boolean = {
     if (reqSep) {
       ready = 1
       val j = delim(buffer, i, iN, nSep)
-      if (j == i) { err(fail,e.delim,id); error = e.delim; false }
+      if (j == i) { err(fail,e.delim,id); false }
       else {
         t += 1
         if (j < 0) iN = i else i = j
@@ -89,9 +89,9 @@ extends Grok {
       else { j = i; rawDecimalDigitsUnsigned(buffer, dig+1) }
     }
     if (error > 0) { err(fail,error,id); return 0 }
-    if (i-j > dig) { err(fail,e.range,id); error = e.range; return 0 }
+    if (i-j > dig) { err(fail,e.range,id); return 0 }
     val ans = if (negative) -l else l
-    if (ans < lo || ans > hi) { err(fail,e.range,id); error = e.range; return 0 }
+    if (ans < lo || ans > hi) { err(fail,e.range,id); return 0 }
     if (!wrapup(id)(fail)) return 0
     ans
   }
@@ -115,18 +115,18 @@ extends Grok {
         else {
           val c = buffer(i)-'0'
           if (c < 0 || c > 9) l
-          else if (l > GrokNumber.maxULongPrefix || c > GrokNumber.maxULongLastDigit) { err(fail, e.range, id); error = e.range; return 0 }
+          else if (l > GrokNumber.maxULongPrefix || c > GrokNumber.maxULongLastDigit) { err(fail, e.range, id); return 0 }
           else {
             i += 1
-            if (i < iN && { val c = buffer(i); c >= '0' && c <= '9'}) { err(fail, e.range, id); error = e.range; return 0 }
+            if (i < iN && { val c = buffer(i); c >= '0' && c <= '9'}) { err(fail, e.range, id); return 0 }
             l*10 + c
           }
         }
       }
       else {
-        if (i-j == 19 && i < iN && { val c = buffer(i); c >= '0' && c <= '9'}) { err(fail, e.range, id); error = e.range; return 0 }
+        if (i-j == 19 && i < iN && { val c = buffer(i); c >= '0' && c <= '9'}) { err(fail, e.range, id); return 0 }
         val x = if (negative) -l else l
-        if (x != 0 && (x < 0) != negative) { err(fail, e.range,id); error = e.range; return 0 }
+        if (x != 0 && (x < 0) != negative) { err(fail, e.range,id); return 0 }
         x
       }
     if (!wrapup(id)(fail)) return 0
@@ -141,7 +141,7 @@ extends Grok {
       else { j = i; rawHexidecimalDigits(buffer, dig+1) }
     }
     if (error > 0) { err(fail,error,id); return 0 }
-    if (i-j > dig) { err(fail,e.range,id); error = e.range; return 0 }
+    if (i-j > dig) { err(fail,e.range,id); return 0 }
     if (!wrapup(id)(fail)) return 0
     ans
   }
@@ -150,7 +150,7 @@ extends Grok {
     var j = 0
     while (j < lowered.length) {
       if (i >= iN) { err(fail, e.end, id); error = e.end; return }
-      if (lowered.charAt(j) != (buffer(i) | 0x20)) { err(fail, e.wrong, id); error = e.wrong; return }
+      if (lowered.charAt(j) != (buffer(i) | 0x20)) { err(fail, e.wrong, id); return }
       i += 1; j += 1
     }
     ready = 0
@@ -178,7 +178,7 @@ extends Grok {
     val ans = 
       if (c == 'T') { matchAsciiInsensitive("true", e.Z)(fail); true }
       else if (c == 'F') { matchAsciiInsensitive("false", e.Z)(fail); false }
-      else { err(fail, e.wrong, e.Z); error = e.wrong; return false }
+      else { err(fail, e.wrong, e.Z); return false }
     if (!wrapup(e.Z)(fail)) return false
     ans
   }
@@ -204,19 +204,19 @@ extends Grok {
         false
       case 'O' =>
         i += 1
-        if (i >= iN) { err(fail, e.end, e.aZ); error = e.end; return false }
+        if (i >= iN) { err(fail, e.end, e.aZ); return false }
         val c = buffer(i) & 0xDF
         if (c == 'N') { i += 1; true }
         else if (c == 'F') {
           i += 1
-          if (i >= iN) { err(fail, e.end, e.aZ); error = e.end; return false }
-          if ((buffer(i) & 0xDF) != 'F') { err(fail, e.wrong, e.aZ); error = e.wrong; return false }
+          if (i >= iN) { err(fail, e.end, e.aZ); return false }
+          if ((buffer(i) & 0xDF) != 'F') { err(fail, e.wrong, e.aZ); return false }
           i += 1
           false
         }
-        else { err(fail, e.wrong, e.aZ); error = e.wrong; return false }
+        else { err(fail, e.wrong, e.aZ); return false }
       case _ =>
-        err(fail, e.wrong, e.aZ); error = e.wrong; return false
+        err(fail, e.wrong, e.aZ); return false
     }
     if (!wrapup(e.aZ)(fail)) return false
     ans
@@ -227,7 +227,7 @@ extends Grok {
   def uS(implicit fail: GrokHop[this.type]): Short = smallNumber(5, 0, 0xFFFFL, e.uS)(fail).toShort
   def C(implicit fail: GrokHop[this.type]): Char = {
     if (!prepare(1, e.C)(fail)) return 0
-    if (delim.not(buffer, i, i+1) == i) { err(fail, e.wrong, e.C); error = e.wrong; return 0 }    
+    if (delim.not(buffer, i, i+1) == i) { err(fail, e.wrong, e.C); return 0 }    
     val ans = buffer(i) & 0xFF
     i += 1
     if (!wrapup(e.C)(fail)) return 0
@@ -242,10 +242,10 @@ extends Grok {
     if (c == '-') I(fail)
     else if (c == '+') {
       i += 1
-      if (i+1 >= iN) { err(fail, e.end, e.aI); error = e.end; return 0 }
+      if (i+1 >= iN) { err(fail, e.end, e.aI); return 0 }
       val c = buffer(i)
       if (c >= '0' && c <= '9') I(fail)
-      else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
+      else { err(fail, e.wrong, e.aI); return 0 }
     }
     else if (c >= '0' && c <= '9') {
       if (c == '0' && i+2 < iN && (buffer(i+1)|0x20)=='x' && { val c = buffer(i+2) | 0x20; (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') }) {
@@ -254,7 +254,7 @@ extends Grok {
       }
       else uI(fail)
     }
-    else { err(fail, e.wrong, e.aI); error = e.wrong; return 0 }
+    else { err(fail, e.wrong, e.aI); return 0 }
   }
   def L(implicit fail: GrokHop[this.type]): Long = longNumber(false, e.L)(fail)
   def uL(implicit fail: GrokHop[this.type]): Long = longNumber(true, e.uL)(fail)
@@ -265,20 +265,20 @@ extends Grok {
     if (c == '-') L(fail)
     else if (c == '+') {
       i += 1
-      if (i+1 >= iN) { err(fail, e.end, e.aL); error = e.end; return 0 }
+      if (i+1 >= iN) { err(fail, e.end, e.aL); return 0 }
       val c = buffer(i)
       if (c >= '0' && c <= '9') L(fail)
-      else { err(fail, e.wrong, e.aL); error = e.wrong; return 0 }
+      else { err(fail, e.wrong, e.aL); return 0 }
     }
     else if (c >= '0' && c <= '9') {
       if (c == '0' && i+1 < iN && (buffer(i+1)|0x20)=='x') {
-        if (i+2 >= iN) { err(fail, e.end, e.aL); error = e.end; return 0 }
+        if (i+2 >= iN) { err(fail, e.end, e.aL); return 0 }
         i += 2
         xL(fail)
       }
       else uL(fail)
     }
-    else { err(fail, e.wrong, e.aL); error = e.wrong; return 0 }
+    else { err(fail, e.wrong, e.aL); return 0 }
   }
   def F(implicit fail: GrokHop[this.type]): Float = D(fail).toFloat
   def xF(implicit fail: GrokHop[this.type]): Float = xD(fail).toFloat
@@ -313,19 +313,19 @@ extends Grok {
       case '+' => i += 1
       case _ =>
     }
-    if (buffer(i) != '0') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (buffer(i) != '0') { err(fail, e.wrong, e.xD); return parseErrorNaN }
     i += 1
-    if ((buffer(i)|0x20) != 'x') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if ((buffer(i)|0x20) != 'x') { err(fail, e.wrong, e.xD); return parseErrorNaN }
     i += 1
     val subnorm = buffer(i) match {
       case '0' => true
       case '1' => false
       case 'i' | 'I' => return (if (neg) -D(fail) else D(fail))
       case 'n' | 'N' => return D(fail)
-      case _ => { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+      case _ => { err(fail, e.wrong, e.xD); return parseErrorNaN }
     }
     i += 1
-    if (buffer(i) != '.') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (buffer(i) != '.') { err(fail, e.wrong, e.xD); return parseErrorNaN }
     i += 1
     val oldReqSep = reqSep
     reqSep = false
@@ -333,9 +333,9 @@ extends Grok {
     error = 0
     val bits = hexidecimalNumber(13, e.xD)(null)
     reqSep = oldReqSep
-    if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
-    if (i >= iN-1) { err(fail, e.end, e.xD); error = e.end; return parseErrorNaN }
-    if ((buffer(i)|0x20) != 'p') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (error != 0) { err(fail, e.wrong, e.xD); return parseErrorNaN }
+    if (i >= iN-1) { err(fail, e.end, e.xD); return parseErrorNaN }
+    if ((buffer(i)|0x20) != 'p') { err(fail, e.wrong, e.xD); return parseErrorNaN }
     i += 1
     if (buffer(i) == '+') i += 1
     val iExp0 = i
@@ -343,8 +343,8 @@ extends Grok {
     reqSep = false
     val exp = smallNumber(6, -1022, 1023, e.xD)(null)
     reqSep = oldReqSep
-    if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
-    if ((i - iExp0) > 5) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
+    if (error != 0) { err(fail, e.wrong, e.xD); return parseErrorNaN }
+    if ((i - iExp0) > 5) { err(fail, e.wrong, e.xD); return parseErrorNaN }
     if (!wrapup(e.xD)(fail)) return parseErrorNaN
     java.lang.Double.longBitsToDouble(bits | (exp+1022L + (if (subnorm) 0 else 1)) << 52)
   }
@@ -390,7 +390,7 @@ extends Grok {
         }
         else {
           var n = (x >> 16) & 0xF
-          if (k+n >= iEnd) { err(fail, e.wrong, e.quote); error = e.wrong; return null }
+          if (k+n >= iEnd) { err(fail, e.wrong, e.quote); return null }
           var l = 0L
           if ((x & 0x100000) != 0) {
             val iOld = i
@@ -454,7 +454,6 @@ extends Grok {
       i += 1
     }
     err(fail, e.end, e.quote)
-    error = e.end
     null
   }
   def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
@@ -463,7 +462,7 @@ extends Grok {
     val bleft = left.toByte
     val bright = right.toByte
     val besc = esc.toByte
-    if (c != bleft) { err(fail, e.wrong, e.quote); error = e.wrong; return null }
+    if (c != bleft) { err(fail, e.wrong, e.quote); return null }
     i += 1
     if (bleft == bright && bleft == besc) return quotedByDegenerately(bleft)(fail)
     val iStart = i
@@ -482,7 +481,7 @@ extends Grok {
       }
       i += 1
     }
-    if (depth != 0) { err(fail, e.wrong, e.quote); error = e.wrong; return null }
+    if (depth != 0) { err(fail, e.wrong, e.quote); return null }
     if (escies > 0) return quotedByWithEscapes(iStart, i-1, bleft, bright, besc, escaper)(fail)
     val ans = if (hi) new String(buffer, iStart, i-1-iStart) else new String(buffer, iStart, i-1-iStart, "ASCII")
     if (!wrapup(e.quote)(fail)) return null
@@ -502,7 +501,7 @@ extends Grok {
     val a = delim.not(buffer, i, iN)
     val buf = new Array[Byte](((a - i).toLong*3/4).toInt)
     val n = kse.eio.base64.decodeFromBase64(buffer, i, a, buf, 0, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); error = e.wrong; return null }
+    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); return null }
     i = a
     t += 1
     ready = 0
@@ -512,7 +511,7 @@ extends Grok {
     if (!prepare(0, e.tok)(fail)) return -1
     val a = delim.not(buffer, i, iN)
     val n = kse.eio.base64.decodeFromBase64(buffer, i, a, target, start, kse.eio.base64.Url64.decoder)
-    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); error = e.wrong; return -1 }
+    if (n < 0) { i = i - (n+1); err(fail, e.wrong, e.b64); return -1 }
     i = a
     t += 1
     ready = 0
@@ -520,7 +519,7 @@ extends Grok {
   }
   def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(1, e.exact)(fail)) return null
-    if ((buffer(i) & 0xFF) != c) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+    if ((buffer(i) & 0xFF) != c) { err(fail, e.wrong, e.exact); return this }
     i += 1
     if (!wrapup(e.exact)(fail)) return null
     this
@@ -529,7 +528,7 @@ extends Grok {
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
     while (i < iN && k < s.length && buffer(i) == s.charAt(k)) { i += 1; k += 1 }
-    if (k < s.length) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+    if (k < s.length) { err(fail, e.wrong, e.exact); return this }
     if (!wrapup(e.exact)(fail)) return null
     this
   }
@@ -544,34 +543,34 @@ extends Grok {
       (c == cc) || ((c & 0x80) != 0 && {
         val code = 
           if ((c & 0xE0) == 0xC0) {
-            if (i >= iN-1) { err(fail, e.end, e.exact); error = e.end; return this }
+            if (i >= iN-1) { err(fail, e.end, e.exact); return this }
             val c2 = buffer(i+1) & 0xFF
             i += 1
-            if ((c2&0xC0) != 0x80) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+            if ((c2&0xC0) != 0x80) { err(fail, e.wrong, e.exact); return this }
             ((c & 0x1F) << 6) | (c2 & 0x3F)
           }
           else if ((c & 0xF0) == 0xE0) {
-            if (i >= iN-2) { err(fail, e.end, e.exact); error = e.end; return this }
+            if (i >= iN-2) { err(fail, e.end, e.exact); return this }
             val c2 = buffer(i+1) & 0xFF
             val c3 = buffer(i+2) & 0xFF
             i += 2
-            if (((c2&0xC0) | (c3&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+            if (((c2&0xC0) | (c3&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); return this }
             ((c & 0xF) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F)
           }
           else if ((c & 0xF4) == 0xF0) {
-            if (i >= iN-3) { err(fail, e.end, e.exact); error = e.end; return this }
+            if (i >= iN-3) { err(fail, e.end, e.exact); return this }
             val c2 = buffer(i+1) & 0xFF
             val c3 = buffer(i+2) & 0xFF
             val c4 = buffer(i+3) & 0xFF
             i += 3
-            if (((c2&0xC0) | (c3&0xC0) | (c4&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+            if (((c2&0xC0) | (c3&0xC0) | (c4&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); return this }
             ((c & 0x7) << 18) | ((c2 & 0x3F) << 12) | ((c3 &0x3F) << 6) | (c4 & 0x3F)
           }
-          else { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+          else { err(fail, e.wrong, e.exact); return this }
         
       })
     }) { i += 1; k += 1 }
-    if (k < s.length) { err(fail, e.wrong, e.exact); error = e.wrong; return this }
+    if (k < s.length) { err(fail, e.wrong, e.exact); return this }
     if (!wrapup(e.exact)(fail)) return null
     this
   }*/
@@ -592,7 +591,6 @@ extends Grok {
     }
     i = a
     err(fail, e.wrong, e.oneOf)
-    error = e.wrong
     null
   }
   def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String = {
@@ -621,7 +619,6 @@ extends Grok {
     }
     i = a
     err(fail, e.wrong, e.oneOf)
-    error = e.wrong
     null
   }
   def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte] = {
@@ -641,7 +638,7 @@ extends Grok {
   }
   def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(n, e.bin)(fail)) return null
-    if (start < 0 || target.length - start < n) { err(fail, e.range, e.bin); error = e.range; return null }
+    if (start < 0 || target.length - start < n) { err(fail, e.range, e.bin); return null }
     var j = start
     val end = start + n
     while (j < end) {
