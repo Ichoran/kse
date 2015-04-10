@@ -133,8 +133,35 @@ object Test_Grok extends Test_Kse {
     validSignedLongs.forall{ l => val g = mkGrok("0X" + (BigInt(l) & ((BigInt(1)<<64)-1)).toString(16)); g{ implicit fail => g.aL } == Yes(l) } &&
     invalidAnyLongs.forall{ l => val g = mkGrok(l); isNo(g{ implicit fail => g.aL }, Set(e.aL, e.L, e.xL, e.uL), Set(e.range)) } &&
     notevenNumbers.forall{ l => val g = mkGrok(l); isNo(g{ implicit fail => g.aL }, e.aL, e.wrong) }
-  }  
+  }
   
+  val validExplicitFloats = Array("1.0", "0", "-0", "-Infinity", "NaN", "0.1235812", "40e20", "-40e-20", "4E4", "0.000012531e+5", "9999e9999", "-9999e9999", "9e-9999", "-9e-9999")
+  def test_F = mkGroks.forall{ mkGrok =>
+    validExplicitFloats.forall{ f => val g = mkGrok(f); g{ implicit fail => g.F }.map(_.toString) =?= Yes(f.toFloat.toString) } &&
+    (0 until 1024).map(_ => util.Random.nextInt).forall{ i => 
+      val f = java.lang.Float.intBitsToFloat(i); val g = mkGrok(f.toString); g{ implicit fail => g.F }.map(_.toString) =?= Yes(f.toString)
+    } &&
+    notevenNumbers.forall{ f => val g = mkGrok(f); isNo(g{ implicit fail => g.F }, Set(e.F, e.D), Set(e.wrong)) }
+  }
+  
+  val validExplicitDoubles = validExplicitFloats ++ 
+    Array("1e-200", "-1.19578178917985e-192", "985917982379851729857198571982982159812", "2.000002e200", "0.000000000000000000000000000000000000000000000000000000000000000000000000000000123e-3") ++
+    Array("1.4764606389395946E-308", "-2.0188532403671083E-308", "1.6213519565273E-310", "-6.097892580851617E-309", "1.392111954760543E-308", "-5.59858963445749E-309") ++
+    Array(Double.MaxValue.toString, Double.MinValue.toString, Double.MinPositiveValue.toString, "2.470e-324", "2.471e-324", "179769313486231580793728971405302307166001572487395108634089161737810574079057259642326644280530350389102191776040391417849536235805032710433848589497582645208959795824728567633954093335158118954813353848759795231931608806559135682943768914026291156873243967921161782282609668471618765104228873324865488158720")
+  def test_D = mkGroks.forall{ mkGrok =>
+    validExplicitDoubles.forall{ d => val g = mkGrok(d); g{ implicit fail => g.D }.map(_.toString) =?= Yes(d.toDouble.toString) } &&
+    (0 until 8192).map(_ => util.Random.nextLong).forall{ l =>
+      val d = java.lang.Double.longBitsToDouble(l); val g = mkGrok(d.toString); g{ implicit fail => g.D }.map(_.toString) =?= Yes(d.toString)
+    } &&
+    notevenNumbers.forall{ d => val g = mkGrok(d); isNo(g{ implicit fail => g.D }, e.D, e.wrong) }
+  }
+  
+  /*
+  def test_xF = mkGroks.forall{ mkGrok =>
+    validExplicitFloats.forall{ f => val g = mkGrok("%a".format(f.toFloat)); g{ implicit fail => g.xF }.map(_.toString) =?= Yes(f.toFloat.toString) } &&
+    notevenNumbers.forall{ f => val g = mkGrok(f); isNo(g{ implicit fail => g.xF }, Set(e.xF, e.xD), Set(e.end, e.wrong)) }
+  }
+  */
   
   def main(args: Array[String]) { typicalMain(args) }
 }

@@ -830,9 +830,29 @@ abstract class Grok {
     val neg = if (negative) 0x8000000000000000L else 0
     val exp = (1142 - sh).toLong
     if (exp >= 0x7FF) 0x7FF0000000000000L | neg
-    else if (exp < 0) {
-      if (exp < -53) neg
-      else neg | (hi >>> (7-exp))
+    else if (exp <= 0) {
+      if (exp < -52) neg
+      else {
+        // Subnormal--need to undo rounding
+        val hie = 
+          if (rup) {
+            if (sh == shift+zeros) hi - 0x80
+            else hi - 0x40
+          }
+          else hi
+        val bits = (hie >>> (8-exp))
+        val missed = hie - (bits << (8-exp))
+        val danger = 1L << (7-exp)
+        val approx = java.lang.Double.longBitsToDouble(neg | bits)
+        if (missed < danger - 1) neg | bits
+        else if (missed > danger + 1) neg | (bits+1)
+        else {
+          error = e.imprecise.toByte
+          if (missed < danger) neg | bits
+          else if (missed > danger) neg | (bits + 1)
+          else neg | (bits + (bits&0x1))
+        }
+      } 
     }
     else neg | (exp << 52) | ((hi >>> 7) & 0xFFFFFFFFFFFFFL)
   }
@@ -920,16 +940,13 @@ abstract class Grok {
     arr(j+1) = (db >> 30).toInt
     j = bigAddInPlace(arr, j, 2)
     while (j > 0 && arr(j-1) == 0) j -= 1
-    println(arr.take(j).foldRight(BigInt(0))((x,b) => x + (b << 30)))
     val k = 5*(308 - (lex - nd + 1))
-    println(computedClosestLLtoDecimal.iterator.drop(k+1).take(4).foldRight(BigInt(0))((x,b) => x + (b << 30)))
     val info = computedClosestLLtoDecimal(k).inInt
     val j0 = j
     val jN = j + math.min(4, (info.s1+29)/30)
     while (j < jN) { arr(j) = computedClosestLLtoDecimal(k+1+j-j0); j += 1 }
     j = bigMul(arr, j0, jN-j0)
     while (j > 0 && arr(jN + j-1) == 0) j -= 1
-    println(arr.iterator.drop(jN).take(j).foldRight(BigInt(0))((x,b) => x + (b << 30)))
     val smallBitExponent = (1024 - info.s0) - (math.min(info.s1, 120) - 1)   // Actual exponent of smallest bit
     var shift = -smallBitExponent - math.max(0, 30*(j-4))
     if (j >= 4) {
@@ -1067,7 +1084,7 @@ abstract class Grok {
     while (more) advanceSmartly()
     var jd = i
     // Need some digit somewhere
-    if (nd == 0) { error = e.wrong.toByte; return 0 }
+    if (nd == 0 && j0 == ja && jd == jc) { error = e.wrong.toByte; return 0 }
     
     // Exponent
     val exp =
@@ -1244,7 +1261,7 @@ abstract class Grok {
     while (more) advanceSmartly()
     var jd = i
     // Need some digit somewhere
-    if (nd == 0) { error = e.wrong.toByte; return 0 }
+    if (nd == 0 && j0 == ja && jd == jc) { error = e.wrong.toByte; return 0 }
     
     // Exponent
     val exp =

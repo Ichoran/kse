@@ -306,20 +306,17 @@ extends Grok {
   }
   def xD(implicit fail: GrokHop[this.type]): Double = {
     import GrokNumber._
-    if (!prepare(7, e.D)(fail)) return parseErrorNaN
+    if (!prepare(7, e.xD)(fail)) return parseErrorNaN
     var neg = false
     buffer(i) match {
       case '-' => neg = true; i += 1
       case '+' => i += 1
       case _ =>
     }
-    println(i)
     if (buffer(i) != '0') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
-    println(i)
     if ((buffer(i)|0x20) != 'x') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
-    println(i)
     val subnorm = buffer(i) match {
       case '0' => true
       case '1' => false
@@ -328,30 +325,23 @@ extends Grok {
       case _ => { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     }
     i += 1
-    println(i)
     if (buffer(i) != '.') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
-    println(i)
     val oldReqSep = reqSep
     reqSep = false
     ready = 1
     error = 0
     val bits = hexidecimalNumber(13, e.xD)(null)
-    println(bits.toHexString)
     reqSep = oldReqSep
     if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
-    println(i)
     if (i >= iN-1) { err(fail, e.end, e.xD); error = e.end; return parseErrorNaN }
-    println(i)
     if ((buffer(i)|0x20) != 'p') { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     i += 1
     if (buffer(i) == '+') i += 1
-    println(i)
     val iExp0 = i
     ready = 1
     reqSep = false
     val exp = smallNumber(6, -1022, 1023, e.xD)(null)
-    println(i)
     reqSep = oldReqSep
     if (error != 0) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }
     if ((i - iExp0) > 5) { err(fail, e.wrong, e.xD); error = e.wrong; return parseErrorNaN }

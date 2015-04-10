@@ -244,7 +244,7 @@ kse/tests/Test_Grok.class : \
   kse/eio/base64/package.class \
   kse/eio/base64/Base64.class \
   kse/eio/Delimiter.class \
-  eio/Grok.scala \
+  kse/eio/Grok.class \
   tests/Test_Grok.scala
 	${F} tests/Test_Grok.scala
 
