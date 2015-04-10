@@ -1388,7 +1388,7 @@ abstract class Grok {
   def peekAt(distance: Int): Int
   def peekIndices: Long
   def peekTok: String
-  def peekBinIn(n: Int, target: Array[Byte], start: Int): Int
+  def peekBytesIn(n: Int, target: Array[Byte], start: Int): Int
 
   def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]

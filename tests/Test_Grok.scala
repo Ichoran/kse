@@ -262,6 +262,35 @@ object Test_Grok extends Test_Kse {
     }
   }
   // TODO - get buffered case working
+  
+  val stringSourceOfBytes = "This is a string, and even with delimiters you just grab bytes from it."
+  def test_bytes = mkGroks.forall{ mkGrok =>
+    Seq(0, 1, 4, 12, stringSourceOfBytes.length).forall{ n =>
+      val g = mkGrok(stringSourceOfBytes)
+      g{ implicit fail => g.bytes(n).toSeq } =?= Yes(stringSourceOfBytes.map(_.toByte).take(n))
+    } &&
+    {
+      val g = mkGrok(stringSourceOfBytes);
+      isNo(g{implicit fail => g.bytes(stringSourceOfBytes.length+1)}, e.bin, e.end)
+    }
+  }
+  
+  def test_bytesIn = mkGroks.forall{ mkGrok =>
+    val target = new Array[Byte](stringSourceOfBytes.length+20)
+    Seq(0, 1, 4, 12, stringSourceOfBytes.length).forall{ n =>
+      Seq(0, 1, 8, 20).forall{ k =>
+        val g = mkGrok(stringSourceOfBytes)
+        for (i <- target.indices) target(i) = 0
+        g{ implicit fail => g.bytesIn(n, target, k) }
+        target.drop(k).take(n).toSeq =?= stringSourceOfBytes.map(_.toByte).take(n)
+      }
+    } &&
+    Seq(0, 1, 8, 19).forall{ k =>
+      val g = mkGrok(stringSourceOfBytes)
+      isNo(g{ implicit fail => g.bytesIn(stringSourceOfBytes.length+1, target, k) }, e.bin, e.end)
+    } &&
+    isNo({ val g = mkGrok(stringSourceOfBytes); g{ implicit fail => g.bytesIn(12, target, target.length-6) } }, e.bin, e.range)
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }

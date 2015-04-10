@@ -604,6 +604,7 @@ extends Grok {
   }
   final def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(n, e.bin)(fail)) return null
+    if (start < 0 || target.length - start < n) { err(fail, e.range, e.bin); error = e.range; return null }
     var j = start
     val end = start + n
     while (j < end) {
@@ -821,7 +822,7 @@ extends Grok {
     }
   }
   
-  final def peekBinIn(n: Int, target: Array[Byte], start: Int): Int = {
+  final def peekBytesIn(n: Int, target: Array[Byte], start: Int): Int = {
     if (ready == 0) {
       val j = delim(string, i, iN, nSep)
       if (j < 0) { iN = i; return -1 }

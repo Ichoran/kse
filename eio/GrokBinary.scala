@@ -394,7 +394,7 @@ extends Grok {
     }
   }
   
-  def peekBinIn(n: Int, target: Array[Byte], start: Int): Int = {
+  def peekBytesIn(n: Int, target: Array[Byte], start: Int): Int = {
     var k = start
     val kN = math.min(start + n.toLong, Int.MaxValue)
     val m = math.max(0, math.min(iN - i, kN - k)).toInt
