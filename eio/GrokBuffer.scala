@@ -506,7 +506,7 @@ extends Grok {
     i = a
     t += 1
     ready = 0
-    if (n < buffer.length) java.util.Arrays.copyOf(buffer, n) else buffer
+    if (n < buf.length) java.util.Arrays.copyOf(buf, n) else buf
   }
   def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int = {
     if (!prepare(0, e.tok)(fail)) return -1
@@ -516,7 +516,7 @@ extends Grok {
     i = a
     t += 1
     ready = 0
-    n
+    n - start
   }
   def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(1, e.exact)(fail)) return null

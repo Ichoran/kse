@@ -495,7 +495,7 @@ extends Grok {
     i = j
     t += 1
     ready = 0
-    n
+    n - start
   }
   final def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(1, e.exact)(fail)) return null

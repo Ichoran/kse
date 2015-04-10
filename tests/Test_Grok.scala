@@ -201,5 +201,25 @@ object Test_Grok extends Test_Kse {
     invalidQuotedBy.filter(_.startsWith("(")).forall{ case q => val g = mkGrok(q); isNo(g{ implicit fail => g.qtokBy('(', ')', '$') }, Set(e.quote), Set(e.end, e.wrong)) }
   }
   
+  val validBase64 = Array("bGVhcw", "bGVhc3Vy")
+  val unbasedBase64 = Array("leas".getBytes, "leasur".getBytes)
+  val invalidBase64 = Array("$$$$$$$")
+  def test_base64 = mkGroks.forall{ mkGrok =>
+    (validBase64 zip unbasedBase64).forall{ case (b,u) => val g = mkGrok(b); g{ implicit fail => g.base64 }.map(_.toSeq) =?= Yes(u.toSeq) } &&
+    invalidBase64.forall{ s => val g = mkGrok(s); isNo(g{ implicit fail => g.base64 }, e.b64, e.wrong) }
+  }
+  
+  def test_base64in = mkGroks.forall{ mkGrok =>
+    val target = new Array[Byte](40)
+    Seq(0, 10, 40 - unbasedBase64.map(_.length).max).forall{ n =>
+      (validBase64 zip unbasedBase64).forall{ case (b,u) =>
+        for (i <- target.indices) target(i) = 0
+        val g = mkGrok(b)
+        g{ implicit fail => g.base64in(target, n) }.forall{ k => target.slice(n, n+k).toSeq =?= u.toSeq }
+      } &&
+      invalidBase64.forall{ s => val g = mkGrok(s); isNo(g{ implicit fail => g.base64in(target, n) }, e.b64, e.wrong) }
+    }
+  }
+  
   def main(args: Array[String]) { typicalMain(args) }
 }
