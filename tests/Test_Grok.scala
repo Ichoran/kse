@@ -14,6 +14,16 @@ object Test_Grok extends Test_Kse {
     case Yes(a) => println(a); println(who); println(why); false
   }
   def isNo[A](no: Ok[GrokError, A], who: Int, why: Int): Boolean = isNo(no, Set(who), Set(why))
+  
+  val validSkipOne = Array("", "blah", "la la", " ")
+  val validSkipThree = Array("la la la", "salmon, cod, pike, and bass", "     ")
+  def test_skip = mkGroks.forall{ mkGrok =>
+    (validSkipOne ++ validSkipThree).forall{ s => val g = mkGrok(s); g{ implicit fail => g.skip }.isOk && (s == "" || g.position > 0) } &&
+    validSkipThree.forall{ s => (1 to 3).forall{ n => val g = mkGrok(s); g{ implicit fail => g.skip(n) }.isOk && g.position > 0 } } &&
+    validSkipOne.forall{s => val g = mkGrok(s); isNo(g{ implicit fail => g.skip; g.skip; g.skip }, e.tok, e.end) } &&
+    validSkipOne.forall{s => val g = mkGrok(s); isNo(g{ implicit fail => g.skip(3) }, e.tok, e.end) } &&
+    validSkipThree.forall{ s => val g = mkGrok(s); isNo(g{ implicit fail => g.skip(100) }, e.tok, e.end) }
+  }
 
   val validBool = Array("true", "false", "True", "False", "TRUE", "FALSE", "trUE", "fAlSe")
   val invalidBool = Array("treu", "t", "fals", "f")

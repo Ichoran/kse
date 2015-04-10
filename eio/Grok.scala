@@ -1327,9 +1327,6 @@ abstract class Grok {
   }
   
   
-  final def errorCode: Int = error
-  def customError: GrokError
-  
   def skip(implicit fail: GrokHop[this.type]): this.type
   def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type
   def Z(implicit fail: GrokHop[this.type]): Boolean
@@ -1367,6 +1364,8 @@ abstract class Grok {
   def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
   def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
 
+  final def errorCode: Int = error
+  def customError: GrokError  
   def position: Long
   def isEmpty: Boolean
   def nonEmpty: Boolean
