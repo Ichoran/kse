@@ -13,7 +13,7 @@ import kse.coll.packed._
 final class GrokBinary(private[this] var buffer: Array[Byte], initialStart: Int, initialEnd: Int)
 extends Grok {
   import kse.eio.{GrokErrorCodes => e}
-  import sun.misc.Unsafe.{ARRAY_BYTE_BASE_OFFSET => OFS}
+  import GrokBinary._
   
   i0 = math.max(0, math.min(initialStart, buffer.length))
   i = i0
