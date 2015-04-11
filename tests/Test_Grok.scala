@@ -493,6 +493,50 @@ object Test_Grok extends Test_Kse {
       Iterator.continually((Option(g.peekTok), g.oTok)).takeWhile(_ != (None, None)).forall{ case (t, o) => t == o }
     }
   }
+  
+  val notAllIntegers = "1234 foo ???"
+  def test_context = mkGroks.forall{ mkGrok =>
+    val g = mkGrok(notAllIntegers)
+    val h = mkGrok(notAllIntegers)
+    val a = h{implicit fail => (h.I, h.I)}
+    var contextString = "early"
+    val b = g{ implicit fail => g.context(contextString){ contextString = "mid"; (g.I, { contextString = "late"; g.I }) } }
+    !a.isOk && !b.isOk && a.swap.exists(ae => b.swap.exists(be =>
+      be.description =?= "late" && ae.position =?= (be.position +: be.suberrors.map(_.position)).max
+    ))
+  }
+  
+  def test_attempt = mkGroks.forall{ mkGrok =>
+    val g = mkGrok(notAllIntegers)
+    val h = mkGrok(notAllIntegers)
+    val a = h{ implicit fail => (h.I: Any, h.tok: Any, h.tok: Any) }
+    val b = g{ implicit fail => (g.attempt(g.I).yesOr(_ => g.tok), g.attempt(g.I).yesOr(_ => g.tok), g.attempt(g.I).yesOr(_ => g.tok)) }
+    a =?= b
+  }
+  
+  def test_tangent = mkGroks.forall{ mkGrok =>
+    val g = mkGrok(notAllIntegers)
+    val h = mkGrok(notAllIntegers)
+    val a = h{ implicit fail => (h.I, h.tok, h.C, h.tok, true) }
+    val b = g{ implicit fail =>
+      val w = g.tangent{ g.tok }
+      val x = g.tangent{ g.I }
+      var tf = x == g.I && w == x.toString
+      val y = g.tangent{ g.C }
+      val z = g.tok
+      tf = tf && z.take(1) == y.toString
+      val v = g.tangent{ g.tok }
+      val u2 = g.tangent{ g.C }
+      val u = g.C
+      tf = tf && u2 == u && v.take(1) == u.toString
+      g.tangent{ g exact "??" }
+      val t = g.tangent{ g.C }
+      val s = g.tok
+      tf = tf && s.take(1) ==  t.toString
+      (x, z, u, s, tf)
+    }
+    a =?= b
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
