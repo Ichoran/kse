@@ -692,8 +692,8 @@ extends Grok {
   }
   
   def trySkip(n: Int): Int = {
-    var k = n
-    while (k < 0 && trySkip) k += 1
+    var k = 0
+    while (k < n && trySkip) k += 1
     k
   }
       

@@ -8,6 +8,11 @@ object Test_Grok extends Test_Kse {
   
   val mkGroks = Array[String => Grok](s => Grok(s), s => Grok text s.getBytes)
   
+  case class Secret[A](known: A)(unknown: => String) {
+    override def equals(o: Any) = known == o
+    override def toString = known.toString + "/*" + unknown + "*/"
+  }
+  
   implicit class GrokResultIsNo[A](no: Ok[GrokError, A]) {
     def isNo(g: Grok, who: Set[Int], why: Set[Int]) = no match {
       case No(ge: GrokError) if who(ge.whoError) && why(ge.whyError) && g.errorCode == ge.whyError => true
@@ -330,6 +335,19 @@ object Test_Grok extends Test_Kse {
   val test_trim = mkGroks.forall{ mkGrok =>
     trimmableStrings.forall{ s => val g = mkGrok(s); g{ implicit fail => g.trim } =?= Yes(s.takeWhile(_ == ' ').length) } &&
     trimmableStrings.forall{ s => val g = mkGrok(s); g{ implicit fail => g.trimmed.oTok }.toOption.flatten =?= Some(s.trim) }
+  }
+  
+  val test_trySkip = mkGroks.forall{ mkGrok =>
+    (validSkipOne ++ validSkipThree).forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      Iterator.continually(g.trySkip).takeWhile(_ == true).forall{ _ => h{ implicit fail => h.skip }.isOk } && h{ implicit fail => h.skip }.isNo(h, e.tok, e.end)
+    } &&
+    (validSkipOne ++ validSkipThree).forall{ s => (1 to 4).forall{ n =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      Iterator.continually(g.trySkip(n) == n).takeWhile(_ == true).forall{ _ => h{ implicit fail => h.skip(n) }.isOk } && h{ implicit fail => h.skip(n) }.isNo(h, e.tok, e.end)
+    }}
   }
 
   def main(args: Array[String]) { typicalMain(args) }
