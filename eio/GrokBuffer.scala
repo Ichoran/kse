@@ -823,7 +823,7 @@ extends Grok {
       ready = 1
       i = j
     }
-    buffer(i) & 0xFF
+    if (i >= iN) -1 else buffer(i) & 0xFF
   }
     
   def peekAt(distance: Int): Int = {

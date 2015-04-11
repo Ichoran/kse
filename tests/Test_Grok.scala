@@ -447,6 +447,40 @@ object Test_Grok extends Test_Kse {
       w.length == 0 || g.tryExact(w.charAt(0)) == h{ implicit fail => h.exact(w.charAt(0)) }.isOk
     }
   }
+  
+  def test_peek = mkGroks.forall{ mkGrok =>
+    (validCharacters ++ invalidCharacters).forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      g.peek match {
+        case i if i < 0 => h.oC.isEmpty
+        case i => if (i.toChar.isWhitespace) h.oC.isEmpty else h.oC.map(_.toInt) =?= Some(i)
+      }
+    } &&
+    {
+      val g = mkGrok(validCharacters.mkString(" "))
+      val i = new Iterator[(Int, Option[Char])] { def hasNext = g.peek >= 0; def next = (g.peek, g.oC) }
+      i.forall{ case (x, o) => if (x.toChar.isWhitespace) o.isEmpty else o.map(_.toInt) =?= Some(x) }
+    }
+  }
+  
+  // TODO -- find out why peekAt test doesn't always work
+  /*
+  def test_peekAt = mkGroks.forall{ mkGrok =>
+    (validCharacters ++ invalidCharacters).forall{ s => val g = mkGrok(s); g.peek == g.peekAt(0) } &&
+    {
+      val source = validCharacters.mkString(" ")
+      val g = mkGrok(source)
+      (Iterator(Option("")) ++ Iterator.continually(g.oTok).takeWhile(_.isDefined) ++ Iterator(Option(""))).forall{ o =>
+        (-source.length-1 to source.length+1).forall{ k =>
+          val i = g.position + k
+          val j = g.peekAt(k)
+          if (i < 0 || i >= source.length) j =?= -1 else Secret(source.charAt(i.toInt))(s"$i $j $k $o ${g.position}") =?= j
+        }
+      }
+    }
+  }
+  */
 
   def main(args: Array[String]) { typicalMain(args) }
 }

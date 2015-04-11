@@ -618,9 +618,8 @@ extends Grok {
   
   private final def localPosition = {
     if (ready == 0) {
-      ready = 1
       val j = delim(string, i, iN, nSep)
-      if (j < 0) iN = i else i = j
+      if (j < 0) iN = i else { i = j; ready = 1 }
     }
     i
   }
@@ -786,14 +785,14 @@ extends Grok {
       ready = 1
       i = j
     }
-    string.charAt(i)
+    if (i >= iN) -1 else string.charAt(i)
   }
   
   final def peekAt(distance: Int): Int = {
     if (ready == 0) {
-      ready = 1
       val j = delim(string, i, iN, nSep)
       if (j < 0) { iN = i; return -1 }
+      ready = 1
       i = j
     }
     val index = i + distance.toLong
