@@ -239,6 +239,7 @@ kse/tests/Test_Delimiter.class : \
 
 kse/tests/Test_Grok.class : \
   kse/tests/Test_Kse.class \
+  kse/coll/packed/package.class \
   kse/flow/Ok.class \
   kse/flow/package.class \
   kse/eio/base64/package.class \

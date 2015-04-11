@@ -1,6 +1,7 @@
 package kse.tests
 
 import kse.flow._
+import kse.coll.packed._
 import kse.eio._
 
 object Test_Grok extends Test_Kse {
@@ -402,6 +403,48 @@ object Test_Grok extends Test_Kse {
       val g = mkGrok(s)
       val h = mkGrok(s)
       g.oD.map(_.toString) =?= h{ implicit fail => h.D.toString }.toOption
+    }
+  }
+  
+  def test_oTok = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      Iterator.continually(g.oTok).takeWhile(_.isDefined).forall{ _ == h{ implicit fail => h.tok }.toOption } && h{ implicit fail => h.tok }.isNo(h, e.tok, e.end)
+    }
+  }
+  
+  def test_indexTok = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      Iterator.continually(g.indexTok).takeWhile(_ != -1L).forall{ l => Some(s.substring(l.inLong.i0, l.inLong.i1)) == h{ implicit fail => h.tok }.toOption } &&
+      h{ implicit fail => h.tok }.isNo(h, e.tok, e.end)
+    }
+  }
+  
+  def test_oQuotedBy = mkGroks.forall{ mkGrok =>
+    (validQuotes zip validUnquoted).forall{ case (s,u) =>
+      val g = mkGrok(s)
+      g.oQuotedBy('"', '"', '\\') =?= Some(u)
+    } &&
+    (validQuotedBy zip validUnquotedBy).forall{ case (s,u) =>
+      val g = mkGrok(s)
+      g.oQuotedBy('(', ')', '$') =?= Some(u)
+    }
+  }
+  
+  def test_tryExact = mkGroks.forall{ mkGrok =>
+    val sources = ((exactThings ++ exactThings) zip (exactThings ++ wrongThings))
+    sources.forall { case (s,w) =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      g.tryExact(w) == h{ implicit fail => h.exact(w) }.isOk
+    } &&
+    sources.forall{ case (s,w) =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      w.length == 0 || g.tryExact(w.charAt(0)) == h{ implicit fail => h.exact(w.charAt(0)) }.isOk
     }
   }
 
