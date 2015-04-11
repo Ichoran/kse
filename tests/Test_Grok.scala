@@ -153,11 +153,13 @@ object Test_Grok extends Test_Kse {
   }
   
   val validExplicitFloats = Array("1.0", "0", "-0", "-Infinity", "NaN", "0.1235812", "40e20", "-40e-20", "4E4", "0.000012531e+5", "9999e9999", "-9999e9999", "9e-9999", "-9e-9999")
+  val invalidFloats = Array("+", "-", ".", "+.", "-.", "0e", "0e+", "0e-", ".e0")
   def test_F = mkGroks.forall{ mkGrok =>
     validExplicitFloats.forall{ f => val g = mkGrok(f); g{ implicit fail => g.F }.map(_.toString) =?= Yes(f.toFloat.toString) } &&
     (0 until 1024).map(_ => util.Random.nextInt).forall{ i => 
       val f = java.lang.Float.intBitsToFloat(i); val g = mkGrok(f.toString); g{ implicit fail => g.F }.map(_.toString) =?= Yes(f.toString)
     } &&
+    invalidFloats.forall{ f => val g = mkGrok(f); g{ implicit fail => g.F }.isNo(g, Set(e.F, e.D), Set(e.end, e.wrong)) } &&
     notevenNumbers.forall{ f => val g = mkGrok(f); g{ implicit fail => g.F }.isNo(g, Set(e.F, e.D), Set(e.wrong)) }
   }
   
@@ -178,6 +180,7 @@ object Test_Grok extends Test_Kse {
     (0 until 8192).map(_ => util.Random.nextLong).forall{ l =>
       val d = java.lang.Double.longBitsToDouble(l); val g = mkGrok(d.toString); g{ implicit fail => g.D }.map(_.toString) =?= Yes(d.toString)
     } &&
+    invalidFloats.forall{ d => val g = mkGrok(d); g{ implicit fail => g.D }.isNo(g, Set(e.D), Set(e.end, e.wrong)) } &&
     notevenNumbers.forall{ d => val g = mkGrok(d); g{ implicit fail => g.D }.isNo(g, e.D, e.wrong) }
   }
   
@@ -348,6 +351,58 @@ object Test_Grok extends Test_Kse {
       val h = mkGrok(s)
       Iterator.continually(g.trySkip(n) == n).takeWhile(_ == true).forall{ _ => h{ implicit fail => h.skip(n) }.isOk } && h{ implicit fail => h.skip(n) }.isNo(h, e.tok, e.end)
     }}
+  }
+  
+  val test_oZ = mkGroks.forall{ mkGrok =>
+    (trueAnyBool ++ falseAnyBool ++ invalidAnyBool).forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      g.oZ == h{ implicit fail => h.aZ }.toOption
+    }
+  }
+  
+  val test_oC = mkGroks.forall{ mkGrok =>
+    (validCharacters ++ invalidCharacters).forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      g.oC == h{ implicit fail => h.C }.toOption
+    }
+  }
+  
+  val test_oI = mkGroks.forall{ mkGrok =>
+    (
+      validSignedInts.map(_.toString) ++
+      validSignedInts.map(i => (i & 0xFFFFFFFFL).toString) ++
+      validSignedInts.map(i => i.toHexString).flatMap(s => Seq("0x", "0X").map(_ + s)) ++
+      invalidAnyInts ++
+      notevenNumbers
+    ).forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      g.oI == h{ implicit fail => h.aI }.toOption
+    }
+  }
+  
+  val test_oL = mkGroks.forall{ mkGrok =>
+    (
+      validSignedLongs.map(_.toString) ++
+      validSignedLongs.map(l => BigInt(l) & ((BigInt(1)<<64)-1)).map(_.toString) ++
+      validSignedLongs.map(_.toHexString).flatMap(s => Seq("0x", "0X").map(_ + s)) ++
+      invalidAnyLongs ++
+      notevenNumbers
+    ).forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      g.oL == h{ implicit fail => h.aL }.toOption
+    }
+  }
+  
+  val test_oD = mkGroks.forall{ mkGrok =>
+    (validExplicitDoubles ++ invalidFloats ++ notevenNumbers).forall{ s =>
+      val g = mkGrok(s)
+      val h = mkGrok(s)
+      g.oD.map(_.toString) =?= h{ implicit fail => h.D.toString }.toOption
+    }
   }
 
   def main(args: Array[String]) { typicalMain(args) }
