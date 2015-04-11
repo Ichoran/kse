@@ -325,6 +325,12 @@ object Test_Grok extends Test_Kse {
       (1 to n).forall{ _ => val ans = g.nonEmpty && !g.isEmpty; g.trySkip; ans } && g.isEmpty && !g.nonEmpty
     }}
   }
+  
+  val trimmableStrings = Array("foo", " bar", "                             baz")
+  val test_trim = mkGroks.forall{ mkGrok =>
+    trimmableStrings.forall{ s => val g = mkGrok(s); g{ implicit fail => g.trim } =?= Yes(s.takeWhile(_ == ' ').length) } &&
+    trimmableStrings.forall{ s => val g = mkGrok(s); g{ implicit fail => g.trimmed.oTok }.toOption.flatten =?= Some(s.trim) }
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
