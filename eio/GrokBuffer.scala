@@ -829,9 +829,10 @@ extends Grok {
   def peekAt(distance: Int): Int = {
     if (ready == 0) {
       val j = delim(buffer, i, iN, nSep)
-      if (j < 0) { iN = i; return -1 }
-      ready = 1
-      i = j
+      if (j >= 0) {
+        ready = 1
+        i = j
+      }
     }
     val index = i + distance.toLong
     if (index < i0 || index >= iN) -1 else buffer(index.toInt) & 0xFF

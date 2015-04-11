@@ -464,23 +464,35 @@ object Test_Grok extends Test_Kse {
     }
   }
   
-  // TODO -- find out why peekAt test doesn't always work
-  /*
+  val consistentlyPeekable = "t x q f ? . ! \u0002"
   def test_peekAt = mkGroks.forall{ mkGrok =>
     (validCharacters ++ invalidCharacters).forall{ s => val g = mkGrok(s); g.peek == g.peekAt(0) } &&
     {
-      val source = validCharacters.mkString(" ")
+      val source = consistentlyPeekable
       val g = mkGrok(source)
       (Iterator(Option("")) ++ Iterator.continually(g.oTok).takeWhile(_.isDefined) ++ Iterator(Option(""))).forall{ o =>
         (-source.length-1 to source.length+1).forall{ k =>
-          val i = g.position + k
+          val i = (g.position + k).toInt
           val j = g.peekAt(k)
-          if (i < 0 || i >= source.length) j =?= -1 else Secret(source.charAt(i.toInt))(s"$i $j $k $o ${g.position}") =?= j
+          if (i < 0 || i >= source.length) j =?= -1 else source.charAt(i) =?= j
         }
       }
     }
   }
-  */
+
+  def test_peekIndices = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ s =>
+      val g = mkGrok(s)
+      Iterator.continually((g.peekIndices, g.oTok)).takeWhile(_ != (-1L, None)).forall{ case (l, o) => o =?= Some(s.substring(l.inLong.i0, l.inLong.i1)) }
+    }
+  }
+  
+  def test_peekTok = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ s =>
+      val g = mkGrok(s)
+      Iterator.continually((Option(g.peekTok), g.oTok)).takeWhile(_ != (None, None)).forall{ case (t, o) => t == o }
+    }
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
