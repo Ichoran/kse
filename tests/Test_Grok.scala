@@ -313,7 +313,18 @@ object Test_Grok extends Test_Kse {
     val i = positionIndices.iterator
     g.position =?= i.next && i.forall{ _ =?= { g{ implicit fail => g.I }; g.position } } && g.position =?= positionableString.length
   }
-
+  
+  val emptyAfter = Array(
+    (1, Array(" ", "foo", "aosufq", "reallylong"*100)),
+    (2, Array("  ", "foo bar", " salmon")),
+    (3, Array("   ", "foo bar baz", " salmon  "))
+  )
+  def test_empty = mkGroks.forall{ mkGrok =>
+    emptyAfter.forall{ case (n,ss) => ss.forall{ s =>
+      val g = mkGrok(s)
+      (1 to n).forall{ _ => val ans = g.nonEmpty && !g.isEmpty; g.trySkip; ans } && g.isEmpty && !g.nonEmpty
+    }}
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
