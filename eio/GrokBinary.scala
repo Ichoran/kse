@@ -529,49 +529,42 @@ extends Grok {
       case _: LineDelim => "line "
       case _ => "entry "
     }
+    var tToBe = 0
     var iToBe = i
     val delimOld = delim
     val i0Old = i0
     val iNOld = iN
+    val nSepOld = nSep
     val reqSepOld = reqSep
     var successBuffer = Array.newBuilder[A]
     lazy val failureBuffer = Array.newBuilder[GrokError]
-    var failures, finalized = false
+    var failures = false
     var index = 0
-    val delimNew = delimiter
+    val delimNew = delimiter terminatedBy delim
     while (!isEmpty) {
+      iToBe = i
       index += 1
       try {
-        if (i >= iN) { err(fail, e.end, e.sub); return null }
-        finalized = false
         delim = delimNew
+        ready = 1
         val ans = f(fail)
-        iToBe = i
-        reqSep = reqSepOld
-        iN = iNOld
-        i0 = i0Old
-        delim = delimOld
-        finalized = true
         successBuffer += ans
       }
       catch { case x if fail is x =>
         failures = true
-        failureBuffer += GrokError(e.wrong.toByte, e.sub.toByte, 0, iToBe, name+index, (fail as x value) :: Nil)(buffer)
-        reqSep = reqSepOld
-        iN = iNOld
-        i0 = i0Old
+        failureBuffer += GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, name+index, (fail as x value) :: Nil)(buffer)
         i = iToBe
-        delim = delimOld
-        finalized = true
       }
       finally {
-        if (!finalized) {
-          reqSep = reqSepOld
-          iN = iNOld
-          i0 = i0Old
-          delim = delimOld
-          i = iToBe
-        }
+        tToBe += 1
+        reqSep = reqSepOld
+        nSep = nSepOld
+        iN = iNOld
+        i0 = i0Old
+        delim = delimOld
+        ready = 1
+        trySkip
+        iToBe = i
       }
     }
     if (!failures) Yes(successBuffer.result()) else No((successBuffer.result(), failureBuffer.result()))

@@ -994,7 +994,6 @@ extends Grok {
     }
     var tToBe = t
     var iToBe = i
-    var readyToBe = ready
     val delimOld = delim
     val i0Old = i0
     val iNOld = iN
@@ -1002,59 +1001,37 @@ extends Grok {
     val reqSepOld = reqSep
     var successBuffer = Array.newBuilder[A]
     lazy val failureBuffer = Array.newBuilder[GrokError]
-    var failures, finalized = false
+    var failures = false
     var index = 0
     val delimNew = delimiter terminatedBy delim
     while (!isEmpty) {
+      iToBe = i
       index += 1
       try {
-        if (!prepare(0, e.exact)(fail)) return null
-        finalized = false
         delim = delimNew
+        t = 0
+        ready = 1
         val ans = f(fail)
-        tToBe = t
-        iToBe = i
-        ready = 0
-        reqSep = reqSepOld
-        nSep = nSepOld
-        iN = iNOld
-        i0 = i0Old
-        delim = delimOld
-        finalized = true
-        if (i < iN && delimOld(string, i, iN, 1) == i) skip
-        else { tToBe += 1; ready = 0 }
-        if (!wrapup(e.sub)(fail)) return null
-        readyToBe = ready
         successBuffer += ans
       }
       catch { case x if fail is x =>
         failures = true
         failureBuffer += GrokError(e.wrong.toByte, e.sub.toByte, tToBe, iToBe, name+index, (fail as x value) :: Nil)(string)
+        i = iToBe
+      }
+      finally {
+        tToBe += 1
         reqSep = reqSepOld
         nSep = nSepOld
         iN = iNOld
         i0 = i0Old
-        ready = readyToBe
-        t = tToBe
-        i = iToBe
         delim = delimOld
-        finalized = true
-        fail.dormant{ skip }
-        readyToBe = ready
-      }
-      finally {
-        if (!finalized) {
-          reqSep = reqSepOld
-          nSep = nSepOld
-          iN = iNOld
-          i0 = i0Old
-          delim = delimOld
-          t = tToBe
-          i = iToBe
-          ready = readyToBe
-        }
+        ready = 1
+        trySkip
+        iToBe = i
       }
     }
+    t = tToBe
     if (!failures) Yes(successBuffer.result()) else No((successBuffer.result(), failureBuffer.result()))
   }
 }

@@ -537,6 +537,38 @@ object Test_Grok extends Test_Kse {
     }
     a =?= b
   }
+  
+  def test_each = mkGroks.forall{ mkGrok =>
+    val g = mkGrok(validExplicitDoubles.mkString(" "))
+    g{ implicit fail => g.each{ g.D.toString }.toSeq } =?= Yes(validExplicitDoubles.map(_.toDouble.toString).toSeq) &&
+    g{ implicit fail => g.each{ g.D }.toSeq } =?= Yes(Seq()) &&
+    {
+      val h = mkGrok(notAllIntegers)
+      h{ implicit fail => h.each{ h.I }.toSeq }.isNo(h, e.I, e.wrong)
+    }
+  }
+  
+  def test_filterMap = mkGroks.forall{ mkGrok =>
+    val g = mkGrok(validExplicitDoubles.mkString(" "))
+    g{ implicit fail => g.filterMap{ g.D }{_ > 0}{ _.toInt }.toSeq } =?= Yes(validExplicitDoubles.map(_.toDouble).filter(_ > 0).map(_.toInt).toSeq)
+  }
+  
+  def test_grokEach = mkGroks.forall{ mkGrok =>
+    {
+      val g = mkGrok(validExplicitDoubles.mkString(" "))
+      g.grokEach('.'){ implicit fail => g.tok }.map(_.toSeq) =?= Yes(validExplicitDoubles.map(_.split('.').take(1).mkString).toSeq)
+    } &&
+    {
+      val g = mkGrok(notAllIntegers)
+      g.grokEach('.'){ implicit fail => g.I } match {
+        case No((y,n)) =>
+          y.toSeq == Seq(1234) &&
+          n.map(_.position).toSeq =?= n.map(_.position).sorted.toSeq &&
+          n.length == 2          
+        case _ => false
+      }
+    }
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
