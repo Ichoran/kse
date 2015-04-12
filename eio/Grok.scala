@@ -11,6 +11,7 @@ import kse.flow._
 import kse.coll._
 import kse.coll.packed._
 
+/** GrokCharacter holds utility methods that aid in the parsing of unicode, e.g. in cases where capitalization is not a simple binary switch */
 object GrokCharacter {
   final def elevateCase(c: Char): Char = {
     if (c < 0x130 || c > 0x212B) Character.toUpperCase(c)
@@ -24,6 +25,9 @@ object GrokCharacter {
   }
 }
 
+/** GrokNumber contains constants and methods for assisting in the parsing of numbers by Grok classes.
+  * Most notably, it contains routines to add and multiply large numbers and tables of values used in parsing Doubles.
+  */
 object GrokNumber {
   final val maxULongPrefix = 1844674407370955161L
   final val maxULongLastDigit = 5
@@ -543,6 +547,9 @@ object GrokNumber {
   )
 }
 
+/** GrokError contains error information about a Grok parse that has failed.  There may in general be a tree of errors; the leaf or leaves
+  * contain the most specific error information, while non-leaf nodes contain broader contextual information, if any.
+  */
 final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position: Long, description: String = null, suberrors: List[GrokError] = Nil)(val target: AnyRef = null) {
   private def escapeControls(s: String, bias: Int): String = {
     val sb = new StringBuilder
@@ -646,6 +653,10 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
   override def toString = toTextLines.mkString("\n")
 }
 
+/** GrokHop handles errors during `Grok` parsing by throwing itself as a stackless exception.
+  * Instances of `GrokHop` should never be stored or created; rely upon the methods of `Grok`
+  * which loan you a `GrokHop`.
+  */
 sealed trait GrokHop[X <: Grok] extends HopKey[GrokError, X] {}
 
 final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {
@@ -658,6 +669,11 @@ final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with G
   def is(t: Throwable) = this eq t
 }
 
+/** Grok provides safe eager stream-like parsing capability.  Methods are either fail-safe (e.g. `trySkip`) and report
+  * on their success, or are guarded by the need for an implicit `GrokHop` which can be caught by appropriate methods
+  * from `Grok`.  This allows one to specify a single location where errors are handled; methods need only take an
+  * `implicit GrokHop[g.type]` to have access to any of `Grok`'s capabilities.
+  */
 abstract class Grok {
   import kse.eio.{GrokErrorCodes => e}
   protected var i = 0
@@ -1483,7 +1499,7 @@ object Grok {
 }
 
 
-
+/** GrokErrorCodes holds constants used to specify errors.  `GrokError` converts these codes to human-readable form when turned into a `String`. */
 object GrokErrorCodes {
   private[this] val whyErrorBuilder = Map.newBuilder[Int, String]
   final val end = 1             ; whyErrorBuilder += ((end, "end of input"))
@@ -1529,6 +1545,7 @@ object GrokErrorCodes {
   final val whos = whoErrorBuilder.result();
 }
 
+/** GrokEscape specifies how escape codes should be handled while parsing quoted strings. */
 abstract class GrokEscape {
   def replace(c: Char): Int
   def replace(b: Byte): Int
