@@ -310,6 +310,9 @@ package object flow extends Priority1HopSpecs {
     /** Wraps the value in an `Option`, discarding values where `p` is false. */
     @inline def optIf(p: A => Boolean) = if (p(underlying)) Some(underlying) else None
     
+    /** Performs a side-effecting operation if a conditional is true. */
+    @inline def doIf(p: A => Boolean)(f: A => Unit) { if (p(underlying)) f(underlying) }
+    
     /** Wraps the value in an [[Ok]], in a `Yes` if `p` is true, otherwise in a `No`. */
     @inline def okIf(p: A => Boolean): Ok[A,A] = if (p(underlying)) Yes(underlying) else No(underlying)
     

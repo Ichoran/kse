@@ -41,10 +41,14 @@ object Test_Flow extends Test_Kse {
     val l: Long = 6L
     val d: Double = 7d
 
+    var did = false
+    var didnt = false
+
     (i fn inc) == i+1 &&
     i.tap(x => a = x + 1) == i && (a == i+1)
     i.partFn{ case x if x < 0 => -x } == i && i.partFn{ case x if x > 0 => -x } == -i &&
     i.pickFn(_ < 0){ - _ } == i && i.pickFn(_ > 0){ - _ } == -i &&
+    { i.doIf(_ < 0){_ => didnt = true }; i.doIf(_ > 0){_ => did = true }; did && !didnt } &&
     i.optIf(_ < 0) == None && i.optIf(_ > 0) == Some(i) &&
     i.okIf(_ < 0) == No(i) && i.okIf(_ > 0) == Yes(i) &&
     ((): Any).okAs[Unit] == Yes(()) && ((): Any).okAs[AnyRef] == No(()) &&
