@@ -646,37 +646,16 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
   override def toString = toTextLines.mkString("\n")
 }
 
-sealed trait GrokHop[X <: Grok] extends HopKey[GrokError, X] {
-  def isDormant: Boolean
-  def willPanic: Boolean
-  def dormant[A](a: => A): A
-  def stackless[A](a: => A): A
-  def panic[A](a: => A): A
-  def on(err: GrokError): Unit
-}
+sealed trait GrokHop[X <: Grok] extends HopKey[GrokError, X] {}
 
 final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {
   private[this] var myValue: GrokError = null
-  private[this] var myAttitude = 0
   
   def value = myValue
 
-  def apply(err: GrokError) = { myValue = err; if (myAttitude <= 0) throw this else throw new IllegalArgumentException(err.toString) }
+  def apply(err: GrokError) = { myValue = err; throw this }
   def as(t: Throwable) = if (this eq t) this else null
   def is(t: Throwable) = this eq t
-  def on(err: GrokError) { myValue = err; if (myAttitude == 0) throw this else if (myAttitude > 0) throw new IllegalArgumentException(err.toString) }
-
-  private def withAttitude[A](newAttitude: Int)(a: => A): A = {
-    val oldAttitude = myAttitude
-    myAttitude = newAttitude
-    try { a } finally { myAttitude = oldAttitude }
-  }
-  
-  def isDormant = myAttitude < 0
-  def willPanic = myAttitude > 0
-  def dormant[A](a: => A) = withAttitude(-1)(a)
-  def stackless[A](a: => A) = withAttitude(0)(a)
-  def panic[A](a: => A) = withAttitude(1)(a)
 }
 
 abstract class Grok {

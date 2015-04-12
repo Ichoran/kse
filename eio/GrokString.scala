@@ -34,7 +34,7 @@ extends Grok {
     this
   }
   
-  private final def err(fail: GrokHop[this.type], what: Int, who: Int) { error = what.toByte; if (fail != null) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, t, i)(string) } }
+  private final def err(fail: GrokHop[this.type], what: Int, who: Int) { error = what.toByte; if (fail != null) { fail(GrokError(what.toByte, who.toByte, t, i)(string)) } }
   private final def prepare(needed: Int, id: Int)(fail: GrokHop[this.type]): Boolean = {
     error = 0
     if (ready == 0) {

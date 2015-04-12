@@ -42,7 +42,7 @@ extends Grok {
   // Important to keep everything after this point synced with GrokString.  No good way to do this right now, alas.
   private def err(fail: GrokHop[this.type], what: Int, who: Int) {
     error = what.toByte
-    if (fail != null) { if (fail.isDormant) fail on null else fail on GrokError(what.toByte, who.toByte, 0, i)(buffer) }
+    if (fail != null) { fail(GrokError(what.toByte, who.toByte, 0, i)(buffer)) }
   }
   
   private final def binaryNumber(dig: Int, id: Int)(fail: GrokHop[this.type]): Long = {
@@ -414,7 +414,7 @@ extends Grok {
     g.adoptState(buffer, i0, iN, i, Delimiter.zero, 1, true)
     (try { parse(g) } catch { case t if fail is t => No(fail as t value) }) match {
       case Yes(a) => if ((g.bufferIsExactly(buffer)) && g.position >= i) { error = 0; i = g.position.toInt }; a
-      case No(ge) => error = ge.whyError; fail on GrokError(e.wrong, e.sub, 0, i, null, ge :: Nil)(buffer); null.asInstanceOf[A]
+      case No(ge) => error = ge.whyError; fail(GrokError(e.wrong, e.sub, 0, i, null, ge :: Nil)(buffer)); null.asInstanceOf[A]
     }
   }
   
