@@ -313,7 +313,11 @@ object Test_Grok extends Test_Kse {
     { val g = mkGrok(stringSourceOfBytes); g{ implicit fail => g.bytesIn(12, target, target.length-6) }.isNo(g, e.bin, e.range) }
   }
   
-  def test_customError = mkGroks.forall{ mkGrok => val g = mkGrok(" "); g.customError.whyError == e.wrong && g.customError.whoError == e.custom }
+  def test_customError = mkGroks.forall{ mkGrok =>
+    val g = mkGrok(" ")
+    g.customError.whyError == e.wrong && g.customError.whoError == e.custom &&
+    g.customError("salmon").description == "salmon"
+  }
   
   val positionableString = """1 22 333 4444 55555 666666 7777777"""
   def positionIndices = Seq(0, 2, 5, 9, 14, 20, 27, positionableString.length)

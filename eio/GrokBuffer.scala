@@ -156,7 +156,9 @@ extends Grok {
     ready = 0
   }
 
-  def customError = GrokError(e.wrong.toByte, e.custom.toByte, t, i)(buffer)
+  final def customError = GrokError(e.wrong.toByte, e.custom.toByte, t, i)(buffer)
+  
+  final def customError(message: String) = GrokError(e.wrong.toByte, e.custom.toByte, t, i, message)(buffer)
   
   def skip(implicit fail: GrokHop[this.type]): this.type = {
     error = 0

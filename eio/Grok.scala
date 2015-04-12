@@ -1411,6 +1411,8 @@ abstract class Grok {
   final def errorCode: Int = error
   /** Produce a custom error to throw with a `fail` that documents the current position.  Useful for user-validation of data. */
   def customError: GrokError  
+  /** Produce a custom error with a `String` description that can be thrown by a `fail`.  Useful for user-validation. */
+  def customError(message: String): GrokError
   /** Return the global position of the grokker in the underlying data.  If not already at the start of a token, the position will first be advanced. */
   def position: Long
   /** Returns `true` there are no more tokens to read. */

@@ -142,6 +142,8 @@ extends Grok {
   
   final def customError = GrokError(e.wrong.toByte, e.custom.toByte, t, i)(string)
   
+  final def customError(message:String) = GrokError(e.wrong.toByte, e.custom.toByte, t, i, message)(string)
+  
   final def skip(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(0, e.tok)(fail)) return this
     i = delim.not(string, i, iN)
