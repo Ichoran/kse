@@ -650,6 +650,7 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
     }
   }
   def toTextLines: List[String] = toText(0, -1, null)
+  def untargeted: GrokError = copy(suberrors = suberrors.map(_.untargeted))(target = null)
   override def toString = toTextLines.mkString("\n")
 }
 
