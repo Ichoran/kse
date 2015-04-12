@@ -569,6 +569,49 @@ object Test_Grok extends Test_Kse {
       }
     }
   }
+  
+  def test_delimit = mkGroks.forall{ mkGrok =>
+    val common = "12fish yummy deal!  Deal!!!";
+    {
+      val g = mkGrok(common).delimit(true)
+      val h = mkGrok(common).delimit(false)
+      g{ implicit fail => g.I }.isNo(g, e.I, e.delim) &&
+      h{ implicit fail => h.I } == Yes(12) &&
+      h{ implicit fail => h.delimit(true).skip(2) exact "deal" }.isNo(h, e.exact, e.delim)
+    } &&
+    {
+      val g = mkGrok(common).delimit('e')
+      val h = mkGrok(common).delimit(new CharDelim('e'))
+      g{ implicit fail => Seq(g.tok, g.tok, g.tok) } =?= Yes(common.split('e').toSeq) &&
+      h{ implicit fail => Seq(h.tok, h.tok, h.tok) } =?= Yes(common.split('e').toSeq)
+    } &&
+    {
+      val g = mkGrok(common).delimit(0, 'm')
+      val h = mkGrok(common).delimit(1, 'm')
+      val i = mkGrok(common).delimit(0, new CharDelim('m'))
+      g{ implicit fail => (g.tok, g.tok) } == Yes((common.takeWhile(_ != 'm'), common.reverse.takeWhile(_ != 'm').reverse)) &&
+      h{ implicit fail => (h.tok, h.tok, h.tok) } == Yes((common.takeWhile(_ != 'm'), "", common.reverse.takeWhile(_ != 'm').reverse)) &&
+      i{ implicit fail => (i.tok, i.tok) } == Yes((common.takeWhile(_ != 'm'), common.reverse.takeWhile(_ != 'm').reverse))
+    } &&
+    {
+      val g = mkGrok(common).delimit(true, 'e')
+      val h = mkGrok(common).delimit(true, new CharDelim('e'))
+      g{ implicit fail => g.I }.isNo(g, e.I, e.delim) &&
+      h{ implicit fail => h.I }.isNo(h, e.I, e.delim)
+    } &&
+    {
+      val g = mkGrok(common).delimit(0, ' ')
+      val h = mkGrok(common).delimit(0, new CharDelim(' '))
+      g{ implicit fail => Seq(g.tok, g.tok, g.tok, g.tok) } == Yes(common.split(" +").toSeq)
+      h{ implicit fail => Seq(h.tok, h.tok, h.tok, h.tok) } == Yes(common.split(" +").toSeq)
+    } &&
+    {
+      val g = mkGrok(common).delimit(true, 0, 'm')
+      val h = mkGrok(common).delimit(true, 0, new CharDelim(' '))
+      g{ implicit fail => g.I }.isNo(g, e.I, e.delim)
+      h{ implicit fail => h.I }.isNo(h, e.I, e.delim)
+    }
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }

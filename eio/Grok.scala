@@ -671,6 +671,8 @@ abstract class Grok {
     
   def delimit(required: Boolean): this.type = { reqSep = required; this }
   def delimit(required: Boolean, count: Int): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; this }
+  def delimit(required: Boolean, delimiter: Delimiter): this.type = { reqSep = required; delim = delimiter; this }
+  def delimit(required: Boolean, delimiter: Char): this.type = { reqSep = required; delim = new CharDelim(delimiter); this }
   def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
   def delimit(required: Boolean, count: Int, delimiter: Char): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = new CharDelim(delimiter); this }
   def delimit(count: Int): this.type = { nSep = if (count <= 0) Int.MaxValue else count; this }
