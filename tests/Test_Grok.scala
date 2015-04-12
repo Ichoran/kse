@@ -612,6 +612,16 @@ object Test_Grok extends Test_Kse {
       h{ implicit fail => h.I }.isNo(h, e.I, e.delim)
     }
   }
+  
+  def test_GrokString_input = {
+    val g = Grok("initial input")
+    g{ implicit fail => (g.tok, g.input("input finalized", 6, 11).tok) } =?= Yes(("initial", "final"))
+  }
+  
+  def test_GrokBuffer_input = {
+    val g = Grok text "initial input".getBytes
+    g{ implicit fail => (g.tok, g.input("input finalized".getBytes, 6, 11).tok) } =?= Yes(("initial", "final"))
+  }
 
   def main(args: Array[String]) { typicalMain(args) }
 }
