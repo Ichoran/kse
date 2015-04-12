@@ -40,8 +40,8 @@ object Test_Grok extends Test_Kse {
     invalidBool.forall{ s => val g = mkGrok(s); g{ implicit fail => g.Z }.isNo(g , Set(e.Z), Set(e.wrong, e.end)) }
   }
   
-  val trueAnyBool = Array("yes", "Y", "on", "T", "True", "TRUE", "yeS")
-  val falseAnyBool = Array("no", "Off", "n", "falSe")
+  val trueAnyBool = Array("yes", "Y", "on", "T", "True", "TRUE", "yeS", "1")
+  val falseAnyBool = Array("no", "Off", "n", "falSe", "0")
   val invalidAnyBool = Array("ye", "nay", "tr", "tru", "fa", "of", "uh-huh")
   def test_aZ = mkGroks.forall{ mkGrok =>
     trueAnyBool.forall{s => val g = mkGrok(s); g{ implicit fail => g.aZ } == Yes(true) } &&

@@ -669,16 +669,27 @@ abstract class Grok {
   protected var ready: Byte = 0
   protected var delim: Delimiter = null
     
+  /** Sets whether tokens must be separated by delimiters (`true` means yes) or whether two tokens can abut (e.g. `123true`). */
   def delimit(required: Boolean): this.type = { reqSep = required; this }
+  /** Sets whether tokens must separated by delimiters (`true` means yes) and how many sequential delimiters may be consumed (`0` means any number) */
   def delimit(required: Boolean, count: Int): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; this }
+  /** Sets whether tokens must be separated by delimiters (`true` means yes) and sets the delimiter */
   def delimit(required: Boolean, delimiter: Delimiter): this.type = { reqSep = required; delim = delimiter; this }
+  /** Sets whether tokens must be separated by delimiters (`true` means yes) and sets the delimiter to the supplied character */
   def delimit(required: Boolean, delimiter: Char): this.type = { reqSep = required; delim = new CharDelim(delimiter); this }
+  /** Sets whether tokens must be separated by delimiters (`true` means yes), how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter */
   def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
+  /** Sets whether tokens must be separated by delimiters (`true` means yes), how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter to the supplied character */
   def delimit(required: Boolean, count: Int, delimiter: Char): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = new CharDelim(delimiter); this }
+  /** Sets how many sequential delimiters may be consumed (`0` means any number) */
   def delimit(count: Int): this.type = { nSep = if (count <= 0) Int.MaxValue else count; this }
+  /** Sets how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter */
   def delimit(count: Int, delimiter: Delimiter): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
+  /** Sets how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter to the specified character */
   def delimit(count: Int, delimiter: Char): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = new CharDelim(delimiter); this }
+  /** Sets the delimiter */
   def delimit(delimiter: Delimiter): this.type = { delim = delimiter; this }
+  /** Sets the delimiter to the specified character */
   def delimit(delimiter: Char): this.type = { delim = new CharDelim(delimiter); this }
   
   protected final def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
@@ -744,7 +755,7 @@ abstract class Grok {
     if (i >= N) { error = e.end.toByte; return 0L }
     var ans = ab(i).toLong-'0'
     if (ans < 0) { error = e.wrong.toByte; return 0L }
-    if (ans > 9) {
+    if (ans  > 9) {
       ans = (ans - 17)&0xDF
       if (ans < 0 || ans >= 6) { error = e.wrong.toByte; return 0L }
       ans += 10
@@ -1307,79 +1318,146 @@ abstract class Grok {
     else encodeFracAsDouble(lex.toInt, zex.toInt, nd, da, db, negative)
   }
   
-  
+  /** Skip the next token; fail if there is none */
   def skip(implicit fail: GrokHop[this.type]): this.type
+  /** Skip the next `n` tokens; fail if there are not that many */
   def skip(n: Int)(implicit fail: GrokHop[this.type]): this.type
+  /** Parse a boolean value which is either `true` or `false` or versions thereof with different capitalization. */
   def Z(implicit fail: GrokHop[this.type]): Boolean
+  /** Parse a boolean: the true values may be `t`, `true`, `y`, `yes`, `on`, or `1`; the false values may be `f`, `false`, `n`, `no`, `off`, or `0`; and any mix of upper and lower case is fine */
   def aZ(implicit fail: GrokHop[this.type]): Boolean
+  /** Parse a number between -128 and 127 into a Byte */
   def B(implicit fail: GrokHop[this.type]): Byte
+  /** Parse a number between 0 and 255 into a Byte */
   def uB(implicit fail: GrokHop[this.type]): Byte
+  /** Parse a number between -32768 and 32767 into a Short */
   def S(implicit fail: GrokHop[this.type]): Short
+  /** Parse a number between 0 and 65536 into a Short */
   def uS(implicit fail: GrokHop[this.type]): Short
+  /** Parse the leading token of the underlying data stream (`Char` if a `String`, `Byte` if an `Array[Byte]` or byte stream) and pack in a `Char`.  No UTF-8 translation is performed. */
   def C(implicit fail: GrokHop[this.type]): Char
+  /** Parse a number between -2147483648 and 2147483647 into an Int */
   def I(implicit fail: GrokHop[this.type]): Int
+  /** Parse a number between 0 and 4294967295 into an Int */
   def uI(implicit fail: GrokHop[this.type]): Int
+  /** Parse a hexidecimal number between 0 and FFFFFFFF into an Int (no leading 0x; parsing is case-insensitive) */
   def xI(implicit fail: GrokHop[this.type]): Int
+  /** Parse a number that fits into an Int.  Values between -2147483648 and 4294967295 are accepted, as are 0x0 through 0xFFFFFFFF. */
   def aI(implicit fail: GrokHop[this.type]): Int
+  /** Parse a number between -9223372036854775808 and 9223372036854775807 into a Long */
   def L(implicit fail: GrokHop[this.type]): Long
+  /** Parse a number between 0 and 18446744073709551615 into a Long */
   def uL(implicit fail: GrokHop[this.type]): Long
+  /** Parse a hexidecimal number between 0 and FFFFFFFFFFFFFFFF into a Long */
   def xL(implicit fail: GrokHop[this.type]): Long
+  /** Parse a number that fits into a Long.  Values between -9223372036854775808 and 18446744073709551615, as are 0x0 through 0xFFFFFFFFFFFFFFFF. */
   def aL(implicit fail: GrokHop[this.type]): Long
+  /** Parse a floating-point number in standard format into a Float.  `NaN`, `Inf`, and `Infinity` are also accepted (all parsing case-insensitive). */
   def F(implicit fail: GrokHop[this.type]): Float
+  /** Broken.  DO NOT USE.  When it is fixed, it will parse the binary floating point format. */
   def xF(implicit fail: GrokHop[this.type]): Float
+  /** Parse a floating-point number in standard format into a Double.  `NaN`, `Inf`, and `Infinity` are also accepted (all parsing case-insensitive). */
   def D(implicit fail: GrokHop[this.type]): Double
+  /** Broken.  DO NOT USE.  When it is fixed, it will parse the binary floating point format. */
   def xD(implicit fail: GrokHop[this.type]): Double
+  /** Broken.  DO NOT USE.  When it is fixed, it will parse either D or xD, depending on what's there. */
   def aD(implicit fail: GrokHop[this.type]): Double
+  /** Get the next token as a `String`. */
   def tok(implicit fail: GrokHop[this.type]): String
+  /** Parse a quoted token. `"` is the quote character, `\` is the escape.  Standard escapes like `\n` are parsed. */
   def quoted(implicit fail: GrokHop[this.type]): String
+  /** Parse a quoted token with the specified delimiters.  If left and right delimiters are different, quotes may be nested.  The escaping scheme can be chosen; if it is not, typical C/Java escapes are assumed (albeit with a user-specified escape character). */
   def quotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
+  /** Parse the next token as a quoted token if it is quoted, or just return the token as a `String` if it is not. */
   def qtok(implicit fail: GrokHop[this.type]): String
+  /** Parse the next token as custom-quoted token if it is quoted, or just return the token as a `String` if it is not. */
   def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String
+  /** Parse the next token as base64-encoded data.  URL encoding is used, as newlines recommended in MIME tend to mess with parsing. */
   def base64(implicit fail: GrokHop[this.type]): Array[Byte]
+  /** Parse the next token as base64-encoded data and store the result in an array, returning the total size of the parsed data.  URL encoding is used. */
   def base64in(target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): Int
+  /** Match the character exactly in the underlying data set (note: no UTF-8 or UTF-16 decoding is done, so the character must be a literal match to the underlying data stream. */
   def exact(c: Char)(implicit fail: GrokHop[this.type]): this.type
+  /** Match the string exactly. */
   def exact(s: String)(implicit fail: GrokHop[this.type]): this.type
+  /** Match the string exactly, ignoring case. */
   def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type
+  /** Match one of a set of strings exactly, and return the one that matched. */
   def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String
+  /** Match one of a set of strings exactly, ignoring case, and return the one that matched (the supplied one, not the one in the data stream). */
   def oneOfNoCase(s: String*)(implicit fail: GrokHop[this.type]): String
+  /** Interpret the next `n` bytes or characters as binary data.  If the underlying data is represented as characters, they are returned mod 256. */
   def bytes(n: Int)(implicit fail: GrokHop[this.type]): Array[Byte]
+  /** Interpret the next `n` bytes or characters as binary data and store them in the supplied array.  If the underlying data is represented as characters, they are returned mod 256. */
   def bytesIn(n: Int, target: Array[Byte], start: Int)(implicit fail: GrokHop[this.type]): this.type
 
+  /** Low-level: if the grokker has encountered an error in the last parse, return that error code; 0 means success. */
   final def errorCode: Int = error
+  /** Produce a custom error to throw with a `fail` that documents the current position.  Useful for user-validation of data. */
   def customError: GrokError  
+  /** Return the global position of the grokker in the underlying data.  If not already at the start of a token, the position will first be advanced. */
   def position: Long
+  /** Returns `true` there are no more tokens to read. */
   def isEmpty: Boolean
+  /** Returns `true` if there is at least one more (possibly empty) token to read. */
   def nonEmpty: Boolean
+  /** Discard any number of consecutive delimiters, returning the number discarded. */
   def trim: Int
+  /** Discard any number of consecutive delimiters, returning the same grokker. */
   def trimmed: this.type
+  /** Try to skip a token; `true` means one was skipped, while `false` means there were no more tokens. */
   def trySkip: Boolean
+  /** Try to skip `n` tokens; returns the number successfully skipped. */
   def trySkip(n: Int): Int
+  /** Optionally parse a `Boolean` as with `aZ`. */
   def oZ: Option[Boolean]
+  /** Optionally parse the next entry in the underlying data, as with `C`. */
   def oC: Option[Char]
+  /** Optionally parse an `Int` as with `aI`. */
   def oI: Option[Int]
+  /** Optionally parse a `Long` as with `aL`. */
   def oL: Option[Long]
+  /** Optionally parse a `Double` as with `D`. */
   def oD: Option[Double]
+  /** Optionally parse the next token; if none exists, return `None` */
   def oTok: Option[String]
+  /** Return the indices of the start and end of the next token (start is less-significant 4 bytes); -1L indicates that no tokens remain. */
   def indexTok: Long
+  /** Optionally parse a custom-quoted token (use `'"', '"', '\\'` for standard quoting). */
   def oQuotedBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard): Option[String]
+  /** Test whether the next entry in the underlying data starts exactly with `c` (mod 256 if the underlying data is a byte) and consume it if so */
   def tryExact(c: Char): Boolean
+  /** Test whether the next token is the string `s`, and consume it if so. */
   def tryExact(s: String): Boolean
+  /** Without advancing, get the underlying data entry at the current position, or -1 if there is no more data */
   def peek: Int
+  /** Without advancing, get the underlying data entry the specified number of steps before or behind the current position, or -1 if that is out of bounds */
   def peekAt(distance: Int): Int
+  /** Without advancing, get the start and stop indices (packed into the lower and higher-order bytes of a `Long`) of the next token, or `-1L` if there are no more tokens. */
   def peekIndices: Long
+  /** Without advancing, get the next token or `null` if no more tokens exist. */
   def peekTok: String
+  /** Without advancing, get the next `n` bytes (or chars, mod 256) in the underlying data and pack it into an array at the specified position, returning the number actually stored */
   def peekBytesIn(n: Int, target: Array[Byte], start: Int): Int
 
+  /** Provide a description for a sub-computation.  No state is preserved; any changes during the sub-computation will be reflected in the state of the grokker afterwards. */
   def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
+  /** Attempt to parse, returning to previous state if the parsing fails.  Changes in the underlying data will not be reverted, only the position within the existing data. */
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
+  /** Use this grokker to parse something else (by default, simply more of the same underlying data), restoring all state when done. */
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
   
+  /** Parse repeatedly until input is exhausted, storing the results in an array. */
   def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
+  /** Parse repeatedly until input is exhausted; use `p` to check that input and if it passes, use `f2` to transform it before storing in an array.  Note that either `p` or `f2` may perform additional parsing. */
   def filterMap[A,B](parse: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
 
+  /** Sub-parse each token using the specified delimiter to group sub-tokens.  If all parsing completes successfully, return in a `Yes[Array]`.  If not, return `No[Array[Successes],Array[GrokErrors]]`.  The errors will report which token they were from in the `token` field. */
   def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
+  /** Sub-parse each token using the specified character as a sub-delimiter; see the method parameterized with `Delimiter` for details. */
   def grokEach[A: ClassTag](delimiter: Char)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)
   
+  /** Parse, supplying a `GrokHop` to use on failure (custom is to write this as `g{ implicit fail => ... }`.  Results will be packed into an `Ok`. */
   def apply[A](f: GrokHop[this.type] => A): Ok[GrokError, A] = {
     val hop = new GrokHopImpl[this.type]
     try { Yes(f(hop)) } catch { case t if hop is t => No(hop as t value) }
@@ -1389,12 +1467,18 @@ abstract class Grok {
 
 
 object Grok {
+  /** Grok a string with whitespace as a delimiter. */
   def apply(s: String) = new GrokString(s, 0, s.length, Delimiter.white)
+  /** Grok a string with a specified delimiter. */
   def apply(s: String, d: Delimiter) = new GrokString(s, 0, s.length, d)
+  /** Grok a string with the specified character as a delimiter. */
   def apply(s: String, c: Char): Grok = new GrokString(s, 0, s.length, new CharDelim(c))
   
+  /** Grok byte data as text with whitespace as a delimiter. */
   def text(ab: Array[Byte]) = new GrokBuffer(ab, 0, ab.length, Delimiter.white)
+  /** Grok byte data as text with the specified delimiter. */
   def text(ab: Array[Byte], d: Delimiter) = new GrokBuffer(ab, 0, ab.length, d)
+  /** Grok byte data as text with the specified character as a delimiter. */
   def text(ab: Array[Byte], c: Char) = new GrokBuffer(ab, 0, ab.length, new CharDelim(c))
 }
 
