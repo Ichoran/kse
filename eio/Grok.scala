@@ -1466,9 +1466,9 @@ abstract class Grok {
   /** Use this grokker to parse something else (by default, simply more of the same underlying data), restoring all state when done. */
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
   
-  /** Parse repeatedly until input is exhausted, storing the results in an array. */
+  /** Parse repeatedly until input is exhausted, storing the results in an array.  Delimiters are restored before parsing each item. */
   def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
-  /** Parse repeatedly until input is exhausted; use `p` to check that input and if it passes, use `f2` to transform it before storing in an array.  Note that either `p` or `f2` may perform additional parsing. */
+  /** Parse repeatedly until input is exhausted; use `p` to check that input and if it passes, use `f2` to transform it before storing in an array.  Delimiters are restored before parsing each item.  Note that either `p` or `f2` may perform additional parsing. */
   def filterMap[A,B](parse: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
 
   /** Sub-parse each token using the specified delimiter to group sub-tokens.  If all parsing completes successfully, return in a `Yes[Array]`.  If not, return `No[Array[Successes],Array[GrokErrors]]`.  The errors will report which token they were from in the `token` field. */
