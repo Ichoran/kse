@@ -691,23 +691,23 @@ abstract class Grok {
   /** Sets whether tokens must separated by delimiters (`true` means yes) and how many sequential delimiters may be consumed (`0` means any number) */
   def delimit(required: Boolean, count: Int): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; this }
   /** Sets whether tokens must be separated by delimiters (`true` means yes) and sets the delimiter */
-  def delimit(required: Boolean, delimiter: Delimiter): this.type = { reqSep = required; delim = delimiter; this }
+  def delimit(required: Boolean, delimiter: Delimiter): this.type = { reqSep = required; delim = delim switchWith delimiter; this }
   /** Sets whether tokens must be separated by delimiters (`true` means yes) and sets the delimiter to the supplied character */
-  def delimit(required: Boolean, delimiter: Char): this.type = { reqSep = required; delim = new CharDelim(delimiter); this }
+  def delimit(required: Boolean, delimiter: Char): this.type = { reqSep = required; delim = delim switchWith new CharDelim(delimiter); this }
   /** Sets whether tokens must be separated by delimiters (`true` means yes), how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter */
-  def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
+  def delimit(required: Boolean, count: Int, delimiter: Delimiter): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = delim switchWith delimiter; this }
   /** Sets whether tokens must be separated by delimiters (`true` means yes), how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter to the supplied character */
-  def delimit(required: Boolean, count: Int, delimiter: Char): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = new CharDelim(delimiter); this }
+  def delimit(required: Boolean, count: Int, delimiter: Char): this.type = { reqSep = required; nSep = if (count <= 0) Int.MaxValue else count; delim = delim switchWith new CharDelim(delimiter); this }
   /** Sets how many sequential delimiters may be consumed (`0` means any number) */
   def delimit(count: Int): this.type = { nSep = if (count <= 0) Int.MaxValue else count; this }
   /** Sets how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter */
-  def delimit(count: Int, delimiter: Delimiter): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = delimiter; this }
+  def delimit(count: Int, delimiter: Delimiter): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = delim switchWith delimiter; this }
   /** Sets how many sequential delimiters may be consumed (`0` means any number), and sets the delimiter to the specified character */
-  def delimit(count: Int, delimiter: Char): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = new CharDelim(delimiter); this }
+  def delimit(count: Int, delimiter: Char): this.type = { nSep = if (count <= 0) Int.MaxValue else count; delim = delim switchWith new CharDelim(delimiter); this }
   /** Sets the delimiter */
-  def delimit(delimiter: Delimiter): this.type = { delim = delimiter; this }
+  def delimit(delimiter: Delimiter): this.type = { delim = delim switchWith delimiter; this }
   /** Sets the delimiter to the specified character */
-  def delimit(delimiter: Char): this.type = { delim = new CharDelim(delimiter); this }
+  def delimit(delimiter: Char): this.type = { delim = delim switchWith new CharDelim(delimiter); this }
   
   protected final def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)

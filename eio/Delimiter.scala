@@ -33,6 +33,12 @@ trait Delimiter {
   
   /** Creates a new `Delimiter` that stops returning tokens once a delimiter given by `d2` is reached. */
   def terminatedBy(d2: Delimiter) = new TerminatedDelim(this, d2)
+
+  /** Creates a new `Delimiter` in place of this one, keeping any terminators the same */
+  def switchWith(d2: Delimiter): Delimiter = this match {
+    case td: TerminatedDelim => new TerminatedDelim(d2, td.terminator)
+    case _ => d2
+  }
 }
 
 final class CharDelim(c: Char) extends Delimiter {
@@ -140,7 +146,7 @@ final class LineDelim extends Delimiter  {
   }
 }
 
-final class TerminatedDelim(tokenizer: Delimiter, terminator: Delimiter) extends Delimiter {
+final class TerminatedDelim(val tokenizer: Delimiter, val terminator: Delimiter) extends Delimiter {
   private[this] var cachedData: AnyRef = null
   private[this] var cachedStart: Int = Int.MaxValue
   private[this] var cachedEnd: Int = Int.MaxValue

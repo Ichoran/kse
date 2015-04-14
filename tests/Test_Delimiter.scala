@@ -131,5 +131,19 @@ object Test_Delimiter extends Test_Kse {
     bufferDelim(delimed, (Delimiter.colon terminatedBy Delimiter.tab).terminatedBy(Delimiter.zero))
   ))
 
+  def test_switchWith: Boolean = {
+    val s = "one\ntwo\tthree four\nfive"
+    val d = new TerminatedDelim(Delimiter.tab, Delimiter.newline)
+    val d2 = d.switchWith(Delimiter.space)
+    d.not(s,0,s.length) == 3 &&
+    d(s, 3, s.length, 1) == -1 &&
+    d.not(s, 4, s.length) == 7 &&
+    d(s, 7, s.length, 1) == 8 &&
+    d2.not(s, 8, s.length) == 13 &&
+    d2(s, 13, s.length, 1) == 14 &&
+    d2.not(s, 14, s.length) == 18 &&
+    d2(s, 18, s.length, 1) == -1
+  }
+
   def main(args: Array[String]) { typicalMain(args) }
 }
