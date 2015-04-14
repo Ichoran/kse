@@ -614,6 +614,14 @@ object Test_Grok extends Test_Kse {
       val h = mkGrok(common).delimit(true, 0, new CharDelim(' '))
       g{ implicit fail => g.I }.isNo(g, e.I, e.delim)
       h{ implicit fail => h.I }.isNo(h, e.I, e.delim)
+    } &&
+    {
+      val g = mkGrok(common).delimit(true, 0, new TerminatedDelim(new CharDelim('!'), new CharDelim(' ')))
+      val h = mkGrok(common).delimit(true, 0, new TerminatedDelim(new CharDelim('!'), new CharDelim(' '))).delimit('y')
+      val i = mkGrok(common).delimit(true, 0, new TerminatedDelim(new CharDelim('!'), new CharDelim(' '))).freshDelimiter('y')
+      g.oTok =?= Some(common.takeWhile(_ != ' ')) &&
+      h.oTok =?= Some(common.takeWhile(_ != ' ')) &&
+      i.oTok =?= Some(common.takeWhile(_ != 'y'))
     }
   }
   

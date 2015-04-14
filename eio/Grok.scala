@@ -708,6 +708,10 @@ abstract class Grok {
   def delimit(delimiter: Delimiter): this.type = { delim = delim switchWith delimiter; this }
   /** Sets the delimiter to the specified character */
   def delimit(delimiter: Char): this.type = { delim = delim switchWith new CharDelim(delimiter); this }
+  /** Completely replaces the delimiter.  Use this in nested groks if you want to no longer sub-parse a string. */
+  def freshDelimiter(delimiter: Delimiter): this.type = { delim = delimiter; this }
+  /** Completely replaces the delimiter; use only the specified character.  Use this in nexted groks if you want to no longer sub-parse a string. */
+  def freshDelimiter(delimiter: Char): this.type = { delim = new CharDelim(delimiter); this }
   
   protected final def rawDecimalDigitsUnsigned(s: String, limit: Int): Long = {
     val N = math.min(i+limit, iN)
