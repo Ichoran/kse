@@ -1465,7 +1465,7 @@ abstract class Grok {
 
   /** Provide a description for a sub-computation.  No state is preserved; any changes during the sub-computation will be reflected in the state of the grokker afterwards. */
   def context[A](description: => String)(parse: => A)(implicit fail: GrokHop[this.type]): A
-  /** Attempt to parse, returning to previous state if the parsing fails.  Changes in the underlying data will not be reverted, only the position within the existing data. */
+  /** Attempt to parse, returning to previous state if the parsing fails.  Changes in the underlying state will not be reverted, only the position within the existing data. */
   def attempt[A](parse: => A)(implicit fail: GrokHop[this.type]): Ok[GrokError, A]
   /** Use this grokker to parse something else (by default, simply more of the same underlying data), restoring all state when done. */
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
