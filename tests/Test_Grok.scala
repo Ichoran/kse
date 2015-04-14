@@ -48,7 +48,12 @@ object Test_Grok extends Test_Kse {
     falseAnyBool.forall{s => val g = mkGrok(s); g{ implicit fail => g.aZ } == Yes(false) } && 
     validBool.forall{s => val g = mkGrok(s); g{ implicit fail => g.aZ } == Yes(s.toBoolean) } &&
     invalidAnyBool.forall{ s => val g = mkGrok(s).delimit(true); g{ implicit fail => g.aZ }.isNo(g, Set(e.aZ), Set(e.wrong, e.end, e.delim)) } &&
-    invalidAnyBool.forall{ s => val g = mkGrok(s); val ans = g{implicit fail => g.aZ}; (ans.isOk && g.position == 1) || ans.isNo(g, Set(e.aZ), Set(e.wrong, e.end)) }
+    invalidAnyBool.forall{ s => val g = mkGrok(s); val ans = g{implicit fail => g.aZ}; (ans.isOk && g.position == 1) || ans.isNo(g, Set(e.aZ), Set(e.wrong, e.end)) } &&
+    {
+      // Catch end-of-token problems
+      val g = mkGrok((trueAnyBool ++ falseAnyBool ++ trueAnyBool).mkString(" ")).delimit(true)
+      g{ implicit fail => g.each{ g.aZ } }.exists(a => a.count(_ == true) == 2*trueAnyBool.length && a.count(_ == false) == falseAnyBool.length)
+    }
   }
   
   val validSignedBytes = Array[Byte](1, 47, -125, 0, 127, -128)

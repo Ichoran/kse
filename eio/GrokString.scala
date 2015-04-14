@@ -170,7 +170,7 @@ extends Grok {
   final def aZ(implicit fail: GrokHop[this.type]): Boolean = {
     if (!prepare(1, e.aZ)(fail)) return false
     val ans = (string.charAt(i)&0xDF) match {
-      case 16 | 17 => smallNumber(1, 0, 1, e.aZ)(fail) == 1
+      case 16 | 17 => return smallNumber(1, 0, 1, e.aZ)(fail) == 1   // Return because smallNumber already handles wrapup
       case 'T' =>
         i += 1
         if (i < iN && (string.charAt(i)&0xDF) == 'R') { i -= 1; matchAsciiInsensitive("true", e.aZ)(fail) }
