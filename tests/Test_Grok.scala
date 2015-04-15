@@ -274,7 +274,12 @@ object Test_Grok extends Test_Kse {
   val impossibleStrings = Array(Array[String](), Array("salmon", "herring"), Array("?????", "!!!!!", ".....", ","))
   def test_oneOf = mkGroks.forall{ mkGrok =>
     (actualStrings zip possibleStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOf(bs: _*) }.isOk } &&
-    (actualStrings zip impossibleStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOf(bs: _*) }.isNo(g, e.oneOf, e.wrong) }
+    (actualStrings zip impossibleStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOf(bs: _*) }.isNo(g, e.oneOf, e.wrong) } &&
+    {
+      val g = mkGrok(actualStrings.mkString("")).delimit(false)
+      val all = possibleStrings.map(_.toSet).reduce(_ union _).toArray
+      actualStrings.forall{ s => g{ implicit fail => g.oneOf(all: _*) } =?= Yes(s) } && g.isEmpty
+    }
   }
   
   val actualCaseStrings = Array("Salmon", "COD", "herring")
@@ -283,7 +288,12 @@ object Test_Grok extends Test_Kse {
     mkGrok("") match {
       case _: GrokString =>
         (actualCaseStrings zip possibleCaseStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOfNoCase(bs: _*) }.isOk } &&
-        (actualCaseStrings zip impossibleStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOfNoCase(bs: _*) }.isNo(g, e.oneOf, e.wrong) }
+        (actualCaseStrings zip impossibleStrings).forall{ case (a,bs) => val g = mkGrok(a); g{ implicit fail => g.oneOfNoCase(bs: _*) }.isNo(g, e.oneOf, e.wrong) } &&
+        {
+          val g = mkGrok(actualStrings.mkString("")).delimit(false)
+          val all = possibleStrings.map(_.toSet).reduce(_ union _).toArray
+          actualStrings.forall{ s => g{ implicit fail => g.oneOf(all: _*) }.map(_.toLowerCase) =?= Yes(s.toLowerCase) } && g.isEmpty
+        }
       case _ => true
     }
   }

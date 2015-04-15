@@ -582,16 +582,16 @@ extends Grok {
     ready = 0
     var n = 0
     while (n < s.length) {
-      if (a - i == s(n).length) {
+      if (!reqSep || a - i == s(n).length) {
         var j = 0
         var k = i
         val sn = s(n)
-        while (k < a && sn.charAt(j) == buffer(k)) { k += 1; j += 1 }
-        if (k == a) { i = a; t += 1; return sn }
+        while (k < a && j < sn.length && sn.charAt(j) == buffer(k)) { k += 1; j += 1 }
+        if (j == sn.length) { i = k; t += 1; return sn }
       }
       n += 1
     }
-    i = a
+    if (reqSep) i = a
     err(fail, e.wrong, e.oneOf)
     null
   }
@@ -602,11 +602,11 @@ extends Grok {
     ready = 0
     var n = 0
     while (n < s.length) {
-      if (a - i == s(n).length) {
+      if (!reqSep || a - i == s(n).length) {
         var j = 0
         var k = i
         val sn = s(n)
-        while (k < a && {
+        while (k < a && j < sn.length && {
           val c = buffer(k)
           val cc = sn.charAt(j)
           (c == cc) || {
@@ -615,7 +615,7 @@ extends Grok {
             // else elevateCase(c) == elevateCase(cc)
           }
         }) { k += 1; j += 1 }
-        if (k == a) { i = a; t += 1; return sn }
+        if (j == sn.length) { i = k; t += 1; return sn }
       }
       n += 1
     }
