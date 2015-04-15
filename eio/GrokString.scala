@@ -568,7 +568,7 @@ extends Grok {
           var j = 0
           var k = i
           val sn = s(n)
-          while (k < a && j <= sn.length && {
+          while (k < a && j < sn.length && {
             val c = string.charAt(k)
             val cc = sn.charAt(j)
             (c == cc) || {
