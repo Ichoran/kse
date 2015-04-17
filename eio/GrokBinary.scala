@@ -117,6 +117,25 @@ extends Grok {
     i = math.min(iN, j+1L).toInt
     ans
   }
+  def tokUntil(n: Int)(implicit fail: GrokHop[this.type]): String = {
+    val j = Delimiter.zero.not(buffer, i, iN)
+    if (j < 0) { err(fail, e.end, e.tok); return null }
+    val m = math.min(j-i, math.max(0,n))
+    val ans = new String(buffer, i, m)
+    error = 0
+    i = math.min(iN, i+m.toLong).toInt
+    ans
+  }
+  def tokUntil(p: Int => Boolean)(implicit fail: GrokHop[this.type]): String = {
+    val j = Delimiter.zero.not(buffer, i, iN)
+    if (j < 0) { err(fail, e.end, e.tok); return null }
+    var k = i
+    while (k < j && !p(buffer(k) & 0xFF)) k += 1
+    val ans = new String(buffer, i, k-i)
+    error = 0
+    i = math.min(iN, k).toInt
+    ans
+  }
   def quoted(implicit fail: GrokHop[this.type]): String = quotedBy('"', '"', '\\')(fail)
   private def quotedByWithEscapes(iStart: Int, iEnd: Int, left: Byte, right: Byte, esc: Byte, escaper: GrokEscape)(implicit fail: GrokHop[this.type]): String = {
     val buf = new Array[Char](iEnd - iStart)

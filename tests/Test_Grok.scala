@@ -196,7 +196,13 @@ object Test_Grok extends Test_Kse {
   
   val validTokens = Array("", " ", "foo bar", "salmon", "incrediblylong"*10000)
   def test_tok = mkGroks.forall{ mkGrok =>
-    validTokens.forall{ s => val g = mkGrok(s); g{ implicit fail => g.tok } == Yes(s.split(' ').headOption.getOrElse("")) }
+    validTokens.forall{ s => val g = mkGrok(s); g{ implicit fail => g.tok } =?= Yes(s.split(' ').headOption.getOrElse("")) }
+  }
+  def test_tok_n = mkGroks.forall{ mkGrok =>
+    validTokens.forall{ s => val g = mkGrok(s); g{ implicit fail => g.tokUntil(2) } =?= Yes(s.split(' ').headOption.map(_.take(2)).getOrElse("")) }
+  }
+  def test_tok_p = mkGroks.forall{ mkGrok =>
+    validTokens.forall{s => val g = mkGrok(s); g{ implicit fail => g.tokUntil(_ == 'o') } =?= Yes(s.split(' ').headOption.map(_.takeWhile(_ != 'o')).getOrElse("")) }
   }
   
   val validQuotes = Array("\"fish\"", "\"\"", """"fish are fun friends"""", """"\"\\\""""")
