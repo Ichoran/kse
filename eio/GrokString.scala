@@ -934,10 +934,13 @@ extends Grok {
     try {
       val ans = Array.newBuilder[A]
       while (!isEmpty) {
+        val iA = i
         ans += parse
+        val iB = i
         reqSep = reqSepOld
         nSep = nSepOld
         delim = delimOld
+        if (iA == iB && i < iN) skip
       }
       ans.result()
     }

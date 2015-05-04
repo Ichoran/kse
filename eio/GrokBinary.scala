@@ -491,7 +491,9 @@ extends Grok {
     try {
       val ans = Array.newBuilder[A]
       while (!isEmpty) {
+        val iA = i
         ans += parse
+        if (i == iA && i < iN) i += 1
         reqSep = reqSepOld
       }
       ans.result()
