@@ -490,9 +490,9 @@ extends Grok {
   final def qtok(implicit fail: GrokHop[this.type]): String = qtokBy('"', '"', '\\')(fail)
   final def qtokBy(left: Char, right: Char, esc: Char, escaper: GrokEscape = GrokEscape.standard)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.quote)(fail)) return null
-    if (i >= iN) { error = 0; return "" }
+    if (i >= iN) { error = 0; ready = 0; return "" }
     val j = delim.not(string, i, i+1)
-    if (j == i) { error = 0; return "" }
+    if (j == i) { error = 0; ready = 0; return "" }
     val c = string.charAt(i)
     if (c != left) tok(fail) else quotedBy(left, right, esc, escaper)(fail)
   }

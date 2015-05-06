@@ -230,7 +230,8 @@ object Test_Grok extends Test_Kse {
   def test_qtokBy = mkGroks.forall{ mkGrok =>
     validTokens.forall{ case q => val g = mkGrok(q); g{ implicit fail => g.qtokBy('(', ')', '$') } == Yes(q.split(' ').headOption.getOrElse("")) } &&
     (validQuotedBy zip validUnquotedBy).forall{ case (q,u) => val g = mkGrok(q); g{ implicit fail => g.qtokBy('(', ')', '$') } =?= Yes(u) } &&
-    invalidQuotedBy.filter(_.startsWith("(")).forall{ case q => val g = mkGrok(q); g{ implicit fail => g.qtokBy('(', ')', '$') }.isNo(g, Set(e.quote), Set(e.end, e.wrong)) }
+    invalidQuotedBy.filter(_.startsWith("(")).forall{ case q => val g = mkGrok(q); g{ implicit fail => g.qtokBy('(', ')', '$') }.isNo(g, Set(e.quote), Set(e.end, e.wrong)) } &&
+    { val g = mkGrok(""); g{ implicit fail => g.qtokBy('?', '?', '!') } =?= Yes("") && g.hasToken =?= false }
   }
   
   val validBase64 = Array("bGVhcw", "bGVhc3Vy")
