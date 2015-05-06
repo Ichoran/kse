@@ -978,9 +978,9 @@ extends Grok {
         nSep = nSepOld
         delim = delimOld
         more = hasToken
-        if (more && i == iOld && i < iN) {
-          skip
-          more = hasToken
+        if (more && i == iOld) {
+          if (i < iN) { skip; more = hasToken }
+          else { ready = 0; more = false }
         }
       }
       ans.result()

@@ -587,6 +587,11 @@ object Test_Grok extends Test_Kse {
     {
       val h = mkGrok(" one two three ")
       h{ implicit fail => h.each{ h.tok }.toSeq } =?= Yes(Seq("", "one", "two", "three", ""))
+    } &&
+    {
+      // Make sure we advance even if we don't do anything per token
+      val h = mkGrok(" one two three ")
+      h{ implicit fail => h.each{ () }.length } =?= Yes(5)
     }
   }
   
