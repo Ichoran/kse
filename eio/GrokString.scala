@@ -47,12 +47,12 @@ extends Grok {
   }
   private final def wrapup(id: Int)(fail: GrokHop[this.type]): Boolean = {
     if (reqSep) {
-      ready = 1
       val j = delim(string, i, iN, nSep)
       if (j == i) { err(fail,e.delim,id); false }
       else {
         t += 1
-        if (j < 0) iN = i else i = j
+        if (j < 0) { iN = i; ready = 0 }
+        else { i = j; ready = 1 }
         true
       }
     }
@@ -648,9 +648,9 @@ extends Grok {
   
   final def position = localPosition.toLong
   
-  final def isEmpty = localPosition >= iN
+  final def hasToken = ready > 0 || localPosition < iN
   
-  final def nonEmpty = localPosition < iN
+  final def hasContent = localPosition < iN
   
   final def trim: Int = {
     if (ready != 2 && i < iN) {
@@ -933,7 +933,7 @@ extends Grok {
     val reqSepOld = reqSep
     try {
       val ans = Array.newBuilder[A]
-      while (!isEmpty) {
+      while (hasToken) {
         val iA = i
         ans += parse
         val iB = i
@@ -964,7 +964,7 @@ extends Grok {
     val stringOld = string
     try {
       var pos = position - 1
-      while (nonEmpty && pos != position) {
+      while (hasToken && pos != position) {
         iOld = i
         tOld = t
         readyOld = ready
@@ -1029,7 +1029,7 @@ extends Grok {
     var failures = false
     var index = 0
     val delimNew = delimiter terminatedBy delim
-    while (!isEmpty) {
+    while (hasToken) {
       iToBe = i
       index += 1
       try {

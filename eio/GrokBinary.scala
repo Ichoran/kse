@@ -324,9 +324,9 @@ extends Grok {
   
   def position = i.toLong
   
-  def isEmpty = i >= iN
+  def hasToken = i < iN // TODO -- forward to g in some sort of sane way
   
-  def nonEmpty = i < iN
+  def hasContent = i < iN
   
   def trim: Int = 0
   def trimmed: this.type = this
@@ -490,7 +490,7 @@ extends Grok {
     val reqSepOld = reqSep
     try {
       val ans = Array.newBuilder[A]
-      while (!isEmpty) {
+      while (hasToken) {
         val iA = i
         ans += parse
         if (i == iA && i < iN) i += 1
@@ -512,7 +512,7 @@ extends Grok {
     val bufferOld = buffer
     try {
       var pos = position - 1
-      while (nonEmpty && pos != position) {
+      while (hasToken && pos != position) {
         iOld = i
         val a = parse
         reqSep = reqSepOld
@@ -564,7 +564,7 @@ extends Grok {
     var failures = false
     var index = 0
     val delimNew = delimiter terminatedBy delim
-    while (!isEmpty) {
+    while (hasToken) {
       iToBe = i
       index += 1
       try {

@@ -52,7 +52,7 @@ object Test_Grok extends Test_Kse {
     {
       // Catch end-of-token problems
       val g = mkGrok((trueAnyBool ++ falseAnyBool ++ trueAnyBool).mkString(" ")).delimit(true)
-      g{ implicit fail => g.each{ g.aZ } }.exists(a => a.count(_ == true) == 2*trueAnyBool.length && a.count(_ == false) == falseAnyBool.length)
+      g{ implicit fail => g.each{ g.aZ } }.exists(a => a.count(_ == true) =?= 2*trueAnyBool.length && a.count(_ == false) =?= falseAnyBool.length)
     }
   }
   
@@ -284,7 +284,7 @@ object Test_Grok extends Test_Kse {
     {
       val g = mkGrok(actualStrings.mkString("")).delimit(false)
       val all = possibleStrings.map(_.toSet).reduce(_ union _).toArray
-      actualStrings.forall{ s => g{ implicit fail => g.oneOf(all: _*) } =?= Yes(s) } && g.isEmpty
+      actualStrings.forall{ s => g{ implicit fail => g.oneOf(all: _*) } =?= Yes(s) } && !g.hasContent
     }
   }
   
@@ -298,7 +298,7 @@ object Test_Grok extends Test_Kse {
         {
           val g = mkGrok(actualStrings.mkString("")).delimit(false)
           val all = possibleStrings.map(_.toSet).reduce(_ union _).toArray
-          actualStrings.forall{ s => g{ implicit fail => g.oneOf(all: _*) }.map(_.toLowerCase) =?= Yes(s.toLowerCase) } && g.isEmpty
+          actualStrings.forall{ s => g{ implicit fail => g.oneOf(all: _*) }.map(_.toLowerCase) =?= Yes(s.toLowerCase) } && !g.hasContent
         }
       case _ => true
     }
@@ -349,15 +349,27 @@ object Test_Grok extends Test_Kse {
   }
   
   val emptyAfter = Array(
-    (1, Array(" ", "foo", "aosufq", "reallylong"*100)),
-    (2, Array("  ", "foo bar", " salmon")),
-    (3, Array("   ", "foo bar baz", " salmon  "))
+    "" -> (0,1),
+    " " -> (1,2),
+    "foo" -> (1,1),
+    "aosufq" -> (1,1),
+    "reallylong"*100 -> (1,1),
+    "  " -> (2,3),
+    "foo bar" -> (2,2),
+    " salmon" -> (2,2),
+    "   " -> (3,4),
+    "foo bar baz" -> (3,3),
+    " salmon " -> (2,3),
+    " perch  " -> (3,4)
   )
   def test_empty = mkGroks.forall{ mkGrok =>
-    emptyAfter.forall{ case (n,ss) => ss.forall{ s =>
+    emptyAfter.forall{ case (s, (nc, nt)) =>
       val g = mkGrok(s)
-      (1 to n).forall{ _ => val ans = g.nonEmpty && !g.isEmpty; g.trySkip; ans } && g.isEmpty && !g.nonEmpty
-    }}
+      (1 to nc).forall{ _ => val ans = g.hasContent && g.hasToken; g.trySkip; ans =?= true } &&
+      g.hasContent.expectHere(s"content for '$s'")(false) &&
+      (if (nc < nt) (1 to (nt-nc)).forall{ _ => val ans = g.hasToken; g.trySkip; ans =?= true } else true) &&
+      g.hasToken.expectHere(s"token for '$s'")(false)
+    }
   }
   
   val trimmableStrings = Array("foo", " bar", "                             baz")

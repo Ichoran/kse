@@ -1424,10 +1424,10 @@ abstract class Grok {
   def customError(message: String): GrokError
   /** Return the global position of the grokker in the underlying data.  If not already at the start of a token, the position will first be advanced. */
   def position: Long
-  /** Returns `true` there are no more tokens to read. */
-  def isEmpty: Boolean
-  /** Returns `true` if there is at least one more (possibly empty) token to read. */
-  def nonEmpty: Boolean
+  /** Returns `true` if there is another token to read (even an empty token) */
+  def hasToken: Boolean
+  /** Returns `true` if there is more content to read (at least one byte or character) */
+  def hasContent: Boolean
   /** Discard any number of consecutive delimiters, returning the number discarded. */
   def trim: Int
   /** Discard any number of consecutive delimiters, returning the same grokker. */
@@ -1474,7 +1474,7 @@ abstract class Grok {
   /** Use this grokker to parse something else (by default, simply more of the same underlying data), restoring all state when done. */
   def tangent[A](parse: => A)(implicit fail: GrokHop[this.type]): A
   
-  /** Parse repeatedly until input is exhausted, storing the results in an array.  Delimiters are restored before parsing each item. */
+  /** Parse repeatedly until input is exhausted (according to `hasToken`), storing the results in an array.  Delimiters are restored before parsing each item. */
   def each[A](f: => A)(implicit fail: GrokHop[this.type], tag: ClassTag[A]): Array[A]
   /** Parse repeatedly until input is exhausted; use `p` to check that input and if it passes, use `f2` to transform it before storing in an array.  Delimiters are restored before parsing each item.  Note that either `p` or `f2` may perform additional parsing. */
   def filterMap[A,B](parse: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]

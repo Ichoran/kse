@@ -79,5 +79,10 @@ object Test_Kse {
       if (!ans) { println("Not equal:"); println("  "+underlying); println("  "+overlying) }
       ans
     }
+    def expectHere[B](msg: String)(overlying: B) = {
+      val ans = underlying == overlying
+      if (!ans) { println(s"Not equal at $msg"); println("  " + underlying); println("  " + overlying) }
+      ans
+    }
   }  
 }
