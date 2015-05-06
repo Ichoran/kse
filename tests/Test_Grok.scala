@@ -582,6 +582,10 @@ object Test_Grok extends Test_Kse {
     {
       val h = mkGrok(notAllIntegers)
       h{ implicit fail => h.each{ h.I }.toSeq }.isNo(h, e.I, e.wrong)
+    } &&
+    {
+      val h = mkGrok(" one two three ")
+      h{ implicit fail => h.each{ h.tok }.toSeq } =?= Yes(Seq("", "one", "two", "three", ""))
     }
   }
   

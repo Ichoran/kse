@@ -648,7 +648,7 @@ extends Grok {
   
   final def position = localPosition.toLong
   
-  final def hasToken = ready > 0 || localPosition < iN
+  final def hasToken = localPosition < iN || ready > 0
   
   final def hasContent = localPosition < iN
   
@@ -933,14 +933,18 @@ extends Grok {
     val reqSepOld = reqSep
     try {
       val ans = Array.newBuilder[A]
-      while (hasToken) {
-        val iA = i
+      var more = hasToken
+      while (more) {
+        val iOld = i
         ans += parse
-        val iB = i
         reqSep = reqSepOld
         nSep = nSepOld
         delim = delimOld
-        if (iA == iB && i < iN) skip
+        more = hasToken
+        if (more && i == iOld && i < iN) {
+          skip
+          more = hasToken
+        }
       }
       ans.result()
     }
@@ -1059,4 +1063,6 @@ extends Grok {
     t = tToBe
     if (!failures) Yes(successBuffer.result()) else No((successBuffer.result(), failureBuffer.result()))
   }
+  
+  def blab = (i0, iN, i, ready)
 }
