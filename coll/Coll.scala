@@ -49,6 +49,12 @@ package coll {
     def apply[A](a: A) = new Mute(a)
   }
   
+  /** Holds mutable data (would be better if standard library exposed this!) */
+  final class Mu[@specialized A](var value: A) {
+    def op(f: A => A): this.type = { value = f(value); this }
+    def set(a: A): this.type = { value = a; this }
+  }
+  
   
   /** Provides Option-like capabilities, but mutably. */
   sealed abstract class Mopt[@specialized A] {
