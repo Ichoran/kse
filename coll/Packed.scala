@@ -1,7 +1,9 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2014 Rex Kerr and UCSF
+// Copyright (c) 2014, 2015 Rex Kerr and UCSF
 
 package kse.coll
+
+import language.implicitConversions
 
 package packed {
   final class ByteAsBox(val B: Byte) extends AnyVal {
@@ -460,4 +462,6 @@ package object packed {
   implicit final class PackDoubleInPrimitives(private val d: Double) extends AnyVal {
     @inline def inLong = new LongAsBox(java.lang.Double.doubleToRawLongBits(d))
   }
+  
+  @inline final implicit def float_enriched_with_vc(f: Float): RichFloatToVc = new RichFloatToVc(f)
 }

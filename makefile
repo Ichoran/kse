@@ -15,6 +15,7 @@ Kse.jar : \
   kse/flow/Ok.class \
   kse/flow/Hop.class \
   kse/flow/package.class \
+  kse/coll/packed/Vc.class \
   kse/coll/packed/package.class \
   kse/coll/package.class \
   kse/coll/Lazy.class \
@@ -55,7 +56,12 @@ kse/flow/package.class : \
   flow/Flow.scala
 	${F} flow/Flow.scala
 
+kse/coll/packed/Vc.class : \
+  coll/Vc.scala
+	${F} coll/Vc.scala
+
 kse/coll/packed/package.class : \
+  kse/coll/packed/Vc.class \
   coll/Packed.scala
 	${F} coll/Packed.scala
 
