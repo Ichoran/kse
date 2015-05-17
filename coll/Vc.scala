@@ -13,8 +13,8 @@ final class RichFloatToVc(private val underlying: Float) extends AnyVal {
   def -(v: Vc) = Vc(underlying - v.x, underlying - v.y)
   def *(v: Vc) = Vc(underlying * v.x, underlying * v.y)
 
-  def degrees = math.toRadians(underlying)
-  def revolutions = (underlying * 0.15915494309189535).toFloat
+  def degrees = (underlying * 0.017453292519943295).toFloat
+  def revolutions = (underlying * 6.283185307179586).toFloat
 }
 
 final class Vc(private val underlying: Long) extends AnyVal {
@@ -30,6 +30,7 @@ final class Vc(private val underlying: Long) extends AnyVal {
   def isNaN = (java.lang.Float.isNaN(x) || java.lang.Float.isNaN(y))
   def isInf = (java.lang.Float.isInfinite(x) || java.lang.Float.isInfinite(y))
   def isFinite = { val a = x; val b = y; !(java.lang.Float.isNaN(a) || java.lang.Float.isInfinite(a) || java.lang.Float.isNaN(b) || java.lang.Float.isInfinite(b)) }
+  def isZero = (underlying & 0x7FFFFFFF7FFFFFFFL) == 0
 
   def lenSq: Double = { val a = x.toDouble; val b = y.toDouble; a*a + b*b }
   def len: Double = math.sqrt(lenSq)
@@ -104,5 +105,39 @@ object Vc {
 
   def from(p: java.awt.geom.Point2D) = apply(p.getX.toFloat, p.getY.toFloat)
   def from(d: java.awt.geom.Dimension2D) = apply(d.getWidth.toFloat, d.getHeight.toFloat)
+  
+  /** Find point of intersection between lines p0,v0 and p1,v1.  If the lines are coincident, p0 will be chosen.  If they are
+    * paralel but not coincident, NaN will be returned.  If v1 is zero, NaN will be returned unless p0 == p1.  If v0 is zero,
+    * NaN will be returned unless p1,v1 goes through p0.
+    */
+  def intersectLines(p0: Vc, v0: Vc, p1: Vc, v1: Vc): Vc = {
+    if (v1.isZero) {
+      if (math.abs(p0.x - p1.x) + math.abs(p0.y - p1.y) < 10*(java.lang.Math.ulp(p0.x) + java.lang.Math.ulp(p1.x))) p0
+      else NaN
+    }
+    else if (v0.isZero) {
+      val delta = p1-p0
+      val coef = delta dotHat v1
+      if (math.abs(math.abs(coef)-1) < 1e-6) p0
+      else NaN
+    }
+    else {
+      // Use determinant formula 
+      val a0x = p0.x.toDouble
+      val a0y = p0.y.toDouble
+      val a1x = a0x + v0.x.toDouble
+      val a1y = a0y + v0.y.toDouble
+      val b0x = p1.x.toDouble
+      val b0y = p1.y.toDouble
+      val b1x = b0x + v1.x.toDouble
+      val b1y = b0y + v1.y.toDouble
+      val den = (a0x - a1x)*(b0y - b1y) - (a0y - a1y)*(b0x - b1x)
+      if (math.abs(den) < 1e-6) intersect(p0, zero, p1, v1)
+      else {
+        val aMix = (a0x*a1y - a0y*a1x)
+        val bMix = (b0x*b1y - b1x*b0y)
+        from((aMix*(b0x-b1x) - (a0x-a1x)*bMix)/den, (aMix*(b0y-b1y) - (a0y-a1y)*bMix)/den)
+      }
+    }
+  }
 }
-
