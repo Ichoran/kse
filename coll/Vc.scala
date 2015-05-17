@@ -17,7 +17,7 @@ final class RichFloatToVc(private val underlying: Float) extends AnyVal {
   def revolutions = (underlying * 6.283185307179586).toFloat
 }
 
-final class Vc(private val underlying: Long) extends AnyVal {
+final class Vc(val underlying: Long) extends AnyVal {
   import Vc._
   def x = java.lang.Float.intBitsToFloat((underlying & 0xFFFFFFFFL).toInt)
   def xTo(f: Float) = new Vc((underlying & 0xFFFFFFFF00000000L) | (java.lang.Float.floatToRawIntBits(f) & 0xFFFFFFFFL))
@@ -132,7 +132,7 @@ object Vc {
       val b1x = b0x + v1.x.toDouble
       val b1y = b0y + v1.y.toDouble
       val den = (a0x - a1x)*(b0y - b1y) - (a0y - a1y)*(b0x - b1x)
-      if (math.abs(den) < 1e-6) intersect(p0, zero, p1, v1)
+      if (math.abs(den) < 1e-6) intersectLines(p0, zero, p1, v1)
       else {
         val aMix = (a0x*a1y - a0y*a1x)
         val bMix = (b0x*b1y - b1x*b0y)
