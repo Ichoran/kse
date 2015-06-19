@@ -18,6 +18,7 @@ Kse.jar : \
   kse/coll/packed/Vc.class \
   kse/coll/packed/package.class \
   kse/coll/package.class \
+  kse/coll/IVec3F.class \
   kse/coll/Lazy.class \
   kse/coll/Soft.class \
   kse/coll/Mopt.class \
@@ -55,6 +56,10 @@ kse/flow/package.class : \
   kse/flow/Hop.class \
   flow/Flow.scala
 	${F} flow/Flow.scala
+	
+kse/coll/IVec3F.class : \
+  coll/Vec3.scala
+	${F} coll/Vec3.scala
 
 kse/coll/packed/Vc.class : \
   coll/Vc.scala
