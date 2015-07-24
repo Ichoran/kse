@@ -658,7 +658,10 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
   * Instances of `GrokHop` should never be stored or created; rely upon the methods of `Grok`
   * which loan you a `GrokHop`.
   */
-sealed trait GrokHop[X <: Grok] extends HopKey[GrokError, X] {}
+sealed trait GrokHop[X <: Grok] extends HopKey[GrokError, X] {
+  def explodeOnError: this.type
+  def doNotExplode: this.type
+}
 
 final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with GrokHop[X] {
   private[this] var myValue: GrokError = null
