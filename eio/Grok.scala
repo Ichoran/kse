@@ -665,9 +665,14 @@ final private[eio] class GrokHopImpl[X <: Grok] extends Hopped[GrokError] with G
   
   def value = myValue
 
-  def apply(err: GrokError) = { myValue = err; throw this }
+  def explodeOnError: this.type = { myValue = GrokHopImpl.explodingError; this }
+  def doNotExplode: this.type = { myValue = null; this }
+  def apply(err: GrokError) = { if (myValue eq GrokHopImpl.explodingError) throw new Exception("Fatal parsing error\n"+err.toString); myValue = err; throw this }
   def as(t: Throwable) = if (this eq t) this else null
   def is(t: Throwable) = this eq t
+}
+private[eio] object GrokHopImpl {
+  val explodingError = new GrokError(0, 0, 0, 0)()
 }
 
 /** Grok provides safe eager stream-like parsing capability.  Methods are either fail-safe (e.g. `trySkip`) and report
