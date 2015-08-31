@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2015 Rex Kerr and UCSF; based on work of Rex Kerr@HHMI/Janelia
+// Copyright (c) 2015 Rex Kerr, HHMI Janelia, UCSF, and Calico Labs.
 
 package kse.coll.packed
 

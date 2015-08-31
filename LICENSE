@@ -1,7 +1,10 @@
-Copyright (c) 2011-2014 by
+The source files in this repository fall under the BSD 3-clause license:
+
+Copyright (c) 2011-2015 by
   Rex Kerr,
-  HHMI Janelia Farm Research Campus,
-  and the University of California at San Francisco.
+  HHMI Janelia Research Campus ("HHMI Janelia"),
+  the University of California at San Francisco ("UCSF"),
+  and Calico Life Sciences, LLC ("Calico Labs").
 All rights reserved.
 
 Individual source files specify copyright holders more precisely.
@@ -16,7 +19,7 @@ modification, are permitted provided that the following conditions are met:
   this list of conditions and the following disclaimer in the documentation
   and/or other materials provided with the distribution.
 
-* Neither the name of the {organization} nor the names of its
+* Neither the name of the copyright holders nor the names of other
   contributors may be used to endorse or promote products derived from
   this software without specific prior written permission.
 

@@ -1,6 +1,7 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2014-2015 Rex Kerr and UCSF
+// Copyright (c) 2014-2015 Rex Kerr, UCSF, and Calico Labs.
 
+/*
 package kse.eio
 
 import language.postfixOps
@@ -78,10 +79,13 @@ extends Grok {
       if (i + n.toLong < iN)
     }
   }
-}*/
+}
+*/
 
+/*
 object GrokBufferable {
   private[eio] val EmptyByteArray = new Array[Byte](0)
   private[eio] final val InitialSize = 0x200            // 512b
   private[eio] final val TypicalMaximumSize = 0x100000  // 1M
 }
+*/

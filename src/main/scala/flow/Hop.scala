@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2014 Rex Kerr and UCSF
+// Copyright (c) 2014-15 Rex Kerr, UCSF, and Calico Labs.
 
 package kse.flow
 

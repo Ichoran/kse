@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2011-2013 Rex Kerr and the HHMI Janelia Farm Research Campus.
+// Copyright (c) 2011-2015 Rex Kerr, HHMI Janelia, UCSF, and Calico Labs.
 
 
 package kse.eio
