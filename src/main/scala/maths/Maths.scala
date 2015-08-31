@@ -78,10 +78,25 @@ package object maths {
   implicit class EnrichedDoubleMaths(private val value: Double) extends AnyVal {
     @inline final def sq = value*value
     @inline final def sqrt = scala.math.sqrt(value)
+    @inline final def pow(d: Double) = scala.math.pow(value, d)
     @inline final def log = scala.math.log(value)
     @inline final def log2 = maths.log2(value)
     @inline final def log10 = scala.math.log10(value)
+    @inline final def exp = scala.math.exp(value)
+    @inline final def exp2 = scala.math.pow(2, value)
+    @inline final def exp10 = scala.math.pow(10, value)
     @inline final def entropy = maths.entropy(value)
+
+    @inline final def sin = scala.math.sin(value)
+    @inline final def cos = scala.math.cos(value)
+    @inline final def tan = scala.math.tan(value)
+    @inline final def asin = scala.math.asin(value)
+    @inline final def acos = scala.math.acos(value)
+    @inline final def atan = scala.math.atan(value)
+    @inline final def atan2(d: Double) = scala.math.atan2(value, d)
+    @inline final def cosh = scala.math.cosh(value)
+    @inline final def sinh = scala.math.sinh(value)
+    @inline final def tanh = scala.math.tanh(value)
 
     @inline final def gamma = maths.gamma(value)
     @inline final def lnGamma = maths.lnGamma(value)
