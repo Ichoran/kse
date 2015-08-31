@@ -213,3 +213,8 @@ object Test_Hop extends Test_Kse {
   
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+class Test_Hop_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Hop.main(Array()) }
+}

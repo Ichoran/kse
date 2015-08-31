@@ -47,3 +47,7 @@ object Test_Lazy extends Test_Kse {
   def main(args: Array[String]) { typicalMain(args) }
 }
 
+class Test_Lazy_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Lazy.main(Array()) }
+}

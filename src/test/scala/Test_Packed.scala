@@ -201,3 +201,8 @@ object Test_Packed extends Test_Kse {
 
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+class Test_Packed_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Packed.main(Array()) }
+}

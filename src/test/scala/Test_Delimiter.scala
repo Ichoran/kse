@@ -147,3 +147,9 @@ object Test_Delimiter extends Test_Kse {
 
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+
+class Test_Delimiter_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Delimiter.main(Array()) }
+}

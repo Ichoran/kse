@@ -89,3 +89,8 @@ object Test_Flow extends Test_Kse {
 
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+class Test_Flow_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Flow.main(Array()) }
+}

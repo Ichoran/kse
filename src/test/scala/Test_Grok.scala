@@ -680,3 +680,8 @@ object Test_Grok extends Test_Kse {
 
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+class Test_Grok_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Grok.main(Array()) }
+}

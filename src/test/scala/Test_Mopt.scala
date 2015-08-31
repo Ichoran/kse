@@ -87,3 +87,7 @@ object Test_Mopt extends Test_Kse {
   def main(args: Array[String]) { typicalMain(args) }
 }
 
+class Test_Mopt_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Mopt.main(Array()) }
+}

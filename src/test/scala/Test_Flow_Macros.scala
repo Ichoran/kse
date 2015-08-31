@@ -55,3 +55,8 @@ object Test_Flow_Macros extends Test_Kse {
 
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+class Test_Flow_Macros_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Flow_Macros.main(Array()) }
+}

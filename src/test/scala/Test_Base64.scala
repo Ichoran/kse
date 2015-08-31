@@ -47,3 +47,8 @@ object Test_Base64 extends Test_Kse {
 
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+class Test_Base64_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Base64.main(Array()) }
+}

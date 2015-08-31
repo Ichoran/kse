@@ -32,3 +32,8 @@ object Test_Typecheck extends Test_Kse {
 
   def main(args: Array[String]) { typicalMain(args) }
 }
+
+class Test_Typecheck_from_JUnit {
+  @org.junit.Test
+  def test() { Test_Typecheck.main(Array()) }
+}
