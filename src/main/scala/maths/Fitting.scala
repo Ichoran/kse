@@ -43,6 +43,8 @@ final class FitTX {
   def onlyBetaX = if (n < 2) Double.NaN else Stx / Stt
   def onlyBetaError = if (n < 2) Double.NaN else Sxx - Stx*Stx/Stt
   def samples = n
+  def meanT = if (n < 1) Double.NaN else St / n
+  def meanX = if (n < 1) Double.NaN else Sx / n
 
   def clear(): this.type = {
     cached = false
@@ -183,6 +185,9 @@ final class FitTXY {
   def onlyBetaY = if (n < 2) Double.NaN else Sty / Stt
   def onlyBetaError = if (n < 2) Double.NaN else Sxx + Syy - (Stx*Stx + Sty*Sty)/Stt
   def samples = n
+  def meanT = if (n < 1) Double.NaN else St / n
+  def meanX = if (n < 1) Double.NaN else Sx / n
+  def meanY = if (n < 1) Double.NaN else Sy / n
 
   def clear(): this.type = {
     cached = false
@@ -322,7 +327,7 @@ final class FitOLS(dims: Int) {
   def alpha(i: Int) = if (i == 0) 0 else { if (!cached) compute(); (S(i) - S(0)*C(i)) / n }
   def beta(i: Int) = if (i == 0) 1 else { if (!cached) compute(); C(i) }
   def error = { if (!cached) compute(); C(0) }
-  def onlyBeta(i: Int) = if (i == 0) 1 else if (n < 2) Double.NaN else S(i)/S(0)
+  def onlyBeta(i: Int) = if (i == 0) 1 else if (n < 2 || i >= m) Double.NaN else S(i)/S(0)
   def onlyBetaError = if (n < 2) Double.NaN else {
     var i = 1
     var Se = 0.0
@@ -334,6 +339,7 @@ final class FitOLS(dims: Int) {
     Se
   }
   def samples = n
+  def mean(i: Int) = if (n < 1 || i >= m) Double.NaN else S(i) / n
 
   def clear: this.type = {
     n = 0
