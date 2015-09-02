@@ -26,12 +26,12 @@ final class FitTX {
 
   private def compute() {
     if (n < 2) {
-      myBx = Float.NaN
-      myE = Float.NaN
+      myBx = Double.NaN
+      myE = Double.NaN
     }
     else {
       val den = n*Stt - St*St
-      myBx = if (den != 0) (n*Stx - St*Sx)/den else Float.NaN
+      myBx = if (den != 0) (n*Stx - St*Sx)/den else Double.NaN
       myE = (n*Sxx - Sx*Sx - myBx*myBx*den) / n
     }
     cached = true
@@ -40,6 +40,8 @@ final class FitTX {
   def alphaX = { if (!cached) compute(); (Sx - myBx*St ) / n }
   def betaX = { if (!cached) compute(); myBx }
   def error = { if (!cached) compute(); myE }
+  def onlyBetaX = if (n < 2) Double.NaN else Stx / Stt
+  def onlyBetaError = if (n < 2) Double.NaN else Sxx - Stx*Stx/Stt
   def samples = n
 
   def clear(): this.type = {
@@ -177,6 +179,9 @@ final class FitTXY {
   def betaX = { if (!cached) compute(); myBx }
   def betaY = { if (!cached) compute(); myBy }
   def error = { if (!cached) compute(); myE }
+  def onlyBetaX = if (n < 2) Double.NaN else Stx / Stt
+  def onlyBetaY = if (n < 2) Double.NaN else Sty / Stt
+  def onlyBetaError = if (n < 2) Double.NaN else Sxx + Syy - (Stx*Stx + Sty*Sty)/Stt
   def samples = n
 
   def clear(): this.type = {
@@ -317,6 +322,17 @@ final class FitOLS(dims: Int) {
   def alpha(i: Int) = if (i == 0) 0 else { if (!cached) compute(); (S(i) - S(0)*C(i)) / n }
   def beta(i: Int) = if (i == 0) 1 else { if (!cached) compute(); C(i) }
   def error = { if (!cached) compute(); C(0) }
+  def onlyBeta(i: Int) = if (i == 0) 1 else if (n < 2) Double.NaN else S(i)/S(0)
+  def onlyBetaError = if (n < 2) Double.NaN else {
+    var i = 1
+    var Se = 0.0
+    val iStt = 1.0/S(m)
+    while (i < m) {
+      Se += S(m+i) - S(2*m+i).sq*iStt
+      i += 1
+    }
+    Se
+  }
   def samples = n
 
   def clear: this.type = {
