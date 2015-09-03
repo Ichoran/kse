@@ -5,11 +5,13 @@ package kse.maths
 
 import scala.math._
 
+sealed trait Fit {}   // Marker trait so we know what fits we could have
+
 
 /** FitTX performs a ordinary least squares fit of a parameter t against a readout x.
   * We assume t is accurate; this method is not precise if both t and x can vary.
   */
-final class FitTX {
+final class FitTX extends Fit {
   private[this] var Ot = 0.0
   private[this] var Ox = 0.0
 
@@ -141,7 +143,7 @@ object FitTX {
 /** FitTXY performs a ordinary least squares fit of a parameter t against two readouts x and y.
   * We assume t is accurate; this method is not precise if t has error as well as x and y.
   */
-final class FitTXY {
+final class FitTXY extends Fit {
   private[this] var Ot = 0.0
   private[this] var Ox = 0.0
   private[this] var Oy = 0.0
@@ -300,7 +302,7 @@ object FitTXY {
   * We assume the first parameter is accurate; this method does not minimize Euclidean
   * distance to nearest line point.
   */
-final class FitOLS(dims: Int) {
+final class FitOLS(dims: Int) extends Fit {
   private[this] var n = 0L
   private[this] val m = max(1, dims)
   private[this] val O = new Array[Double](m)
@@ -338,6 +340,7 @@ final class FitOLS(dims: Int) {
     }
     Se
   }
+  def dimensions = m
   def samples = n
   def mean(i: Int) = if (n < 1 || i >= m) Double.NaN else S(i) / n
 
