@@ -50,9 +50,33 @@ package coll {
   }
   
   /** Holds mutable data (would be better if standard library exposed this!) */
-  final class Mu[@specialized A](var value: A) {
+  sealed abstract class Mu[@specialized A] {
+    def value: A
+    def value_=(a: A): Unit
+    def value_(a: A): this.type = { value = a; this }
     def op(f: A => A): this.type = { value = f(value); this }
-    def set(a: A): this.type = { value = a; this }
+  }
+  object Mu {
+    object MuUnit extends Mu[Unit] { def value: Unit = (); def value_=(u: Unit) {} }
+    final class MuBoolean(init: Boolean) extends Mu[Boolean] { var value = init }
+    final class MuByte(init: Byte) extends Mu[Byte] { var value = init }
+    final class MuShort(init: Short) extends Mu[Short] { var value = init }
+    final class MuChar(init: Char) extends Mu[Char] { var value = init }
+    final class MuInt(init: Int) extends Mu[Int] { var value = init }
+    final class MuLong(init: Long) extends Mu[Long] { var value = init }
+    final class MuFloat(init: Float) extends Mu[Float] { var value = init }
+    final class MuDouble(init: Double) extends Mu[Double] { var value = init }
+    final class MuAny[A](init: A) extends Mu[A] { var value = init }
+    def apply(u: Unit): Mu[Unit] = MuUnit
+    def apply(z: Boolean): Mu[Boolean] = new MuBoolean(z)
+    def apply(b: Byte): Mu[Byte] = new MuByte(b)
+    def apply(s: Short): Mu[Short] = new MuShort(s)
+    def apply(c: Char): Mu[Char] = new MuChar(c)
+    def apply(i: Int): Mu[Int] = new MuInt(i)
+    def apply(l: Long): Mu[Long] = new MuLong(l)
+    def apply(f: Float): Mu[Float] = new MuFloat(f)
+    def apply(d: Double): Mu[Double] = new MuDouble(d)
+    def apply[A](a: A): Mu[A] = new MuAny(a)
   }
   
   
@@ -197,7 +221,7 @@ package coll {
     def apply[A <: AnyRef](oa: Option[A]) = { val m = new MoptAny[A]; if (oa.isDefined) { m := oa.get }; m }
     def empty[@specialized A](implicit iv: ImplicitValue[Mopt[A], Mopt.type]) = iv.value
   }
-  
+
   trait Stepper[@specialized A] { self =>
     def step(f: A => Unit): Boolean
     def peek(g: A => Unit) = new Stepper[A] {
@@ -226,6 +250,7 @@ package coll {
       }
     }
   }
+
 }
 
 package object coll {
@@ -254,7 +279,8 @@ package object coll {
   implicit class OptionConvertsToMoptAny[A <: AnyRef](private val underlying: Option[A]) extends AnyVal { def toMopt = Mopt(underlying) }
   
   implicit class Tuple1UtilityMethods[A](private val underlying: A) extends AnyVal {
-    @inline def also[Z](f: A => Z) = underlying -> f(underlying)    
+    @inline def also[Z](f: A => Z) = underlying -> f(underlying)
+    @inline def tup[Z](z: Z) = (underlying, z)
   }
   
   implicit class Tuple2UtilityMethods[A,B](val underlying: (A,B)) extends AnyVal {
@@ -267,6 +293,7 @@ package object coll {
     @inline def also[Z](f: (A,B) => Z) = (underlying._1, underlying._2, f(underlying._1, underlying._2))
     @inline def _without1 = underlying._2
     @inline def _without2 = underlying._1
+    @inline def tup[Z](z: Z) = (underlying._1, underlying._2, z)
   }
   implicit class Tuple2IdenticalUtilityMethods[A](val underlying: (A,A)) extends AnyVal {
     @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2))
@@ -286,6 +313,7 @@ package object coll {
     @inline def _without1 = (underlying._2, underlying._3)
     @inline def _without2 = (underlying._1, underlying._3)
     @inline def _without3 = (underlying._1, underlying._2)
+    @inline def tup[Z](z: Z) = (underlying._1, underlying._2, underlying._3, z)
   }
   implicit class Tuple3IdenticalUtilityMethods[A](val underlying: (A,A,A)) extends AnyVal {
     @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3))
@@ -308,6 +336,7 @@ package object coll {
     @inline def _without2 = (underlying._1, underlying._3, underlying._4)
     @inline def _without3 = (underlying._1, underlying._2, underlying._4)
     @inline def _without4 = (underlying._1, underlying._2, underlying._3)
+    @inline def tup[Z](z: Z) = (underlying._1, underlying._2, underlying._3, underlying._4, z)
   }
   implicit class Tuple4IdenticalUtilityMethods[A](val underlying: (A,A,A,A)) extends AnyVal {
     @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4))
@@ -332,6 +361,7 @@ package object coll {
     @inline def _without3 = (underlying._1, underlying._2, underlying._4, underlying._5)
     @inline def _without4 = (underlying._1, underlying._2, underlying._3, underlying._5)
     @inline def _without5 = (underlying._1, underlying._2, underlying._3, underlying._4)
+    @inline def tup[Z](z: Z) = (underlying._1, underlying._2, underlying._3, underlying._4, underlying._5, z)
   }
   implicit class Tuple5IdenticalUtilityMethods[A](val underlying: (A,A,A,A,A)) extends AnyVal {
     @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4), f(underlying._5))
@@ -352,5 +382,6 @@ package object coll {
     def stepper = new Stepper[A] {
       def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
     }
-  } 
+    def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
+  }
 }
