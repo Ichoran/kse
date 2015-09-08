@@ -25,6 +25,7 @@ package maths {
     final val OverLnTwo = 1.4426950408889634079
     final val LnTwo = 0.69314718055994530942
     final val LnHalf = -0.69314718055994530942
+    final val NegOverLnTwo = -1.4426950408889634079
 
     // Constants for statistical distributions; bidirectional conversions chosen so they multiply to 1.
     final val GaussianFWHMToSigma = 0.7413011092528010  // Conversion constant from Mathematica 8: 1/(2*InverseErf[1/2]*Sqrt[2])
@@ -50,7 +51,7 @@ package object maths {
 
   // Common numeric functions that are missing
   @inline final def log2(d: Double) = log(d) * OverLnTwo
-  @inline final def entropy(d: Double) = d * log(d) * OverLnTwo
+  @inline final def entropy(d: Double) = d * log(d) * NegOverLnTwo
 
   implicit class EnrichedShortMaths(private val value: Short) extends AnyVal {
     @inline final def clip(lo: Short, hi: Short) = max(lo, min(hi, value)).toShort
