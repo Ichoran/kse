@@ -48,6 +48,19 @@ final class FitTX extends Fit {
   def meanT = if (n < 1) Double.NaN else St / n
   def meanX = if (n < 1) Double.NaN else Sx / n
 
+  def apply(t: Double): Double = alphaX + betaX*(t - Ot) + Ox
+  def xt(t: Double): Double = apply(t)
+  def xform(in: Array[Double], i0: Int = 0, iN: Int = Int.MaxValue) {
+    val iM = math.min(in.length, iN)
+    var i = i0
+    val aX = alphaX
+    val bX = betaX
+    while (i < iM) {
+      in(i) = aX + bX*(in(i) - Ot) + Ox
+      i += 1
+    }
+  }
+
   def clear(): this.type = {
     cached = false
     n = 0
@@ -190,6 +203,30 @@ final class FitTXY extends Fit {
   def meanT = if (n < 1) Double.NaN else St / n
   def meanX = if (n < 1) Double.NaN else Sx / n
   def meanY = if (n < 1) Double.NaN else Sy / n
+
+  def apply(t: Double): (Double, Double) = (alphaX + betaX*(t - Ot) + Ox, alphaY + betaY*(t - Ot) + Oy)
+  def xt(t: Double): Double = alphaX + betaX*(t - Ot) + Ox
+  def yt(t: Double): Double = alphaY + betaY*(t - Ot) + Oy
+  def xform(in: Array[Double], i0: Int = 0, iN: Int = Int.MaxValue) {
+    val iM = math.min(in.length, iN)
+    var i = i0
+    val aX = alphaX
+    val bX = betaX
+    while (i < iM) {
+      in(i) = aX + bX*(in(i) - Ot) + Ox
+      i += 1
+    }
+  }
+  def yform(in: Array[Double], i0: Int = 0, iN: Int = Int.MaxValue) {
+    val iM = math.min(in.length, iN)
+    var i = i0
+    val aY = alphaY
+    val bY = betaY
+    while (i < iM) {
+      in(i) = aY + bY*(in(i) - Ot) + Ox
+      i += 1
+    }
+  }
 
   def clear(): this.type = {
     cached = false
@@ -343,6 +380,19 @@ final class FitOLS(dims: Int) extends Fit {
   def dimensions = m
   def samples = n
   def mean(i: Int) = if (n < 1 || i >= m) Double.NaN else S(i) / n
+
+  def apply(t: Double): Array[Double] = ???
+  def xit(index: Int, t: Double): Double = ???
+  def xiform(index: Int, in: Array[Double], i0: Int = 0, iN: Int = Int.MaxValue) {
+    val iM = math.min(in.length, iN)
+    var i = i0
+    val a = alpha(index)
+    val b = beta(index)
+    while (i < iM) {
+      in(i) = a + b*(in(i) - O(0)) + O(index)
+      i += 1
+    }
+  }
 
   def clear: this.type = {
     n = 0
