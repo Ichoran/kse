@@ -5,7 +5,11 @@ package kse.maths
 
 import scala.math._
 
-sealed trait Fit {}   // Marker trait so we know what fits we could have
+/** Marker trait so we know what fits we could have */
+sealed trait Fit {
+  def samples: Long
+  def clear: this.type
+}   
 
 
 /** FitTX performs a ordinary least squares fit of a parameter t against a readout x.
