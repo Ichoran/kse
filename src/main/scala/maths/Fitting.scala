@@ -27,23 +27,27 @@ final class FitTX extends Fit {
   private[this] var Stx = 0.0
 
   private[this] var cached = false
+  private[this] var myAx = 0.0
   private[this] var myBx = 0.0
   private[this] var myE = 0.0
 
+
   private def compute() {
     if (n < 2) {
+      myAx = Double.NaN
       myBx = Double.NaN
       myE = Double.NaN
     }
     else {
       val den = n*Stt - St*St
       myBx = if (den != 0) (n*Stx - St*Sx)/den else Double.NaN
+      myAx = (Sx - myBx*St) / n
       myE = (n*Sxx - Sx*Sx - myBx*myBx*den) / n
     }
     cached = true
   }
 
-  def alphaX = { if (!cached) compute(); (Sx - myBx*St ) / n }
+  def alphaX = { if (!cached) compute(); myAx }
   def betaX = { if (!cached) compute(); myBx }
   def error = { if (!cached) compute(); myE }
   def onlyBetaX = if (n < 2) Double.NaN else Stx / Stt
@@ -118,7 +122,7 @@ final class FitTX extends Fit {
     Stx -= t*x
   }
 
-  override def toString = s"Fit: x = $betaX t + $alphaX (n=$n, rmse=${sqrt(error)/n}"
+  override def toString = s"Fit: x = ${betaX.fmt()} t + ${xt(0).fmt()} (n=$n, rmse=${(sqrt(error)/n).fmt()})"
 }
 object FitTX {
   def apply(ts: Array[Double], xs: Array[Double], i0: Int, iN: Int): FitTX = {
@@ -176,12 +180,16 @@ final class FitTXY extends Fit {
   private[this] var Sty = 0.0
 
   private[this] var cached = false
+  private[this] var myAx = 0.0
+  private[this] var myAy = 0.0
   private[this] var myBx = 0.0
   private[this] var myBy = 0.0
   private[this] var myE = 0.0
 
   private def compute() {
     if (n < 2) {
+      myAx = Double.NaN
+      myAy = Double.NaN
       myBx = Double.NaN
       myBy = Double.NaN
       myE = Double.NaN
@@ -190,13 +198,27 @@ final class FitTXY extends Fit {
       val den = n*Stt - St*St
       myBx = if (den != 0) (n*Stx - St*Sx)/den else Double.NaN
       myBy = if (den != 0) (n*Sty - St*Sy)/den else Double.NaN
+      myAx = (Sx - myBx*St) / n
+      myAy = (Sy - myBy*St) / n
       myE = (n*(Sxx + Syy) - Sx*Sx - Sy*Sy - (myBx*myBx + myBy*myBy)*den) / n
     }
     cached = true
   }
 
-  def alphaX = { if (!cached) compute(); (Sx - myBx*St) / n }
-  def alphaY = { if (!cached) compute(); (Sy - myBy*St) / n }
+  private def computeA() {
+    if (n < 2) {
+      myAx = Double.NaN
+      myBx = Double.NaN
+    }
+    else {
+      if (!cached) compute()
+      myAx = (Sx - myBx*St) / n
+      myAy 
+    }
+  }
+
+  def alphaX = { if (!cached) compute(); myAx }
+  def alphaY = { if (!cached) compute(); myAy }
   def betaX = { if (!cached) compute(); myBx }
   def betaY = { if (!cached) compute(); myBy }
   def error = { if (!cached) compute(); myE }
@@ -301,7 +323,7 @@ final class FitTXY extends Fit {
     Sty -= t*y
   }
 
-  override def toString = s"Fit: x = $betaX t + $alphaX; y = $betaY t + $alphaY (n=$n, rmse=${sqrt(error)/n}"
+  override def toString = s"Fit: x = ${betaX.fmt()} t + ${xt(0).fmt()}; y = ${betaY.fmt()} t + ${yt(0).fmt()} (n=$n, rmse=${(sqrt(error)/n).fmt()}"
 }
 object FitTXY {
   def apply(ts: Array[Double], xs: Array[Double], ys: Array[Double], i0: Int, iN: Int): FitTXY = {
@@ -472,7 +494,7 @@ final class FitOLS(dims: Int) extends Fit {
     }
   }
 
-  override def toString = (1 until m).map(i => s"x($i) = ${beta(i)} t + ${alpha(i)}").mkString("Fit: ", "; ", s" (n=$n, err=$error)")
+  override def toString = (1 until m).map(i => s"x($i) = ${beta(i).fmt()} t + ${xit(i,0).fmt()}").mkString("Fit: ", "; ", s" (n=$n, err=${sqrt(error/n).fmt()})")
 }
 object FitOLS {
   def apply(dims: Int, xs: Array[Double], i0: Int, iN: Int): FitOLS = {

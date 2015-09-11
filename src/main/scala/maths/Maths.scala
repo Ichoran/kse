@@ -51,7 +51,7 @@ package object maths {
 
   // Common numeric functions that are missing
   @inline final def log2(d: Double) = log(d) * OverLnTwo
-  @inline final def entropy(d: Double) = d * log(d) * NegOverLnTwo
+  @inline final def entropy(d: Double) = if (d == 0) 0 else d * log(d) * NegOverLnTwo
 
   implicit class EnrichedShortMaths(private val value: Short) extends AnyVal {
     @inline final def clip(lo: Short, hi: Short) = max(lo, min(hi, value)).toShort
@@ -113,6 +113,74 @@ package object maths {
     @inline final def finite = !java.lang.Double.isNaN(value) && !java.lang.Double.isInfinite(value)
     @inline final def bits = java.lang.Double.doubleToRawLongBits(value)
     @inline final def clip(lo: Double, hi: Double) = max(lo, min(hi, value))
+
+    final def fmt(sigfig: Int = 4, maxZeros: Int = 4): String = {
+      if (value == 0) {
+        if (sigfig >= -1) value.toString.dropRight(2)
+        else String.format("%."+min(18,(-sigfig-1))+"f", java.lang.Double.valueOf(value))
+      }
+      else if (!finite) value.toString
+      else {
+        val sf = min(18, abs(sigfig))
+        val mz = if (maxZeros <= 0) 325 else maxZeros
+        val source = String.format("%."+max(0,sf-1)+"e", java.lang.Double.valueOf(value))
+        val neg = source.charAt(0) == '-'
+        val ie = source.lastIndexOf('e')
+        val ex = source.substring(ie+2).toInt * (if (source.charAt(ie+1) == '-') -1 else 1)
+        if (ex < -mz) source
+        else if (sf < ex) source.substring(0, ie) + "e" + ex.toInt
+        else {
+          val lnz = if (sf == 0) ie-1 else {
+            var i = ie-1
+            while (i > 0 && source.charAt(i) == '0') i -= 1
+            i
+          }
+          val nnz = 1 + lnz - (if (sf == 0) 0 else 1) - (if (neg) 1 else 0)
+          val dp = 1 + ex
+          val dig = if (sigfig < 0) sf else min(sf, nnz)
+          val cs = new Array[Char](dig + (if (dp < 1) 2-dp else if (dp < dig) 1 else 0) + (if (neg) 1 else 0))
+          var i = 0
+          if (neg) { cs(i) = '-'; i += 1 }
+          if (dp <= 0) {
+            cs(i) = '0'
+            i += 1
+            cs(i) = '.'
+            i += 1
+            var j = -dp
+            while (j > 0) { cs(i) = '0'; i += 1; j -= 1 }
+            j = nnz
+            var k = if (neg) 1 else 0
+            while (j > 0) {
+              if (source.charAt(k) == '.') k += 1
+              cs(i) = source.charAt(k)
+              i += 1
+              k += 1
+              j -= 1
+            }
+            while (i < cs.length) { cs(i) = '0'; i += 1 }
+          }
+          else {
+            var k = if (neg) 1 else 0
+            var j = nnz
+            while (j > 0) {
+              if (source.charAt(k) == '.') k += 1
+              if (j == nnz - dp) { cs(i) = '.'; i += 1 }
+              cs(i) = source.charAt(k)
+              i += 1
+              k += 1
+              j -= 1
+            }
+            while (i < cs.length) {
+              if (j == nnz - dp) { cs(i) = '.'; i += 1 }
+              cs(i) = '0'
+              i += 1
+              j -= 1
+            }
+          }
+          new String(cs)
+        }
+      }
+    }
   }
 
   // Functions useful in computing statistical distributions
