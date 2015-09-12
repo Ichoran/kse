@@ -407,8 +407,13 @@ final class FitOLS(dims: Int) extends Fit {
   def samples = n
   def mean(i: Int) = if (n < 1 || i >= m) Double.NaN else S(i) / n
 
-  def apply(t: Double): Array[Double] = ???
-  def xit(index: Int, t: Double): Double = ???
+  def apply(t: Double): Array[Double] = {
+    val a = new Array[Double](m-1)
+    var i = 0
+    while (i < a.length) { a(i) = xit(i+1, t); i += 1 }
+    a
+  }
+  def xit(index: Int, t: Double): Double = alpha(index) + beta(index)*(t - O(0)) + O(index)
   def xiform(index: Int, in: Array[Double], i0: Int = 0, iN: Int = Int.MaxValue) {
     val iM = math.min(in.length, iN)
     var i = i0
