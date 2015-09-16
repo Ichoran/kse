@@ -412,6 +412,7 @@ package object maths {
   }
   def erf(x: Double) = 2.0*cdfNormal(SqrtTwo*x)-1.0
   def erfc(x: Double) = -2.0*cdfNormal(-SqrtTwo*x)
+  
   // Student's T test distribution functions (special case of incomplete regularized beta)
   // Approximations from Hill, Comm. ACM, Algorithm 395 & 396, v13 pp 617-620 (1970)
   // Takes no more than about 180 ns on a 3.33 GHz Intel Xeon X5680 (df = 18)

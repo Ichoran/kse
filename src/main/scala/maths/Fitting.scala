@@ -55,6 +55,13 @@ final class FitTX extends Fit {
   def samples = n
   def meanT = if (n < 1) Double.NaN else St / n
   def meanX = if (n < 1) Double.NaN else Sx / n
+  /*
+  // Seems to be according to formula, but doesn't seem to be accurate. Need to figure out what's wrong.
+  def p(t: Double, x: Double, knownSigmaSq: Double = Double.NaN) = if (n <= 2) Double.NaN else {
+    val e = if (knownSigmaSq.nan) myE else knownSigmaSq*(n.toDouble*n)
+    cdfStudentT(n, (x - xt(t))/sqrt((e/(n-2))*((t - St/n).sq/((n*Stt - St*St)))))
+  }
+  */
 
   def apply(t: Double): Double = alphaX + betaX*(t - Ot) + Ox
   def xt(t: Double): Double = apply(t)
