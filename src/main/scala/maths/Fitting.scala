@@ -55,16 +55,19 @@ final class FitTX extends Fit {
   def samples = n
   def meanT = if (n < 1) Double.NaN else St / n
   def meanX = if (n < 1) Double.NaN else Sx / n
-  /*
-  // Seems to be according to formula, but doesn't seem to be accurate. Need to figure out what's wrong.
-  def p(t: Double, x: Double, knownSigmaSq: Double = Double.NaN) = if (n <= 2) Double.NaN else {
-    val e = if (knownSigmaSq.nan) myE else knownSigmaSq*(n.toDouble*n)
-    cdfStudentT(n, (x - xt(t))/sqrt((e/(n-2))*((t - St/n).sq/((n*Stt - St*St)))))
-  }
-  */
 
   def apply(t: Double): Double = alphaX + betaX*(t - Ot) + Ox
   def xt(t: Double): Double = apply(t)
+
+  /** An estimate of the probability that a particular x at a value t comes from the linear relationship
+    * fit by this fitter.  If the true (or a superior) estimate of the variance is known, it can
+    * substantially improve the accuracy of the estimate especially for small n
+    */
+  def p(t: Double, x: Double, knownSigmaSq: Double = Double.NaN) = if (n <= 2) Double.NaN else {
+    if (knownSigmaSq.nan) cdfStudentT(n, (x - xt(t))/sqrt((error/(n-2))*(1.0/n + (n*t - St).sq/(n*(n*Stt - St*St)))))
+    else cdfNormal((x - xt(t))/sqrt(knownSigmaSq*(1.0/n + (n*t - St).sq/(n*(n*Stt - St*St)))))
+  }
+
   def xform(in: Array[Double], i0: Int = 0, iN: Int = Int.MaxValue) {
     val iM = math.min(in.length, iN)
     var i = i0
