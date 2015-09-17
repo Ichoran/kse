@@ -53,16 +53,29 @@ package object maths {
   @inline final def log2(d: Double) = log(d) * OverLnTwo
   @inline final def entropy(d: Double) = if (d == 0) 0 else d * log(d) * NegOverLnTwo
 
+  implicit class EnrichedByteMaths(private val value: Byte) extends AnyVal {
+    @inline final def clip(lo: Byte, hi: Byte) = max(lo, min(hi, value)).toByte
+    @inline final def in(lo: Byte, hi: Byte) = lo <= value && value <= hi
+  }
+
+  implicit class EnrichedCharMaths(private val value: Char) extends AnyVal {
+    @inline final def clip(lo: Char, hi: Char) = max(lo, min(hi, value)).toChar
+    @inline final def in(lo: Char, hi: Char) = lo <= value && value <= hi
+  }
+
   implicit class EnrichedShortMaths(private val value: Short) extends AnyVal {
     @inline final def clip(lo: Short, hi: Short) = max(lo, min(hi, value)).toShort
+    @inline final def in(lo: Short, hi: Short) = lo <= value && value <= hi
   }
 
   implicit class EnrichedIntMaths(private val value: Int) extends AnyVal {
     @inline final def clip(lo: Int, hi: Int) = max(lo, min(hi, value))
+    @inline final def in(lo: Int, hi: Int) = lo <= value && value <= hi
   }
 
   implicit class EnrichedLongMaths(private val value: Long) extends AnyVal {
     @inline final def clip(lo: Long, hi: Long) = max(lo, min(hi, value))
+    @inline final def in(lo: Long, hi: Long) = lo <= value && value <= hi
   }
 
   implicit class EnrichedFloatMaths(private val value: Float) extends AnyVal {
