@@ -55,6 +55,8 @@ package coll {
     def value_=(a: A): Unit
     def value_(a: A): this.type = { value = a; this }
     def op(f: A => A): this.type = { value = f(value); this }
+    override def toString = value.toString
+    override def hashCode = value.##
   }
   object Mu {
     object MuUnit extends Mu[Unit] { def value: Unit = (); def value_=(u: Unit) {} }
