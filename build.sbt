@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 20115 Rex Kerr and Calico Labs.
+// Copyright (c) 2015 Rex Kerr and Calico Labs.
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.11.7"

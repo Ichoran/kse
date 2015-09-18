@@ -1394,7 +1394,7 @@ abstract class Grok {
   /** Get the next token as a `String`. */
   def tok(implicit fail: GrokHop[this.type]): String
   /** Get up to `n` characters as the next token as a `String`. */
-  def tokUntil(n: Int)(implicit fail: GrokHop[this.type]): String
+  def tokLimit(n: Int)(implicit fail: GrokHop[this.type]): String
   /** Get a `String` token that continues until `p` returns true; `p` will receive elements of the underlying data stream in whatever format it is */
   def tokUntil(p: Int => Boolean)(implicit fail: GrokHop[this.type]): String
   /** Parse a quoted token. `"` is the quote character, `\` is the escape.  Standard escapes like `\n` are parsed. */

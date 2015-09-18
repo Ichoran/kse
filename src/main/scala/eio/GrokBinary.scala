@@ -117,7 +117,7 @@ extends Grok {
     i = math.min(iN, j+1L).toInt
     ans
   }
-  def tokUntil(n: Int)(implicit fail: GrokHop[this.type]): String = {
+  def tokLimit(n: Int)(implicit fail: GrokHop[this.type]): String = {
     val j = Delimiter.zero.not(buffer, i, iN)
     if (j < 0) { err(fail, e.end, e.tok); return null }
     val m = math.min(j-i, math.max(0,n))

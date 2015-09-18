@@ -373,7 +373,7 @@ extends Grok {
     i = j
     ans
   }
-  final def tokUntil(n: Int)(implicit fail: GrokHop[this.type]): String = {
+  final def tokLimit(n: Int)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val j = math.min(delim.not(buffer, i, iN), i + math.max(0,n))
     val ans = new String(buffer, i, j-i)
