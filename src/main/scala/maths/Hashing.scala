@@ -7,7 +7,7 @@ package kse.maths
 
 import java.lang.Integer.{rotateLeft => rotl32, rotateRight => rotr32 }
 import java.lang.Long.{rotateLeft => rotl64, rotateRight => rotr64 }
-import java.nio.ByteBuffer
+import java.nio.{ByteBuffer, ByteOrder}
 
 package hashing {
   trait Hash32 { def hash32(bb: ByteBuffer, seed: Int): Int }
@@ -25,6 +25,7 @@ package hashing {
     final val Prime64_5 = 0x27d4eb2f165667c5L //  2870177450012600261L
 
     def hash32(bb: ByteBuffer, seed: Int): Int = {
+      bb.order(ByteOrder.LITTLE_ENDIAN)
       val len = bb.remaining
       var h32 =
         if (bb.remaining < 16) seed + Prime32_5
@@ -64,7 +65,9 @@ package hashing {
       h32 *= Prime32_3
       h32 ^ (h32 >>> 16)
     }
+    def hash32(ab: Array[Byte], seed: Int, i0: Int = 0, iN: Int = Int.MaxValue): Int = hash32(ByteBuffer.wrap(ab, i0, math.min(iN, ab.length)), seed)
     def hash64(bb: ByteBuffer, seed: Long): Long = {
+      bb.order(ByteOrder.LITTLE_ENDIAN)
       val len = bb.remaining
       var h64 =
         if (bb.remaining < 32) seed + Prime64_5
@@ -116,5 +119,6 @@ package hashing {
       h64 *= Prime64_3
       h64 ^ (h64 >>> 32)      
     }
+    def hash64(ab: Array[Byte], seed: Int, i0: Int = 0, iN: Int = Int.MaxValue): Long = hash64(ByteBuffer.wrap(ab, i0, math.min(iN, ab.length)), seed)
   }
 }
