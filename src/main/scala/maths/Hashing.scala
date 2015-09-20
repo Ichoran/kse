@@ -24,6 +24,54 @@ package hashing {
     final val Prime64_4 = 0x85ebca77c2b2ae63L //  9650029242287828579L
     final val Prime64_5 = 0x27d4eb2f165667c5L //  2870177450012600261L
 
+    def hash32(a: Array[Byte], seed: Int, i0: Int = 0, iN: Int = Int.MaxValue): Int = {
+      val iM = math.min(a.length, iN)
+      var i = i0
+      var h32 =
+        if (i0 > iM - 16) seed + Prime32_5
+        else {
+          var v1 = seed + Prime32_1 + Prime32_2
+          var v2 = seed + Prime32_2
+          var v3 = seed
+          var v4 = seed - Prime32_1
+          do {
+            v1 += ((a(i)&0xFF) | ((a(i+1)&0xFF) << 8 ) | ((a(i+2)&0xFF) << 16) | (a(i+3) << 24)) * Prime32_2
+            v1 = rotl32(v1, 13)
+            v1 *= Prime32_1
+            i += 4
+            v2 += ((a(i)&0xFF) | ((a(i+1)&0xFF) << 8 ) | ((a(i+2)&0xFF) << 16) | (a(i+3) << 24)) * Prime32_2
+            v2 = rotl32(v2, 13)
+            v2 *= Prime32_1
+            i += 4
+            v3 += ((a(i)&0xFF) | ((a(i+1)&0xFF) << 8 ) | ((a(i+2)&0xFF) << 16) | (a(i+3) << 24)) * Prime32_2
+            v3 = rotl32(v3, 13)
+            v3 *= Prime32_1
+            i += 4
+            v4 += ((a(i)&0xFF) | ((a(i+1)&0xFF) << 8 ) | ((a(i+2)&0xFF) << 16) | (a(i+3) << 24)) * Prime32_2
+            v4 = rotl32(v4, 13)
+            v4 *= Prime32_1
+            i += 4
+          } while (i <= iM - 16);
+          rotl32(v1, 1) + rotl32(v2, 7) + rotl32(v3, 12) + rotl32(v4, 18)
+        }
+      h32 += (iM - i0)
+      while (i <= iM - 4) {
+        h32 += ((a(i)&0xFF) | ((a(i+1)&0xFF) << 8 ) | ((a(i+2)&0xFF) << 16) | (a(i+3) << 24)) * Prime32_3
+        h32 = rotl32(h32, 17) * Prime32_4
+        i += 4
+      }
+      while (i < iM) {
+        h32 += (a(i) & 0xFF) * Prime32_5
+        h32 = rotl32(h32, 11) * Prime32_1
+        i += 1
+      }
+      h32 ^= h32 >>> 15
+      h32 *= Prime32_2
+      h32 ^= h32 >>> 13
+      h32 *= Prime32_3
+      h32 ^ (h32 >>> 16)
+    }
+
     def hash32(bb: ByteBuffer, seed: Int): Int = {
       bb.order(ByteOrder.LITTLE_ENDIAN)
       val len = bb.remaining
@@ -65,7 +113,7 @@ package hashing {
       h32 *= Prime32_3
       h32 ^ (h32 >>> 16)
     }
-    def hash32(ab: Array[Byte], seed: Int, i0: Int = 0, iN: Int = Int.MaxValue): Int = hash32(ByteBuffer.wrap(ab, i0, math.min(iN, ab.length)), seed)
+
     def hash64(bb: ByteBuffer, seed: Long): Long = {
       bb.order(ByteOrder.LITTLE_ENDIAN)
       val len = bb.remaining
