@@ -56,7 +56,7 @@ package hashing {
         h32 = rotl32(h32, 17) * Prime32_4
       }
       while (bb.hasRemaining) {
-        h32 += bb.get * Prime32_5
+        h32 += (bb.get & 0xFF) * Prime32_5
         h32 = rotl32(h32, 11) * Prime32_1
       }
       h32 ^= h32 >>> 15
@@ -106,11 +106,11 @@ package hashing {
         h64 = rotl64(h64, 27)*Prime64_1 + Prime64_4
       }
       if (bb.remaining >= 4) {
-        h64 ^= bb.getInt * Prime64_1
+        h64 ^= (bb.getInt & 0xFFFFFFFFL) * Prime64_1
         h64 = rotl64(h64, 23) * Prime64_2 + Prime64_3
       }
       while (bb.hasRemaining) {
-        h64 ^= bb.get * Prime64_5
+        h64 ^= (bb.get & 0xFF) * Prime64_5
         h64 = rotl64(h64, 11) * Prime64_1
       }
       h64 ^= h64 >>> 33
