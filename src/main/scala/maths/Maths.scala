@@ -53,6 +53,11 @@ package object maths {
   @inline final def log2(d: Double) = log(d) * OverLnTwo
   @inline final def entropy(d: Double) = if (d == 0) 0 else d * log(d) * NegOverLnTwo
 
+  implicit class EnrichedBooleanMaths(private val value: Boolean) extends AnyVal {
+    @inline final def <==(that: Boolean) = value | !that
+    @inline final def ==>(that: Boolean) = !value | that
+  }
+
   implicit class EnrichedByteMaths(private val value: Byte) extends AnyVal {
     @inline final def clip(lo: Byte, hi: Byte) = max(lo, min(hi, value)).toByte
     @inline final def in(lo: Byte, hi: Byte) = lo <= value && value <= hi
