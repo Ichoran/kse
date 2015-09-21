@@ -1014,7 +1014,7 @@ extends Grok {
   }
   
   
-  def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = {
+  def grokEach[A: ClassTag](delimiter: Delimiter, preamble: GrokHop[this.type] => Boolean = _ => true)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = {
     implicit val fail = new GrokHopImpl[this.type]
     val name = delim match {
       case _: WhiteDelim => "word "
@@ -1040,8 +1040,7 @@ extends Grok {
         delim = delimNew
         t = 0
         ready = 1
-        val ans = f(fail)
-        successBuffer += ans
+        if (preamble(fail)) successBuffer += f(fail)
       }
       catch { case x if fail is x =>
         failures = true

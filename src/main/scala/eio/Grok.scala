@@ -1487,8 +1487,10 @@ abstract class Grok {
   /** Parse repeatedly until input is exhausted; use `p` to check that input and if it passes, use `f2` to transform it before storing in an array.  Delimiters are restored before parsing each item.  Note that either `p` or `f2` may perform additional parsing. */
   def filterMap[A,B](parse: => A)(p: A => Boolean)(f2: A => B)(implicit fail: GrokHop[this.type], tag: ClassTag[B]): Array[B]
 
-  /** Sub-parse each token using the specified delimiter to group sub-tokens.  If all parsing completes successfully, return in a `Yes[Array]`.  If not, return `No[Array[Successes],Array[GrokErrors]]`.  The errors will report which token they were from in the `token` field. */
-  def grokEach[A: ClassTag](delimiter: Delimiter)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
+  /** Sub-parse each token using the specified delimiter to group sub-tokens, skipping any sub-tokens that fail `preamble`.  If all parsing completes successfully, return in a `Yes[Array]`.  If not, return `No[Array[Successes],Array[GrokErrors]]`.  The errors will report which token they were from in the `token` field. */
+  def grokEach[A: ClassTag](delimiter: Delimiter, preamble: GrokHop[this.type] => Boolean = _ => true)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]]
+  /** Sub-parse each token using the specified character as a sub-delimiter and a test/preparation predicate; see the method parameterized with `Delimiter` for details. */
+  def grokEach[A: ClassTag](delimiter: Char, preamble: GrokHop[this.type])(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)
   /** Sub-parse each token using the specified character as a sub-delimiter; see the method parameterized with `Delimiter` for details. */
   def grokEach[A: ClassTag](delimiter: Char)(f: GrokHop[this.type] => A): Ok[(Array[A], Array[GrokError]), Array[A]] = grokEach(new CharDelim(delimiter))(f)
   
