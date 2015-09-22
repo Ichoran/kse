@@ -406,7 +406,7 @@ extends Grok {
             k += 1
             n -= 1
           }
-          x = escaper.extended(c, l).tap(y => println(y.toHexString))
+          x = escaper.extended(c, l)
         }
         buf(j) = x.toChar
         j += 1
