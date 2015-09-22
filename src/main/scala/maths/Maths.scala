@@ -81,6 +81,13 @@ package object maths {
   implicit class EnrichedLongMaths(private val value: Long) extends AnyVal {
     @inline final def clip(lo: Long, hi: Long) = max(lo, min(hi, value))
     @inline final def in(lo: Long, hi: Long) = lo <= value && value <= hi
+    final def agree(format: String) = {
+      val fa = format.split('/')
+      if (fa.length == 3) {
+        value.toString + " " + fa(0) + (if (value == 1) fa(1) else fa(2))
+      }
+      else value + format
+    }
   }
 
   implicit class EnrichedFloatMaths(private val value: Float) extends AnyVal {
