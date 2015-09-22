@@ -1566,12 +1566,20 @@ object GrokErrorCodes {
   final val whos = whoErrorBuilder.result();
 }
 
-/** GrokEscape specifies how escape codes should be handled while parsing quoted strings. */
+/** GrokEscape specifies how escape codes should be handled while parsing quoted strings.
+  * The first character after the escape is passed to `replace`.  It should return a 
+  * value in range (unsigned) for a one-to-one replacement, or an integer which is either
+  * 0x4000000n, where n is the number of characters to pack literally into a Long, or
+  * 0x700000mm, where mm are the number of hexidecimal characters to pack into a Long.
+  * Those values, packed in LSB order, are then passed along with the triggering character,
+  * to `extended`.  Garbled values will be interpreted as the latter command.
+  * `extended` will then have a go and its return value will be interpreted the same way.
+  */
 abstract class GrokEscape {
   def replace(c: Char): Int
   def replace(b: Byte): Int
-  def extended(c: Char, extra: Long): Long
-  def extended(b: Byte, extra: Long): Long
+  def extended(c: Char, extra: Long): Int
+  def extended(b: Byte, extra: Long): Int
 }
 object GrokEscape {
   val identity = new GrokEscape {
@@ -1591,7 +1599,7 @@ object GrokEscape {
       case 't' => '\t'
       case 'b' => '\b'
       case 'f' => '\f'
-      case 'u' => 0x140011
+      case 'u' => 0x70000004
       case _ => c
     }
     def replace(b: Byte) = b match {
@@ -1602,7 +1610,7 @@ object GrokEscape {
       case 't' => '\t'
       case 'b' => '\b'
       case 'f' => '\f'
-      case 'u' => 0x140011
+      case 'u' => 0x70000004
       case _ => b
     }
     def extended(c: Char, extra: Long) =

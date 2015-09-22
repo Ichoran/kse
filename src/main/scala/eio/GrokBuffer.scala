@@ -404,36 +404,27 @@ extends Grok {
       if (c != esc) { buf(j) = c.toChar; j += 1 }
       else {
         val c = buffer(k)
-        val x = escaper.replace(c)
-        if (x < 65536) {
-          buf(j) = x.toChar
-          j += 1
-          k += 1
-        }
-        else {
-          var n = (x >> 16) & 0xF
+        k += 1
+        var x = escaper.replace(c)
+        while (x >= 65536) {
+          var n = (x & 0xFF)
           if (k+n >= iEnd) { err(fail, e.wrong, e.quote); return null }
           var l = 0L
-          if ((x & 0x100000) != 0) {
-            val iOld = i
-            i = k+1
-            l = rawHexidecimalDigits(buffer, k+n)
-            if (error != 0) { err(fail, error, e.quote); return null }
-            i = iOld
-          }
-          else while (n > 0) { l = (l << 16) | buffer(k+n-1); n -= 1 }
-          k += n+1
-          val shift = if ((x&0xF0) != 0) 16 else 8
-          val mask = if (shift == 8) 0xFF else 0xFFFF
-          n = x & 0xF
-          l = escaper.extended(c, l)
-          while (n > 0) {
-            buf(j) = (l & mask).toChar
-            l = l >>> shift
+          if ((x >>> 28) == 4) while (n > 0) { l = (l << 8) | buffer(k); k += 1; n -= 1 }
+          else while (n > 0) { 
+            l = (l << 4) | ( (buffer(k) & 0x20) - '0' match {
+              case x if x >= 0 && x < 10 => x
+              case x if x >= 49 && x < 55 => x - 39
+              case x => err(fail, e.range, e.quote); return null
+            })
+            k += 1
             n -= 1
-            j += 1
           }
+          x = escaper.extended(c, l)
         }
+        buf(j) = x.toChar
+        j += 1
+
       }
     }
     val ans = new String(buf, 0, j)
