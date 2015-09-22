@@ -398,7 +398,7 @@ extends Grok {
           var l = 0L
           if ((x >>> 28) == 4) while (n > 0) { l = (l << 16) | string.charAt(k); k += 1; n -= 1 }
           else while (n > 0) { 
-            l = (l << 4) | ( (string.charAt(k) & 0x20) - '0' match {
+            l = (l << 4) | ( (string.charAt(k) | 0x20) - '0' match {
               case x if x >= 0 && x < 10 => x
               case x if x >= 49 && x < 55 => x - 39
               case x => err(fail, e.range, e.quote); return null
@@ -406,7 +406,7 @@ extends Grok {
             k += 1
             n -= 1
           }
-          x = escaper.extended(c, l)
+          x = escaper.extended(c, l).tap(y => println(y.toHexString))
         }
         buf(j) = x.toChar
         j += 1
