@@ -586,10 +586,10 @@ final case class GrokError(whyError: Byte, whoError: Byte, token: Int, position:
     var sright = new String(java.util.Arrays.copyOfRange(ab, k, right))
     if (sleft.indexOf(0x65533) >= 0 || sright.indexOf(0x65533) >= 0) {
       var bufl = new Array[Char](k-left)
-      var i = 0; while (i < bufl.length) { bufl(i) = ab(left+i).toChar; i += 1 }
+      var i = 0; while (i < bufl.length) { bufl(i) = (ab(left+i)&0xFF).toChar; i += 1 }
       sleft = new String(bufl)
       val bufr = new Array[Char](right-k)
-      var j = 0; while (j < bufr.length) { bufr(j) = ab(k+j).toChar; j += 1 }
+      var j = 0; while (j < bufr.length) { bufr(j) = (ab(k+j)&0xFF).toChar; j += 1 }
       sright = new String(bufr)
     }
     sleft = escapeControls(sleft, -1)

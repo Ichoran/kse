@@ -230,7 +230,7 @@ extends Grok {
   def C(implicit fail: GrokHop[this.type]): Char = {
     if (!prepare(1, e.C)(fail)) return 0
     if (delim.not(buffer, i, i+1) == i) { err(fail, e.wrong, e.C); return 0 }    
-    val ans = buffer(i) & 0xFF
+    var ans = buffer(i) & 0xFF
     i += 1
     if (!wrapup(e.C)(fail)) return 0
     ans.toChar
@@ -401,7 +401,7 @@ extends Grok {
     while (k < iEnd) {
       val c = buffer(k)
       k += 1
-      if (c != esc) { buf(j) = c.toChar; j += 1 }
+      if (c != esc) { buf(j) = (c & 0xFF).toChar; j += 1 }
       else {
         val c = buffer(k)
         k += 1
@@ -410,7 +410,7 @@ extends Grok {
           var n = (x & 0xFF)
           if (k+n >= iEnd) { err(fail, e.wrong, e.quote); return null }
           var l = 0L
-          if ((x >>> 28) == 4) while (n > 0) { l = (l << 8) | buffer(k); k += 1; n -= 1 }
+          if ((x >>> 28) == 4) while (n > 0) { l = (l << 8) | (buffer(k) & 0xFF); k += 1; n -= 1 }
           else while (n > 0) { 
             l = (l << 4) | ( (buffer(k) | 0x20) - '0' match {
               case x if x >= 0 && x < 10 => x
@@ -448,7 +448,7 @@ extends Grok {
               while (j < i) {
                 val c = buffer(j)
                 if (!skip) {
-                  buf(k) = c.toChar
+                  buf(k) = (c & 0xFF).toChar
                   k += 1
                   if (c == q) skip = true
                 }
@@ -539,53 +539,23 @@ extends Grok {
   def exact(s: String)(implicit fail: GrokHop[this.type]): this.type = {
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
-    while (i < iN && k < s.length && buffer(i) == s.charAt(k)) { i += 1; k += 1 }
+    while (i < iN && k < s.length && (buffer(i) & 0xFF) == s.charAt(k)) { i += 1; k += 1 }
     if (k < s.length) { err(fail, e.wrong, e.exact); return this }
     if (!wrapup(e.exact)(fail)) return null
     this
   }
-  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type =  ???
-  /*{
-    import GrokCharacter._
+  def exactNoCase(s: String)(implicit fail: GrokHop[this.type]): this.type =  {
     if (!prepare(0, e.exact)(fail)) return null
     var k = 0
-    while (i < iN && k < s.length && {
-      val c = buffer(i) & 0xFF
-      val cc = s.charAt(k)
-      (c == cc) || ((c & 0x80) != 0 && {
-        val code = 
-          if ((c & 0xE0) == 0xC0) {
-            if (i >= iN-1) { err(fail, e.end, e.exact); return this }
-            val c2 = buffer(i+1) & 0xFF
-            i += 1
-            if ((c2&0xC0) != 0x80) { err(fail, e.wrong, e.exact); return this }
-            ((c & 0x1F) << 6) | (c2 & 0x3F)
-          }
-          else if ((c & 0xF0) == 0xE0) {
-            if (i >= iN-2) { err(fail, e.end, e.exact); return this }
-            val c2 = buffer(i+1) & 0xFF
-            val c3 = buffer(i+2) & 0xFF
-            i += 2
-            if (((c2&0xC0) | (c3&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); return this }
-            ((c & 0xF) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F)
-          }
-          else if ((c & 0xF4) == 0xF0) {
-            if (i >= iN-3) { err(fail, e.end, e.exact); return this }
-            val c2 = buffer(i+1) & 0xFF
-            val c3 = buffer(i+2) & 0xFF
-            val c4 = buffer(i+3) & 0xFF
-            i += 3
-            if (((c2&0xC0) | (c3&0xC0) | (c4&0xC0)) != 0x80) { err(fail, e.wrong, e.exact); return this }
-            ((c & 0x7) << 18) | ((c2 & 0x3F) << 12) | ((c3 &0x3F) << 6) | (c4 & 0x3F)
-          }
-          else { err(fail, e.wrong, e.exact); return this }
-        
-      })
-    }) { i += 1; k += 1 }
+    while (i < iN && k < s.length && 
+      ((buffer(i) & 0xFF) match { case x if (x|0x20) >= 'a' && (x|0x20) <= 'z' => (x|0x20) == (s.charAt(k)|0x20); case x => x == s.charAt(k) })
+    ) { 
+      i += 1; k += 1
+    }
     if (k < s.length) { err(fail, e.wrong, e.exact); return this }
     if (!wrapup(e.exact)(fail)) return null
-    this
-  }*/
+    this    
+  }
   def oneOf(s: String*)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.exact)(fail)) return null
     val a = delim.not(buffer, i, iN)
@@ -596,7 +566,7 @@ extends Grok {
         var j = 0
         var k = i
         val sn = s(n)
-        while (k < a && j < sn.length && sn.charAt(j) == buffer(k)) { k += 1; j += 1 }
+        while (k < a && j < sn.length && sn.charAt(j) == (buffer(k) & 0xFF)) { k += 1; j += 1 }
         if (j == sn.length) { i = k; t += 1; return sn }
       }
       n += 1
@@ -617,7 +587,7 @@ extends Grok {
         var k = i
         val sn = s(n)
         while (k < a && j < sn.length && {
-          val c = buffer(k)
+          val c = buffer(k) & 0xFF
           val cc = sn.charAt(j)
           (c == cc) || {
             ???
