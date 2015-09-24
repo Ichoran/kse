@@ -109,10 +109,16 @@ extends Grok {
   def D(implicit fail: GrokHop[this.type]): Double = java.lang.Double.longBitsToDouble(binaryNumber(8, e.D)(fail))
   def xD(implicit fail: GrokHop[this.type]): Double = D
   def aD(implicit fail: GrokHop[this.type]): Double = D
+  private[this] def unencodedString(o: Int, m: Int) = if (m <= 0) "" else {
+    var cs = new Array[Char](m)
+    var k = 0
+    while (k < m) { cs(k) = (buffer(o+k) & 0xFF).toChar; k += 1 }
+    new String(cs)  
+  }
   def tok(implicit fail: GrokHop[this.type]): String = {
     val j = Delimiter.zero.not(buffer, i, iN)
     if (j < 0) { err(fail, e.end, e.tok); return null }
-    val ans = new String(buffer, i, j-i)
+    val ans = unencodedString(i, j-i)
     error = 0
     i = math.min(iN, j+1L).toInt
     ans
@@ -121,7 +127,7 @@ extends Grok {
     val j = Delimiter.zero.not(buffer, i, iN)
     if (j < 0) { err(fail, e.end, e.tok); return null }
     val m = math.min(j-i, math.max(0,n))
-    val ans = new String(buffer, i, m)
+    val ans = unencodedString(i, m)
     error = 0
     i = math.min(iN, i+m.toLong).toInt
     ans
@@ -131,7 +137,7 @@ extends Grok {
     if (j < 0) { err(fail, e.end, e.tok); return null }
     var k = i
     while (k < j && !p(buffer(k) & 0xFF)) k += 1
-    val ans = new String(buffer, i, k-i)
+    val ans = unencodedString(i, k-i)
     error = 0
     i = math.min(iN, k).toInt
     ans
@@ -198,7 +204,7 @@ extends Grok {
               }
               new String(buf, 0, k)
             }
-            else new String(buffer, iStart, i - iStart)
+            else unencodedString(iStart, i - iStart)
           i += 1
           return ans
         }
@@ -236,7 +242,7 @@ extends Grok {
     }
     if (depth != 0) { err(fail, e.wrong, e.quote); return null }
     if (escies > 0) return quotedByWithEscapes(iStart, i-1, bleft, bright, besc, escaper)(fail)
-    val ans = if (hi) new String(buffer, iStart, i-1-iStart) else new String(buffer, iStart, i-1-iStart, "ASCII")
+    val ans = if (hi) unencodedString(iStart, i-1-iStart) else new String(buffer, iStart, i-1-iStart)
     ans
   }
   def qtok(implicit fail: GrokHop[this.type]): String = qtokBy('"', '"', '\\')(fail)
@@ -401,7 +407,7 @@ extends Grok {
     if (l == -1) null
     else {
       val x = new LongAsBox(l)
-      new String(buffer, x.i0, x.i1 - x.i0)
+      unencodedString(x.i0, x.i1 - x.i0)
     }
   }
   

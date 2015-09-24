@@ -364,10 +364,16 @@ extends Grok {
       case _ => D(fail)
     }
   }
+  private[this] def unencodedString(o: Int, m: Int) = if (m <= 0) "" else {
+    var cs = new Array[Char](m)
+    var k = 0
+    while (k < m) { cs(k) = (buffer(o+k) & 0xFF).toChar; k += 1 }
+    new String(cs)  
+  }
   def tok(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val j = delim.not(buffer, i, iN)
-    val ans = new String(buffer, i, j-i)
+    val ans = unencodedString(i, j-i)
     ready = 0
     t += 1
     i = j
@@ -376,7 +382,7 @@ extends Grok {
   final def tokLimit(n: Int)(implicit fail: GrokHop[this.type]): String = {
     if (!prepare(0, e.tok)(fail)) return null
     val j = math.min(delim.not(buffer, i, iN), i + math.max(0,n))
-    val ans = new String(buffer, i, j-i)
+    val ans = unencodedString(i, j-i)
     ready = 0
     t += 1
     i = j
@@ -387,7 +393,7 @@ extends Grok {
     val j = delim.not(buffer, i, iN)
     var k = i
     while (k < j && !p(buffer(k) & 0xFF)) k += 1
-    val ans = new String(buffer, i, k-i)
+    val ans = unencodedString(i, k-i)
     ready = 0
     t += 1
     i = k
@@ -457,7 +463,7 @@ extends Grok {
               }
               new String(buf, 0, k)
             }
-            else new String(buffer, iStart, i - iStart)
+            else unencodedString(iStart, i - iStart)
           i += 1
           if (!wrapup(e.quote)(fail)) return null
           return ans
@@ -495,7 +501,7 @@ extends Grok {
     }
     if (depth != 0) { err(fail, e.wrong, e.quote); return null }
     if (escies > 0) return quotedByWithEscapes(iStart, i-1, bleft, bright, besc, escaper)(fail)
-    val ans = if (hi) new String(buffer, iStart, i-1-iStart) else new String(buffer, iStart, i-1-iStart, "ASCII")
+    val ans = if (hi) unencodedString(iStart, i-1-iStart) else new String(buffer, iStart, i-1-iStart)
     if (!wrapup(e.quote)(fail)) return null
     ans
   }
@@ -836,7 +842,7 @@ extends Grok {
     if (l == -1) null
     else {
       val x = new LongAsBox(l)
-      new String(buffer, x.i0, x.i1 - x.i0)
+      unencodedString(x.i0, x.i1 - x.i0)
     }
   }
   
