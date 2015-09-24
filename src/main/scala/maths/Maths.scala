@@ -81,13 +81,13 @@ package object maths {
   implicit class EnrichedLongMaths(private val value: Long) extends AnyVal {
     @inline final def clip(lo: Long, hi: Long) = max(lo, min(hi, value))
     @inline final def in(lo: Long, hi: Long) = lo <= value && value <= hi
-    final def agree(format: String) = {
+    final def pluralizes(format: String) = {
       val fa = format.split('/')
-      if (fa.length == 3) {
-        value.toString + " " + fa(0) + (if (value == 1) fa(1) else fa(2))
-      }
-      else value + format
+      if (fa.length > 2) fa(0) + fa(if (this.in(1, fa.length-2)) value.toInt else (fa.length-1).toInt)
+      else if (fa.length == 2) { if (value == 1) fa(0) else fa(0) + fa(1) }
+      else format        
     }
+    final def plural(format: String) = value.toString + " " + this.pluralizes(format)
   }
 
   implicit class EnrichedFloatMaths(private val value: Float) extends AnyVal {
@@ -132,6 +132,7 @@ package object maths {
     @inline final def ervcInv = maths.erfcInv(value)
 
     @inline final def sign = scala.math.signum(value)
+    @inline final def rint = scala.math.rint(value)
     @inline final def ulp = scala.math.ulp(value)
     @inline final def nan = java.lang.Double.isNaN(value)
     @inline final def inf = java.lang.Double.isInfinite(value)
