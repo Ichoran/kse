@@ -11,6 +11,7 @@ import scala.util.control.Breaks._
 import kse.typecheck._
 import kse.flow._
 import kse.coll._
+import kse.maths._
 
 package object eio {
   import java.io._
@@ -527,9 +528,9 @@ package object eio {
   }
   
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
-    def toFile(f: File) {
+    def toFile(f: File, lineEnding: String = null) {
       val p = new java.io.PrintWriter(f)
-      try { underlying.foreach(p.println) } finally { p.close() }
+      try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
     }
   }
   
@@ -785,4 +786,23 @@ package eio {
       else args.take(i).partition(a => !a.startsWith("-")) eachFn (_ ++ args.drop(i+1), x => new OptionSource(x))
     }
   }
+
+  /*
+  object Text {
+    def margin(label: String, content: Seq[String], lmargin: Int, rmargin: Int = 79, wrapIndicator: String = "", mergeShort: String = null): Seq[String] = {
+      if (content.length == 0) content :+ label
+      else {
+        val iL = lmargin min 0
+        val iR = iL max rmargin
+        val N = 1 + iR - iL
+        val cN = content.map(_.length).sum
+        if (content.length == 1 || (mergeShort != null && cN + (content.length-1)*mergeShort.length <= N)) {
+          if (label.length + 1 < iL) {
+            if (content.length == 1)
+          }
+        }        
+      }
+    }    
+  }
+  */
 }
