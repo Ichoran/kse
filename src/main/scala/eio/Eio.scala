@@ -787,22 +787,85 @@ package eio {
     }
   }
 
-  /*
   object Text {
-    def margin(label: String, content: Seq[String], lmargin: Int, rmargin: Int = 79, wrapIndicator: String = "", mergeShort: String = null): Seq[String] = {
-      if (content.length == 0) content :+ label
+    def wrapLine(line: String, width: Int, wrapIndicator: String = ""): List[String] = {
+      val w = math.max(width, 1)
+      val hw = w/2
+      if (line.length == 0) Nil
+      else if (line.length <= w) line :: Nil
+      else if (w == 1) line.map(c => c.toString).toList
       else {
-        val iL = lmargin min 0
+        var parens, brackets, braces = 0L
+        var quotes = false
+        var white = false
+        val score = new Array[Short](line.length)
+        var i = 0
+        while (i < line.length) {
+          line.charAt(i) match {
+            case '(' => parens += 1
+            case '[' => brackets += 1
+            case '{' => braces += 1
+            case '}' => braces = math.max(0, braces-1)
+            case ']' => brackets = math.max(0, brackets-1)
+            case ')' => parens = math.max(0, parens-1)
+            case '"' => quotes = !quotes
+            case c => white = c.isWhitespace
+          }
+          score(i) = ((if (white) 0 else 1) + (if (quotes) 2 else 0) + 4*(parens.toLong + brackets + braces)).clip(0, Short.MaxValue).toShort
+          i += 1
+        }
+        var x = 0
+        val cuts = List.newBuilder[Int]
+        while (x < line.length) {
+          var i = math.min(x + w - 1, line.length - 1)
+          if (i < line.length - 1) i -= math.min(wrapIndicator.length, hw)
+          if (score(i) != 0) {
+            var sc: Double = score(i)
+            var ix = i
+            i -= 1
+            while (i > x + hw) {
+              score(i) match {
+                case 0 => ix = i; i = x  // Early termination, we can't do better than this
+                case s if s + 1e-3*(ix - i) < sc => ix = i; sc = s
+                case _ =>
+              }
+              i -= 1
+            }
+            i = ix
+          }
+          cuts += i
+          x = i+1
+        }
+        x = 0
+        cuts.result().map{ i => val ans = line.substring(x, i+1); x = i+1; if (i+1 < line.length) ans + wrapIndicator else ans }
+      }
+    }
+    def block(label: String, content: Seq[String], lmargin: Int, rmargin: Int = 79, wrapIndicator: String = "", mergeShort: String = null): Seq[String] = {
+      if (content.length == 0) {
+        if (label.nonEmpty) content :+ label
+        else content
+      }
+      else {
+        val iL = lmargin max 0
         val iR = iL max rmargin
         val N = 1 + iR - iL
         val cN = content.map(_.length).sum
-        if (content.length == 1 || (mergeShort != null && cN + (content.length-1)*mergeShort.length <= N)) {
-          if (label.length + 1 < iL) {
-            if (content.length == 1)
+        if ((content.length == 1 && cN <= N) || (mergeShort != null && cN + (content.length-1)*mergeShort.length <= N)) {
+          val single = (if (content.length == 1) content else content.take(0) :+ content.mkString(mergeShort))
+          if (label.isEmpty) single.map(x => " "*iL + x)
+          else if (label.length < iL) single.map(x => label + " "*(iL - label.length) + x)
+          else label +: single.map(x => " "*iL + x)
+        }
+        else {
+          val multi = content.flatMap{ line => 
+            if (line.length <= N) line :: Nil
+            else wrapLine(line, N, wrapIndicator)
           }
-        }        
+          val whites = " "*iL
+          if (label.isEmpty || label.length < iL) (label + " "*(iL - label.length) + multi.head) +: multi.tail.map(x => whites + x)
+          else label +: multi.map(x => whites + x)
+        }
       }
-    }    
+    } 
   }
-  */
 }
