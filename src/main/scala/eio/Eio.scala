@@ -818,20 +818,22 @@ package eio {
         val cuts = List.newBuilder[Int]
         while (x < line.length) {
           var i = math.min(x + w - 1, line.length - 1)
-          if (i < line.length - 1) i -= math.min(wrapIndicator.length, hw)
-          if (score(i) != 0) {
-            var sc: Double = score(i)
-            var ix = i
-            i -= 1
-            while (i > x + hw) {
-              score(i) match {
-                case 0 => ix = i; i = x  // Early termination, we can't do better than this
-                case s if s + 1e-3*(ix - i) < sc => ix = i; sc = s
-                case _ =>
-              }
+          if (i < line.length - 1) {
+            i -= math.min(wrapIndicator.length, hw)
+            if (score(i) != 0) {
+              var sc: Double = score(i)
+              var ix = i
               i -= 1
+              while (i > x + hw) {
+                score(i) match {
+                  case 0 => ix = i; i = x  // Early termination, we can't do better than this
+                  case s if s + 1e-3*(ix - i) < sc => ix = i; sc = s
+                  case _ =>
+                }
+                i -= 1
+              }
+              i = ix
             }
-            i = ix
           }
           cuts += i
           x = i+1
