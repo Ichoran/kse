@@ -871,31 +871,34 @@ package eio {
       }
     }
 
-    def deblock(lines: Seq[String], line0: Int, lmargin: Int, wrapIndicator: String = "", mergeShort: String = null): Ok[String, (String, Seq[String])] = {
+    def deblock(
+      lines: Seq[String], line0: Int,
+      lmargin: Int,
+      wrapIndicator: String = "", mergeShort: String = null,
+      reportNextIndex: Int => Unit = _ => ()
+    ): Ok[String, (String, Seq[String])] = {
       val lit = (lines.iterator drop line0).buffered
       if (!lit.hasNext) return No("Empty input")
       if (lit.head.isEmpty) return No("Input line empty")
       if (lit.head.charAt(0).isWhitespace) return No("Empty key")
       if (lmargin <= 0) return No("Blocks must have positive margin")
 
-      var key = ""
-      val ls = {
-        if (lit.head.length < lmargin || lit.head(lmargin - 1) != ' ') key = lit.next.trim
-        lit.map{ x =>
-          val (pre, post) = x.splitAt(lmargin)
-          if (key.isEmpty) {
-            key = pre.trim
-            post
-          }
-          else if (pre.isEmpty || pre(0) != ' ') null
+      val keyAlone = (lit.head.length < lmargin || lit.head(lmargin - 1) != ' ')
+      var key = if (keyAlone) lit.next.trim else ""
+
+      val ls = lit.map{ x =>
+        val (pre, post) = x.splitAt(lmargin)
+        if (key.nonEmpty && (pre.isEmpty || pre(0) != ' ')) null
+        else {
+          if (key.isEmpty) key = pre.trim
           else {
             var i = 0
             while (i < pre.length && pre(i) == ' ') i += 1
-            if (i < pre.length) return No(s"Indentation wrong depth (expected $lmargin)\n$pre\n${" "*i}\n")
-            post
+            if (i < pre.length) return No(s"Indentation wrong depth (expected $lmargin)\n$pre\n${" "*i}\n")            
           }
-        }.takeWhile(_ != null)
-      }.toArray
+          post
+        }
+      }.takeWhile(_ != null).toArray
 
       val lb = lines.genericBuilder[String]
 
@@ -925,6 +928,7 @@ package eio {
         }
       }
 
+      reportNextIndex(line0 + ls.length + (if (keyAlone) 1 else 0))
       Yes(key -> lb.result())
     }
   }
