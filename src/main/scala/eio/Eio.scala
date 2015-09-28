@@ -842,6 +842,7 @@ package eio {
         cuts.result().map{ i => val ans = line.substring(x, i+1); x = i+1; if (i+1 < line.length) ans + wrapIndicator else ans }
       }
     }
+
     def block(label: String, content: Seq[String], lmargin: Int, rmargin: Int = 79, wrapIndicator: String = "", mergeShort: String = null): Seq[String] = {
       if (content.length == 0) {
         if (label.nonEmpty) content :+ label
@@ -868,6 +869,63 @@ package eio {
           else label +: multi.map(x => whites + x)
         }
       }
-    } 
+    }
+
+    def deblock(lines: Seq[String], line0: Int, lmargin: Int, wrapIndicator: String = "", mergeShort: String = null): Ok[String, (String, Seq[String])] = {
+      val lit = (lines.iterator drop line0).buffered
+      if (!lit.hasNext) return No("Empty input")
+      if (lit.head.isEmpty) return No("Input line empty")
+      if (lit.head.charAt(0).isWhitespace) return No("Empty key")
+      if (lmargin <= 0) return No("Blocks must have positive margin")
+
+      var key = ""
+      val ls = {
+        if (lit.head.length < lmargin || lit.head(lmargin - 1) != ' ') key = lit.next.trim
+        lit.map{ x =>
+          val (pre, post) = x.splitAt(lmargin)
+          if (key.isEmpty) {
+            key = pre.trim
+            post
+          }
+          else if (pre.isEmpty || pre(0) != ' ') null
+          else {
+            var i = 0
+            while (i < pre.length && pre(i) == ' ') i += 1
+            if (i < pre.length) return No(s"Indentation wrong depth (expected $lmargin)\n$pre\n${" "*i}\n")
+            post
+          }
+        }.takeWhile(_ != null)
+      }.toArray
+
+      val lb = lines.genericBuilder[String]
+
+      if (ls.length == 1 && mergeShort != null && mergeShort.nonEmpty) ls(0).split(mergeShort).foreach(lb += _)
+      else if (wrapIndicator.isEmpty) ls.foreach(lb += _)
+      else {
+        var i = 0
+        while (i < ls.length) {
+          if (ls(i).endsWith(wrapIndicator)) {
+            var j = i + 1
+            while (j < ls.length && ls(j).endsWith(wrapIndicator)) j += 1
+            if (j >= ls.length) return No("Last line of block has a wrap indicator\n"+ls.last+"\n"+(" "*(ls.length-1))+"^\n")
+            var sb = new StringBuilder
+            while (i < j) {
+              val l = ls(i)
+              sb ++= l.dropRight(wrapIndicator.length)
+              i += 1
+            }
+            sb ++= ls(j)
+            lb += sb.result()
+            i = j+1
+          }
+          else {
+            lb += ls(i)
+            i += 1
+          }
+        }
+      }
+
+      Yes(key -> lb.result())
+    }
   }
 }
