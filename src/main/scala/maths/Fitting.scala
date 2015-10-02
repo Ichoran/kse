@@ -6,16 +6,17 @@ package kse.maths
 import scala.math._
 
 /** Marker trait so we know what fits we could have */
-sealed trait Fit {
+sealed trait Fit[F <: Fit[F]] extends scala.Cloneable {
   def samples: Long
   def clear: this.type
+  override def clone(): F = ???
 }   
 
 
 /** FitTX performs a ordinary least squares fit of a parameter t against a readout x.
   * We assume t is accurate; this method is not precise if both t and x can vary.
   */
-final class FitTX extends Fit {
+final class FitTX extends Fit[FitTX] {
   private[this] var Ot = 0.0
   private[this] var Ox = 0.0
 
@@ -30,6 +31,21 @@ final class FitTX extends Fit {
   private[this] var myAx = 0.0
   private[this] var myBx = 0.0
   private[this] var myE = 0.0
+
+
+  private def setEverything(_Ot: Double, _Ox: Double, _n: Long, _St: Double, _Stt: Double, _Sx: Double, _Sxx: Double, _Stx: Double): this.type = {
+    Ot = _Ot; Ox = _Ox;
+    n = _n;
+    St = _St; Stt = _Stt;
+    Sx = _Sx; Sxx = _Sxx;
+    Stx = _Stx;
+    this
+  }
+
+  override def clone(): FitTX = {
+    val that = new FitTX
+    that.setEverything(Ot, Ox, n, St, Stt, Sx, Sxx, Stx)
+  }
 
 
   private def compute() {
@@ -174,7 +190,7 @@ object FitTX {
 /** FitTXY performs a ordinary least squares fit of a parameter t against two readouts x and y.
   * We assume t is accurate; this method is not precise if t has error as well as x and y.
   */
-final class FitTXY extends Fit {
+final class FitTXY extends Fit[FitTXY] {
   private[this] var Ot = 0.0
   private[this] var Ox = 0.0
   private[this] var Oy = 0.0
@@ -195,6 +211,29 @@ final class FitTXY extends Fit {
   private[this] var myBx = 0.0
   private[this] var myBy = 0.0
   private[this] var myE = 0.0
+
+
+  private def setEverything(
+    _Ot: Double, _Ox: Double, _n: Long,
+    _St: Double, _Stt: Double,
+    _Sx: Double, _Sxx: Double,
+    _Sy: Double, _Syy: Double,
+    _Stx: Double, _Sty: Double
+  ): this.type = {
+    Ot = _Ot; Ox = _Ox;
+    n = _n;
+    St = _St; Stt = _Stt;
+    Sx = _Sx; Sxx = _Sxx;
+    Sy = _Sy; Syy = _Syy;
+    Stx = _Stx; Sty = _Sty;
+    this
+  }
+
+  override def clone(): FitTXY = {
+    val that = new FitTXY
+    that.setEverything(Ot, Ox, n, St, Stt, Sx, Sxx, Sy, Syy, Stx, Sty)
+  }
+
 
   private def compute() {
     if (n < 2) {
@@ -375,13 +414,28 @@ object FitTXY {
   * We assume the first parameter is accurate; this method does not minimize Euclidean
   * distance to nearest line point.
   */
-final class FitOLS(dims: Int) extends Fit {
+final class FitOLS(dims: Int) extends Fit[FitOLS] {
   private[this] var n = 0L
   private[this] val m = max(1, dims)
   private[this] val O = new Array[Double](m)
   private[this] val S = new Array[Double](3*m)
   private[this] var cached = false
   private[this] val C = new Array[Double](m)
+
+  private def setEverything(_O: Array[Double], _n: Long, _S: Array[Double]): this.type = {
+    var i = 0
+    while (i < O.length) { O(i) = _O(i); i += 1 }
+    i = 0
+    while (i < S.length) { S(i) = _S(i); i += 1 }
+    n = _n
+    this
+  }
+
+  override def clone(): FitOLS = {
+    val that = new FitOLS(dims)
+    that.setEverything(O, n, S)
+  }
+
 
   def compute() {
     if (n < 2) {
