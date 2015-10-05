@@ -1,7 +1,7 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
 // Copyright (c) 2015 Rex Kerr, UCSF, and Calico Labs.
 
-package kse.coll
+package kse.maths
 
 import scala.math._
 
@@ -57,8 +57,10 @@ final case class IVec3F(x: Float, y: Float, z: Float) {
   def angle(xf: Float, yf: Float, zf: Float) = acos(max(-1, min(1, dotHat(xf, yf, zf))))
   def angle(v: IVec3F) = acos(max(-1, min(1, dotHat(v))))
   
-  def interpolate(v: IVec3F, fraction: Float): IVec3F = 
-    new IVec3F((1-fraction)*x + fraction*v.x, (1-fraction)*y + fraction*v.y, (1-fraction)*z + fraction*v.z)
+  def interpolate(v: IVec3F, fraction: Float): IVec3F = {
+    val remains = 1 - fraction
+    new IVec3F(remains*x + fraction*v.x, remains*y + fraction*v.y, remains*z + fraction*v.z)
+  }
   
   def interangle(v: IVec3F, fraction: Float): IVec3F = {
     val a2 = lenSq

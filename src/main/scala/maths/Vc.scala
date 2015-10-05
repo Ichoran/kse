@@ -1,7 +1,7 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
 // Copyright (c) 2015 Rex Kerr, HHMI Janelia, UCSF, and Calico Labs.
 
-package kse.coll.packed
+package kse.maths
 
 final class RichFloatToVc(private val underlying: Float) extends AnyVal {
   import Vc._
@@ -78,6 +78,11 @@ final class Vc(val underlying: Long) extends AnyVal {
     { val a = x.toDouble; val b = y.toDouble; (math.acos(math.max(-1,math.min(1,((a*f+b*g)/math.sqrt((a*a + b*b)*(f*f + g*g))))))*math.signum(a*g-b*f)) }
   def angle(v: Vc): Double =
     { val a = x.toDouble; val b = y.toDouble; val c = v.x.toDouble; val d = v.y.toDouble; (math.acos(math.max(-1,math.min(1,((a*c+b*d)/math.sqrt((a*a + b*b)*(c*c + d*d))))))*math.signum(a*d-b*c)) }
+
+  def interpolate(v: Vc, fraction: Float): Vc = {
+    val remains = 1 - fraction
+    Vc(remains*x + fraction*v.x, remains*y + fraction*v.y)
+  }
 
   def ===(v: Vc) = (x == v.x) && (y == v.y)
 

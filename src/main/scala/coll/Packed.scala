@@ -462,6 +462,4 @@ package object packed {
   implicit final class PackDoubleInPrimitives(private val d: Double) extends AnyVal {
     @inline def inLong = new LongAsBox(java.lang.Double.doubleToRawLongBits(d))
   }
-  
-  @inline final implicit def float_enriched_with_vc(f: Float): RichFloatToVc = new RichFloatToVc(f)
 }

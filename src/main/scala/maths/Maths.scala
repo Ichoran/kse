@@ -209,6 +209,20 @@ package object maths {
     }
   }
 
+  @inline final implicit def float_enriched_with_vc(f: Float): RichFloatToVc = new RichFloatToVc(f)
+
+  implicit class EnrichAwtPointWithVc(private val underlying: java.awt.geom.Point2D) extends AnyVal {
+    def vc = Vc.from(underlying)
+  }
+
+  implicit class EnrichAwtDimWithVc(private val underlying: java.awt.geom.Dimension2D) extends AnyVal {
+    def vc = Vc.from(underlying)
+  }
+
+  implicit class EnrichFloatTupleWithVc(private val underlying: (Float, Float)) extends AnyVal {
+    def vc = Vc.from(underlying)
+  }
+
   // Functions useful in computing statistical distributions
   // Gamma functions and their ilk (including complete beta)
   // Common operation when using Lanczos rational function approximation for gamma
