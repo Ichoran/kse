@@ -296,7 +296,7 @@ package object eio {
           val stance = fw.picker
           val myName = fw.file.getPath + "//" + zes.map(_.getName).mkString("//")
           var buf: Array[Byte] = null
-          var stp: Stepper[Array[Byte]] = null
+          var wlk: Walker[Array[Byte]] = null
           var consumed = false
           
           stance match {
@@ -308,12 +308,12 @@ package object eio {
                 val bufs = Vector.newBuilder[Array[Byte]]
                 var n = 0
                 var go = true
-                stp = new InputStreamStepper(zis, 8192)
+                wlk = new InputStreamStepper(zis, 8192)
                 while (n < sizeLimit && go) {
-                  go = stp.step{ b => n += b.length; bufs += b }
+                  go = wlk.step{ b => n += b.length; bufs += b }
                 }
                 if (!go) {
-                  stp = null
+                  wlk = null
                   buf = new Array[Byte](n)
                   var i = 0
                   bufs.result().foreach{ a => 
@@ -323,7 +323,7 @@ package object eio {
                 }
                 else {
                   oversize = true
-                  stp = bufs.result().iterator.stepper ++ stp
+                  wlk = bufs.result().iterator.walker ++ wlk
                 }
               }
               else if (sz < sizeLimit) {
@@ -344,17 +344,17 @@ package object eio {
               fw match {
                 case fsw: FileWalkOnStreams if oversize =>
                   consumed = true
-                  fsw.stream = if (stp == null) zis else (new SteppedByteArrayInputStream(stp))
+                  fsw.stream = if (wlk == null) zis else (new SteppedByteArrayInputStream(wlk))
                   fsw.streamOp
-                  if (stp != null) stp = null
+                  if (wlk != null) wlk = null
                 case fbw: FileWalkOnBuffers if buf != null =>
                   fbw.buffer = buf
                   fbw.bufOp
-                case fsw: FileWalkOnStreams if (!consumed || buf != null || stp != null) =>
-                  fsw.stream = if (!consumed) zis else if (buf == null) new ByteArrayInputStream(buf) else new SteppedByteArrayInputStream(stp)
+                case fsw: FileWalkOnStreams if (!consumed || buf != null || wlk != null) =>
+                  fsw.stream = if (!consumed) zis else if (buf == null) new ByteArrayInputStream(buf) else new SteppedByteArrayInputStream(wlk)
                   consumed = true
                   fsw.streamOp
-                  if (stp != null) stp = null
+                  if (wlk != null) wlk = null
                 case fbw: FileWalkOnBuffers =>
                   log(myName, "Could not read zip entry into buffer", "buffer missing")
                 case fsw: FileWalkOnStreams =>
@@ -524,7 +524,7 @@ package object eio {
   }
   
   implicit class InputStreamsShouldDoThis(private val underlying: InputStream) extends AnyVal {
-    def stepper(size: Int = 8192): Stepper[Array[Byte]] = new InputStreamStepper(underlying, size)
+    def walker(size: Int = 8192): Walker[Array[Byte]] = new InputStreamStepper(underlying, size)
   }
   
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
@@ -542,7 +542,7 @@ package eio {
   import java.util.zip._
   
   /** Note: the minimum chunk size is 256 */
-  class InputStreamStepper(is: InputStream, chunkSize: Int) extends Stepper[Array[Byte]] {
+  class InputStreamStepper(is: InputStream, chunkSize: Int) extends Walker[Array[Byte]] {
     private var buf = new Array[Byte](math.max(256, chunkSize))
     private var isEmpty = false
     def step(f: Array[Byte] => Unit) = {
@@ -568,7 +568,7 @@ package eio {
     }
   }
   
-  class SteppedByteArrayInputStream(stepper: Stepper[Array[Byte]]) extends InputStream {
+  class SteppedByteArrayInputStream(walker: Walker[Array[Byte]]) extends InputStream {
     private[this] var working: Array[Byte] = null
     private[this] var taken: Int = 0
     private[this] var exhausted = false
@@ -576,7 +576,7 @@ package eio {
       if (!exhausted) {
         if (working == null || taken >= working.length) {
           taken = 0
-          exhausted = !stepper.step(working = _)
+          exhausted = !walker.step(working = _)
           prepared()
         }
         else true
