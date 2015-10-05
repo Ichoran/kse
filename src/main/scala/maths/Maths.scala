@@ -140,6 +140,11 @@ package object maths {
     @inline final def bits = java.lang.Double.doubleToRawLongBits(value)
     @inline final def clip(lo: Double, hi: Double) = max(lo, min(hi, value))
 
+    /** Formats a string with `sigfig` significant figures and `maxZeros` zeros before a nonzero digit
+      * (including the one before the decimal point).  If `sigfig` is negative, the full number of
+      * digits is shown even if they are zero; otherwise trailing zeros will be truncated.
+      * If `maxZeros` is negative, any number of zeros will be shown after.
+      */
     final def fmt(sigfig: Int = 4, maxZeros: Int = 4): String = {
       if (value == 0) {
         if (sigfig >= -1) value.toString.dropRight(2)
@@ -154,7 +159,7 @@ package object maths {
         val ie = source.lastIndexOf('e')
         val ex = source.substring(ie+2).toInt * (if (source.charAt(ie+1) == '-') -1 else 1)
         if (ex < -mz) source
-        else if (sf < ex) source.substring(0, ie) + "e" + ex.toInt
+        else if (sf <= ex) source.substring(0, ie) + "e" + ex.toInt
         else {
           val lnz = if (sf == 0) ie-1 else {
             var i = ie-1
@@ -163,50 +168,57 @@ package object maths {
           }
           val nnz = 1 + lnz - (if (sf == 0) 0 else 1) - (if (neg) 1 else 0)
           val dp = 1 + ex
-          val dig = if (sigfig < 0) sf else min(sf, nnz)
-          val cs = new Array[Char](dig + (if (dp < 1) 2-dp else if (dp < dig) 1 else 0) + (if (neg) 1 else 0))
-          var i = 0
-          if (neg) { cs(i) = '-'; i += 1 }
-          if (dp <= 0) {
-            cs(i) = '0'
-            i += 1
-            cs(i) = '.'
-            i += 1
-            var j = -dp
-            while (j > 0) { cs(i) = '0'; i += 1; j -= 1 }
-            j = nnz
-            var k = if (neg) 1 else 0
-            while (j > 0) {
-              if (source.charAt(k) == '.') k += 1
-              cs(i) = source.charAt(k)
-              i += 1
-              k += 1
-              j -= 1
-            }
-            while (i < cs.length) { cs(i) = '0'; i += 1 }
-          }
-          else {
-            var k = if (neg) 1 else 0
-            var j = nnz
-            while (j > 0) {
-              if (source.charAt(k) == '.') k += 1
-              if (j == nnz - dp) { cs(i) = '.'; i += 1 }
-              cs(i) = source.charAt(k)
-              i += 1
-              k += 1
-              j -= 1
-            }
-            while (i < cs.length) {
-              if (j == nnz - dp) { cs(i) = '.'; i += 1 }
+          new String(
+            if (dp <= 0) {
+              val dig = if (sigfig < 0) sf else nnz
+              val cs = new Array[Char](dig + (2-dp) + (if (neg) 1 else 0))
+              var i = if (neg) { cs(0) = '-'; 1 } else 0
               cs(i) = '0'
               i += 1
-              j -= 1
+              cs(i) = '.'
+              i += 1
+              var j = -dp
+              while (j > 0) { cs(i) = '0'; i += 1; j -= 1 }
+              j = nnz
+              var k = if (neg) 1 else 0
+              while (j > 0) {
+                if (source.charAt(k) == '.') k += 1
+                cs(i) = source.charAt(k)
+                i += 1
+                k += 1
+                j -= 1
+              }
+              while (i < cs.length) { cs(i) = '0'; i += 1 }
+              cs
             }
-          }
-          new String(cs)
+            else {
+              val dig = if (sigfig < 0) sf else max(dp, nnz)
+              val cs = new Array[Char](dig + (if (dig > dp) 1 else 0) + (if (neg) 1 else 0))
+              var i = if (neg) { cs(0) = '-'; 1 } else 0
+              var k = i
+              var j = nnz
+              while (j > 0) {
+                if (source.charAt(k) == '.') k += 1
+                if (j == nnz - dp) { cs(i) = '.'; i += 1 }
+                cs(i) = source.charAt(k)
+                i += 1
+                k += 1
+                j -= 1
+              }
+              while (i < cs.length) {
+                if (j == nnz - dp) { cs(i) = '.'; i += 1 }
+                cs(i) = '0'
+                i += 1
+                j -= 1
+              }
+              cs
+            }
+          )
         }
       }
     }
+    /** A shortcut method for fmt with default arguments */
+    def fmt[X](implicit always: X =:= X, always2: X =:= X, always3: X =:= X): String = fmt()
   }
 
   @inline final implicit def float_enriched_with_vc(f: Float): RichFloatToVc = new RichFloatToVc(f)
@@ -221,6 +233,10 @@ package object maths {
 
   implicit class EnrichFloatTupleWithVc(private val underlying: (Float, Float)) extends AnyVal {
     def vc = Vc.from(underlying)
+  }
+
+  implicit class EnrichIntTupleWithVc(private val underlying: (Int, Int)) extends AnyVal {
+    def vc = Vc(underlying._1, underlying._2)
   }
 
   // Functions useful in computing statistical distributions

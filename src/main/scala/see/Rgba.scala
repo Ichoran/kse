@@ -10,8 +10,13 @@ import kse.maths._
 import kse.flow._
 import kse.eio._
 
-case class Rgba(r: Float, g: Float, b: Float, a: Float) {
+class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
   import Rgba._
+
+  def r = _r
+  def g = _g
+  def b = _b
+  def a = _a
 
   def rTo(red: Float) = new Rgba(clip(red), g, b, a)
   def gTo(green: Float) = new Rgba(r, clip(green), b, a)
@@ -20,8 +25,8 @@ case class Rgba(r: Float, g: Float, b: Float, a: Float) {
 
   def rFn(red: Float => Float) = new Rgba(clip(red(r)), g, b, a)
   def gFn(green: Float => Float) = new Rgba(r, clip(green(g)), b, a)
-  def bFn(blue: Float => Float) = new Rgba(r, g, blue(b), a)
-  def aFn(alpha: Float => Float) = new Rgba(r, g, b, alpha(a))
+  def bFn(blue: Float => Float) = new Rgba(r, g, clip(blue(b)), a)
+  def aFn(alpha: Float => Float) = new Rgba(r, g, b, clip(alpha(a)))
 
   def grayLevel = clip(0.1f*r + 0.7f*g + 0.2f*b)
   def gray = { val k = grayLevel; new Rgba(k, k, k, a) }
@@ -82,21 +87,31 @@ case class Rgba(r: Float, g: Float, b: Float, a: Float) {
   override def toString = "#%s%02X".format(rgbText,rint(a*255.0).toInt)
 }
 object Rgba {
+  def apply(r: Float, g: Float, b: Float, a: Float) = new Rgba(clip(r), clip(g), clip(b), clip(a))
+  def apply(r: Long, g: Long, b: Long, a: Long) = new Rgba(iclip(r.clip(0, 255).toInt), iclip(g.clip(0, 255).toInt), iclip(b.clip(0, 255).toInt), iclip(a.clip(0, 255).toInt))
+  def apply(r: Int, g: Int, b: Int, a: Int) = new Rgba(iclip(r), iclip(g), iclip(b), iclip(a))
+  def apply(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), iclip(i >>> 24))
+
+  val White = apply(1, 1, 1, 1)
+  val Black = apply(0, 0, 0, 1)
+
   private val greenvector = IVec3F(-0.7f, 0.3f, -0.7f)
   private val cyanvector = IVec3F(-0.9f, 0.1f, 0.1f)
 
   def dclip(d: Double): Float = max(0.0, min(1.0, d)).toFloat
   def clip(f: Float): Float = max(0.0f, min(1.0f, f))
   def iclip(i: Int): Float = max(0.0f, min(1.0f, (i/255.0).toFloat))
-  def from(r: Float, g: Float, b: Float, a: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), clip(a))
-  def from(r: Int, g: Int, b: Int, a: Int): Rgba = new Rgba(iclip(r), iclip(g), iclip(b), iclip(a))
-  def from(i: Int): Rgba = apply(i & 0xFF, (i >>> 8) & 0xFF, (i >>> 16) & 0xFF, i >>> 24)
+
+  def rgb(r: Float, g: Float, b: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), 1f)
+  def rgb(r: Long, g: Long, b: Long) = new Rgba(iclip(r.clip(0, 255).toInt), iclip(g.clip(0, 255).toInt), iclip(b.clip(0, 255).toInt), 1f)
+  def rgb(r: Int, g: Int, b: Int): Rgba = new Rgba(iclip(r), iclip(g), iclip(b), 1f)
+  def rgb(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), 1f)
   
   def parse(s: String) = {
     val g = Grok(s).delimit(true)
     val i = (if (g.peek == '#') 1 else 0)
     g{ implicit fail =>
-      from(g.input(s,i,i+2).xI, g.input(s,i+2,i+4).xI, g.input(s,i+4,i+6).xI, if (s.length <= i+6) 255 else g.input(s, i+6, s.length).delimit(true).xI)
+      apply(g.input(s,i,i+2).xI, g.input(s,i+2,i+4).xI, g.input(s,i+4,i+6).xI, if (s.length <= i+6) 255 else g.input(s, i+6, s.length).delimit(true).xI)
     }.mapNo(n => n.toString)
   }
 }
