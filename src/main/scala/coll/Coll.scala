@@ -224,15 +224,15 @@ package coll {
     def empty[@specialized A](implicit iv: ImplicitValue[Mopt[A], Mopt.type]) = iv.value
   }
 
-  trait Stepper[@specialized A] { self =>
+  trait Walker[@specialized A] { self =>
     def step(f: A => Unit): Boolean
-    def peek(g: A => Unit) = new Stepper[A] {
+    def peek(g: A => Unit) = new Walker[A] {
       def step(f: A => Unit): Boolean = self.step{ a => g(a); f(a) }
     }
     def foreach[U](f: A => U) {
       while(step(a => { f(a); () })) {}
     }
-    def filter(p: A => Boolean) = new Stepper[A] {
+    def filter(p: A => Boolean) = new Walker[A] {
       def step(f: A => Unit): Boolean = {
         var good = false
         while (self.step(a => if ({ good = p(a); good }) f(a)) && !good) {}
@@ -240,7 +240,7 @@ package coll {
       }
     }
     def withFilter(p: A => Boolean) = filter(p)
-    def ++(s: Stepper[A]): Stepper[A] = new Stepper[A] {
+    def ++(s: Walker[A]): Walker[A] = new Walker[A] {
       private[this] var current = self
       def step(f: A => Unit): Boolean = {
         val ans = current.step(f)
@@ -252,7 +252,6 @@ package coll {
       }
     }
   }
-
 }
 
 package object coll {
@@ -381,7 +380,7 @@ package object coll {
       ans
       }
     }
-    def stepper = new Stepper[A] {
+    def walker = new Walker[A] {
       def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
     }
     def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
