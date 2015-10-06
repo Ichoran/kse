@@ -350,6 +350,22 @@ package object flow extends Priority1HopSpecs {
       */
     @inline def tidy[Z](g: A => Any)(f: A => Z) = try { f(underlying) } finally { g(underlying) }
   }
+
+  /** Adds convenience methods to use `Int` like a range from 0 to the value */
+  implicit class IntCanRepeatActions(private val underlying: Int) extends AnyVal {
+    @inline def X(f: => Unit) { var i = 0; while (i < underlying) { f; i += 1 } }
+    def of[@specialized A: reflect.ClassTag](f: => A): Array[A] = {
+      val a = new Array[A](underlying)
+      var i = 0
+      while (i < underlying) { a(i) = f; i += 1 }
+      a
+    }
+    def arrayed[@specialized A: reflect.ClassTag](f: Int => A): Array[A] = {
+      val a = new Array[A](underlying)
+      var i = 0; while (i < underlying) { a(i) = f(i); i += 1 }
+      a
+    }
+  }
   
   
   /** C-style for loop (translated to while loop via macro).
@@ -366,7 +382,7 @@ package object flow extends Priority1HopSpecs {
     * println(s)
     * }}}
     */
-  def aFor[A](array: Array[A])(f: (A,Int) => Unit): Unit = macro ControlFlowMacroImpl.aFor[A]
+  def aFor[A](array: Array[A])(f: (A, Int) => Unit): Unit = macro ControlFlowMacroImpl.aFor[A]
   
   /** Indexed loop, counting up from 0. 
     * Example: {{{ nFor(3)(println) // Prints 0 1 2 on separate lines }}}
