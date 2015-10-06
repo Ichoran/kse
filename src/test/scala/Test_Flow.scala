@@ -29,6 +29,19 @@ object Test_Flow extends Test_Kse {
     okay[Int]{ implicit hop => n.orHop } == No(0)
   }
 
+  def test_Int_Extension = {
+    val i = 5
+    var ia = 0
+    i X { ia += 1 }
+    (ia =?= 5) && {
+      val a = i of { ia += 1; ia }
+      a.isInstanceOf[Array[Int]] =?= true && (ia =?= 10) && a.toSeq =?= (6 to 10) && {
+        val b = i arrayed { _ + 1 }
+        b.isInstanceOf[Array[Int]] =?= true && b.toSeq =?= (1 to 5)
+      }
+    }
+  }
+
   def test_Everything_Extension = {
     val i = 5
 

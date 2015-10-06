@@ -9,12 +9,30 @@ import kse.typecheck._
 import kse.flow._
 
 package coll {
+  /** A class that captures the idea of a constant or computed value that can stand in for the original */
+  abstract class Itself[@specialized A] {
+    def itself: A
+    override def toString = itself.toString
+    override def hashCode = itself.##
+  }
+  trait LowPriorityItselfConversions {
+    implicit def itselfCanBeAnything[@specialized A](it: Itself[A]): A = it.itself
+    implicit def anythingCanBeItself[@specialized A](a: A): Itself[A] = Itself.value(a)    
+  }
+  object Itself extends LowPriorityItselfConversions {
+    def value[@specialized A](a: A): Itself[A] = new Itself[A] { def itself = a }
+    def is[@specialized A](a: => A): Itself[A] = new Itself[A] { private lazy val mySelf = a; def itself = a }
+    def from[@specialized A](a: => A): Itself[A] = new Itself[A] { def itself = a }
+  }
+
+
   /** A general way to defer a computation but cache the result. */
   class Lazy[A](gen: => A) {
     lazy val value = gen
     def map[B](f: A => B) = Lazy(f(value))
     def flatMap[B](f: A => Lazy[B]) = Lazy(f(value).value)
     def foreach[B](f: A => B) { f(value) }
+    def asItself: Itself[A] = Itself is value
   }
   object Lazy {
     def apply[A](gen: => A) = new Lazy(gen)
@@ -31,6 +49,7 @@ package coll {
       }
       u
     }
+    def asItself: Itself[U] = Itself from apply()
   }
   object Soft {
     def apply[T,U](t: T)(gen: T => U) = new Soft(t)(gen)
