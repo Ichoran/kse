@@ -21,12 +21,12 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
   def rTo(red: Float) = new Rgba(clip(red), g, b, a)
   def gTo(green: Float) = new Rgba(r, clip(green), b, a)
   def bTo(blue: Float) = new Rgba(r, g, clip(blue), a)
-  def aTo(alpha: Float) = new Rgba(r, g, b, clip(alpha))
+  def aTo(alpha: Float) = new Rgba(r, g, b, if (alpha.nan) alpha else clip(alpha))
 
   def rFn(red: Float => Float) = new Rgba(clip(red(r)), g, b, a)
   def gFn(green: Float => Float) = new Rgba(r, clip(green(g)), b, a)
   def bFn(blue: Float => Float) = new Rgba(r, g, clip(blue(b)), a)
-  def aFn(alpha: Float => Float) = new Rgba(r, g, b, clip(alpha(a)))
+  def aFn(alpha: Float => Float) = new Rgba(r, g, b, { val aph = alpha(a); if (aph.nan) aph else clip(aph) })
 
   def grayLevel = clip(0.1f*r + 0.7f*g + 0.2f*b)
   def gray = { val k = grayLevel; new Rgba(k, k, k, a) }
@@ -46,7 +46,7 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
     new Rgba(mix(r), mix(g), mix(b), a)
   }
   
-  def ghost(fraction: Float) = if (fraction == 1) this else new Rgba(r, g, b, (fraction*a).clip(0f, 1f))
+  def ghost(fraction: Float) = if (fraction == 1 || a.nan) this else new Rgba(r, g, b, (fraction*a).clip(0f, 1f))
 
   def opaque = if (a < 1) new Rgba(r, g, b, 1f) else this
   
@@ -77,14 +77,32 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
         else v.interangle(waypoint, ((1-frac)/(1-fangle)).toFloat)
       }
     val s = IVec3F(r, g, b) interangle ( IVec3F(rgba.r, rgba.g, rgba.b) , frac )  // Need w at all?  Maybe just use s?
-    new Rgba( dclip((w.x + zk)*0.5 + s.x*0.5), dclip((w.y + zk)*0.5 + s.y*0.5), dclip((w.z + zk)*0.5 + s.z*0.5), dclip(q*a +p*rgba.a) )
+    val aph = if (a.nan) { if (rgba.a.nan) a else rgba.a } else if (rgba.a.nan) a else dclip(q*a + p*rgba.a)
+    new Rgba( dclip((w.x + zk)*0.5 + s.x*0.5), dclip((w.y + zk)*0.5 + s.y*0.5), dclip((w.z + zk)*0.5 + s.z*0.5), aph )
   }
   
   def ~(rgba: Rgba): Rgba = blend(rgba, 0.5f)
   
   def rgbText = "%02X%02X%02X".format(rint(r*255.0).toInt,rint(g*255.0).toInt,rint(b*255.0).toInt)
   
-  override def toString = "#%s%02X".format(rgbText,rint(a*255.0).toInt)
+  override def toString = "#%s%02X".format(rgbText, if (a.nan) 255 else rint(a*255.0).toInt)
+
+  override def hashCode = {
+    var h = -1106268609
+    h = scala.util.hashing.MurmurHash3.mix(h, java.lang.Float.floatToRawIntBits(r) match { case Int.MinValue => 0; case x => x })
+    h = scala.util.hashing.MurmurHash3.mix(h, java.lang.Float.floatToRawIntBits(g) match { case Int.MinValue => 0; case x => x })
+    h = scala.util.hashing.MurmurHash3.mix(h, java.lang.Float.floatToRawIntBits(b) match { case Int.MinValue => 0; case x => x })
+    if (a.nan) scala.util.hashing.MurmurHash3.finalizeHash(h, 3)
+    else {
+      h = scala.util.hashing.MurmurHash3.mix(h, java.lang.Float.floatToRawIntBits(a) match { case Int.MinValue => 0; case x => x })
+      scala.util.hashing.MurmurHash3.finalizeHash(h, 4)
+    }
+  }
+
+  override def equals(o: Any) = o match {
+    case rgba: Rgba => r == rgba.r && g == rgba.g && b == rgba.b && (a == rgba.a || (a.nan && rgba.a.nan))
+    case _ => false
+  }
 }
 object Rgba {
   def apply(r: Float, g: Float, b: Float, a: Float) = new Rgba(clip(r), clip(g), clip(b), clip(a))
@@ -102,16 +120,20 @@ object Rgba {
   def clip(f: Float): Float = max(0.0f, min(1.0f, f))
   def iclip(i: Int): Float = max(0.0f, min(1.0f, (i/255.0).toFloat))
 
-  def rgb(r: Float, g: Float, b: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), 1f)
-  def rgb(r: Long, g: Long, b: Long) = new Rgba(iclip(r.clip(0, 255).toInt), iclip(g.clip(0, 255).toInt), iclip(b.clip(0, 255).toInt), 1f)
-  def rgb(r: Int, g: Int, b: Int): Rgba = new Rgba(iclip(r), iclip(g), iclip(b), 1f)
-  def rgb(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), 1f)
+  def rgb(r: Float, g: Float, b: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), Float.NaN)
+  def rgb(r: Long, g: Long, b: Long) = new Rgba(iclip(r.clip(0, 255).toInt), iclip(g.clip(0, 255).toInt), iclip(b.clip(0, 255).toInt), Float.NaN)
+  def rgb(r: Int, g: Int, b: Int): Rgba = new Rgba(iclip(r), iclip(g), iclip(b), Float.NaN)
+  def rgb(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), Float.NaN)
   
   def parse(s: String) = {
     val g = Grok(s).delimit(true)
     val i = (if (g.peek == '#') 1 else 0)
     g{ implicit fail =>
-      apply(g.input(s,i,i+2).xI, g.input(s,i+2,i+4).xI, g.input(s,i+4,i+6).xI, if (s.length <= i+6) 255 else g.input(s, i+6, s.length).delimit(true).xI)
+      val r0 = g.input(s,i,i+2).xI
+      val g0 = g.input(s,i+2,i+4).xI
+      val b0 = g.input(s,i+4,i+6).xI
+      if (s.length < i + 6) rgb(r0, g0, b0)
+      else apply(r0, g0, b0, g.input(s, i+6, s.length).delimit(true).xI)
     }.mapNo(n => n.toString)
   }
 }
