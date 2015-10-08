@@ -11,25 +11,29 @@ import kse.maths._
 import kse.flow._
 import kse.eio._
 
-trait Svgable {
-  def toSvg: Vector[String]
-}
-
-trait SvgLine extends Svgable {
-  def svgLine: String
-  def toSvg = Vector[String](svgLine)
-}
-
-trait SvgStyled[S <: SvgStyled[S]] extends Svgable {
-  def style: Chart.Style
-  def restyle(f: Chart.Style => Chart.Style): S
-  def styleTag = style.tag.map(x => "style=\""+x+"\" ") match { case Some(s) => s; case None => "" }
-}
-
-trait SvgLineStyled[S <: SvgStyled[S]] extends SvgLine with SvgStyled[S] {}
-
 object Chart {
   private val q = "\""
+
+  trait Svgable {
+    def toSvg: Vector[String]
+  }
+
+  trait SvgLine extends Svgable {
+    def svgLine: String
+    def toSvg = Vector[String](svgLine)
+  }
+
+  trait SvgBasicStyled extends Svgable {
+    def style: Style
+    def restyle(f: Style => Style): SvgBasicStyled
+    def styleTag = style.tag.map(x => "style=\""+x+"\" ") match { case Some(s) => s; case None => "" }    
+  }
+
+  trait SvgStyled[S <: SvgStyled[S]] extends SvgBasicStyled {
+    override def restyle(f: Style => Style): S
+  }
+
+  trait SvgLineStyled[S <: SvgStyled[S]] extends SvgLine with SvgStyled[S] {}
 
   case class Style(
     name: Option[String] = None,
@@ -38,6 +42,26 @@ object Chart {
     linew: Option[Float] = None,
     alpha: Option[Float] = None
   ) {
+    val mask =
+      (if (fillc.isEmpty) 0 else 1) |
+      (if (linec.isEmpty) 0 else 2) |
+      (if (linew.isEmpty) 0 else 4) |
+      (if (alpha.isEmpty) 0 else 8)
+
+    def orElse(s: Style) = 
+      if ((s.mask & ~mask & 0xF) == 0) this
+      else new Style(name, fillc orElse s.fillc, linec orElse s.linec, linew orElse s.linew, alpha orElse s.alpha)
+
+    def diff(s: Style) = 
+      if ((mask & s.mask) == 0) this
+      else new Style(
+        name,
+        if (fillc == s.fillc) None else fillc,
+        if (linec == s.linec) None else linec,
+        if (linew == s.linew) None else linew,
+        if (alpha == s.alpha) None else alpha
+      )
+
     def tag: Option[String] = (
       fillc.map{ _.fold(s => "fill:" + s)(c => "fill:#"+c.rgbText+";fill-opacity:"+c.a.fmt) }.toList ++
       linec.map{ _.fold(s => "stroke:" + s)(c => "stroke:#"+c.rgbText+";stroke-opacity:"+c.a.fmt) }.toList ++
@@ -49,43 +73,43 @@ object Chart {
     val empty = Style()
   }
 
-  class Group private (val others: Seq[SvgStyled[_]], val style: Style) extends SvgStyled[Group] {
-    def restyle(f: Style => Style) = new Group(others, f(style))
-    def toSvg = (if (style == Style.empty) "<g>" else s"<g $styleTag>") +: (others.flatMap(_.toSvg).map("  " + _).toVector :+ "</g>")
-  }
-  /*
-  object Group {
-    private def degen(x: Option[Ok[String, Rgba]]): AnyRef = x match {
-      case None => None
-      case Some(No(s)) => s
-      case Some(Yes(c)) => c
+  class Group private (val global: Style, val specific: Seq[SvgBasicStyled]) extends SvgStyled[Group] {
+    def style = global
+    def restyle(f: Style => Style) = {
+      val nglob = f(global)
+      Group.apply(nglob, specific.map(x => x.restyle(y => f(y orElse global))): _*)
     }
+    def toSvg = (if (style == Style.empty) "<g>" else s"<g $styleTag>") +: (specific.flatMap(_.toSvg).map("  " + _).toVector :+ "</g>")
+  }
+  
+  object Group {
+    private def canonize[A, B](xs: Seq[A])(f: A => Option[B]): Option[(B, A)] = 
+      xs.
+      groupBy(x => f(x) match { case None => return None; case Some(b) => b }).
+      filter(_._2.length > min(1, xs.length-1)).
+      toList.sortBy(- _._2.length).
+      headOption.map{ x => x._1 -> x._2.head }
 
-    private def canonize[A, B](xs: Seq[A])(f: A => B): Option[A] = 
-      xs.groupBy(f).filter(_._2.length > 1 && _._1 != None).toList.sortBy(- _._2.length).headOption.map(_._2.head)
-
-    def apply(style: Style, elts: SvgStyled[_]*): Group = {
+    def apply(style: Style, elts: SvgBasicStyled*): Group = {
       val styles = elts.map(_.style)
-      var mine = style
-      val canonicalFillC = canonize(styles)(x => degen(x.fillc)).filter(x => (style.fillc == x) || { if (style.fillc.isEmpty) {} else false }
-      val canonicalLineC = canonize(styles)(x => degen(x.linec))
+
+      val canonicalFillC = canonize(styles)(x => x.fillc)
+      val canonicalLineC = canonize(styles)(x => x.linec)
       val canonicalLineW = canonize(styles)(x => x.linew)
       val canonicalAlpha = canonize(styles)(x => x.alpha)
 
-      val registryC = RMap.empty[Option[Ok[String, Rgba]], Option[Ok[String, Rgba]]]
-      val registryF = RMap.empty[Option[Float], Option[Float]]
+      val mine = style.copy(
+        fillc = style.fillc orElse canonicalFillC.map(_._1),
+        linec = style.linec orElse canonicalLineC.map(_._1),
+        linew = style.linew orElse canonicalLineW.map(_._1),
+        alpha = style.alpha orElse canonicalAlpha.map(_._1)
+      )
 
-
-
-      stylish(elts.map(_.style)) match {
-        case Some((gst, ests)) => new Group((elts zip ests).map{ case (x,y) => x.restyle(y) }, gst)
-        case None => new Group(ests, style)
-      }
+      new Group(mine, elts.map(_.restyle(s => s diff mine)))
     }
 
-    def apply(elts: SvgStyled[_]*): Group = apply(Style.empty, elts)
+    def apply(elts: SvgBasicStyled*): Group = apply(Style.empty, elts: _*)
   }
-  */
 
   case class Circle(c: Vc, r: Float, style: Style) extends SvgLineStyled[Circle] {
     def restyle(f: Style => Style) = copy(style = f(style))
@@ -94,13 +118,12 @@ object Chart {
 
   case class Line(ps: collection.mutable.WrappedArray[Long], style: Style) extends SvgLineStyled[Line] {
     def restyle(f: Style => Style) = copy(style = f(style))
-    def svgLine = f"<polyline points=$q${if (ps.length > 0) ps.map{l => val v = Vc from l; v.x.fmt + "," + v.y.fmt }.mkString(" ") else ""}$q $styleTag/>"
+    def svgLine = f"<polyline points=$q${ if (ps.length > 0) ps.map{ l => val v = Vc from l; v.x.fmt + "," + v.y.fmt }.mkString(" ") else "" }$q $styleTag/>"
   }
-
 
   case class ErrorBarY(c: Vc, r: Float, r2: Float, ey: Float, style: Style, riser: Style = Style.empty) extends SvgStyled[ErrorBarY] {
     def restyle(f: Style => Style) = new ErrorBarY(c, r, r2, ey, f(style), f(riser))
-    lazy val g: Group = ???/*{
+    lazy val g: Group = {
       val cL = c.xFn(_ - r)
       val cR = c.xFn(_ + r)
       val bU = c.yFn(_ + ey)
@@ -109,19 +132,31 @@ object Chart {
       val bUR = bU.xFn(_ + r2)
       val bDL = bD.xFn(_ - r2)
       val bDR = bD.xFn(_ + r2)
-      val (cs, bs, rs) = GroupStyle(bs, rs) match {
-        case (c, Array(b,r)) => (c, b, r)
-        case _ => (Style(fillc = Some(No("none"))), style, riser.copy(linec = riser.linec orElse style.linec, linew = riser.linew orElse style.linew.map(_ * 0.5f)))
-      }
+      val bs = 
+        if (style.name.nonEmpty) style
+        else Style(
+          fillc = Some(No("none")),
+          linec = style.linec.map(_.map(_.opaque)),
+          linew = style.linew,
+          alpha = style.alpha.map(_ * style.linec.flatMap(_.map(_.a).toOption).getOrElse(1f)) orElse style.linec.flatMap(_.map(_.a).toOption)
+        )
+      val rs =
+        if (riser.name.nonEmpty) riser
+        else Style(
+          fillc = riser.fillc orElse bs.fillc,
+          linec = riser.linec.map(_.map(_.opaque)) orElse bs.linec,
+          linew = riser.linew orElse bs.linew.map(_ * 0.4f),
+          alpha = riser.alpha.map(_ * riser.linec.flatMap(_.map(_.a).toOption).getOrElse(1f)) orElse riser.linec.flatMap(_.map(_.a).toOption) orElse bs.alpha
+        )
       Group(
-        cs,
+        Style.empty,
         Line(Array(cL.underlying, cR.underlying), bs),
         Line(Array(bU.underlying, bD.underlying), rs),
         Line(Array(bUL.underlying, bUR.underlying), rs),
         Line(Array(bDL.underlying, bDR.underlying), rs)
       )
-    }*/
-    def toSvg = ???
+    }
+    def toSvg = g.toSvg
   }
   case class ErrorBracketY(c: Vc, r: Float, r2: Float, ey: Float, style: Style, riser: Style = Style.empty) extends SvgStyled[ErrorBracketY] {
     def restyle(f: Style => Style) = copy(style = f(style))
