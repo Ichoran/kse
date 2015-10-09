@@ -14,6 +14,73 @@ import kse.eio._
 object Chart {
   private val q = "\""
 
+  private def mean(xs: Array[Float]) = {
+    var s = 0.0
+    var i = 0
+    var n = 0
+    while (i < xs.length) {
+      val x = xs(i)
+      if (!x.nan) s += xs(i) else n += 1
+      i += 1
+    }
+    if (i > n) (s/(i-n)).toFloat else 0f
+  }
+
+  private case class PStat(n: Int, mean: Float, sd: Float, sem: Float) {}
+
+  private def stats(xs: Array[Float]): PStat = {
+    var s = 0.0
+    var ss = 0.0
+    var i = 0
+    var n = 0
+    while (i < xs.length) {
+      val x = xs(i)
+      if (!x.nan) s += x else n += 1
+      i += 1
+    }
+    val m = if (i > n) s/(i-n) else 0.0
+    i = 0
+    while (i < xs.length) {
+      val x = xs(i) - m
+      if (!x.nan) ss += x*x
+      i += 1
+    }
+    if (i > n) {
+      val k = i-n
+      val sd = if (k == 1) 9.8f*m else sqrt((ss/k - m*m)*(k.toDouble/(k-1)))
+      PStat(k, m.toFloat, sd.toFloat, (sd/sqrt(k)).toFloat)
+    }
+    else PStat(0, 0f, 0f, 0f)
+  }
+
+  private case class NpStat(
+    n: Int,
+    median: Float,
+    loIqr: Float, hiIqr: Float,
+    p05: Float, p95: Float,
+    p025: Float, p975: Float,
+    loFence: Float, hiFence: Float,
+    lo: Array[Float], lolo: Array[Float], hi: Array[Float], hihi: Array[Float]
+  ) {}
+
+  private def pickrank(xs: Array[Float], n: Int, rank: Double, maxout: Boolean = false): Float = if (!(rank >= 0f && rank <= 1f)) Float.NaN else {
+    val i = (n*rank).floor.toInt
+    val j = (n*rank).ceil.toInt
+    ???
+  }
+
+  private def npstats(xs: Array[Float]): NpStat = {
+    var i, n = 0
+    val ys = new Array[Float](xs.length)
+    while (i < xs.length) {
+      val x = xs(i)
+      if (!x.nan) { ys(n) = x; n += 1 }
+      i += 1
+    }
+    java.util.Arrays.sort(ys, 0, n)
+    ???
+  }
+
   trait Svgable {
     def toSvg: Vector[String]
   }
@@ -73,6 +140,11 @@ object Chart {
     val empty = Style()
   }
 
+  trait Grouped extends Svgable {
+    def group: Group
+    override def toSvg = group.toSvg
+  }
+
   class Group private (val global: Style, val specific: Seq[SvgBasicStyled]) extends SvgStyled[Group] {
     def style = global
     def restyle(f: Style => Style) = {
@@ -115,23 +187,29 @@ object Chart {
     def restyle(f: Style => Style) = copy(style = f(style))
     def svgLine = f"<circle cx=$q${c.x.fmt()}$q cy=$q${c.y.fmt()}$q r=$q${r.fmt()}$q $styleTag/>"
   }
+  object Circle {
+    def apply(c: Vc, r: Float, color: Rgba): Circle =
+      new Circle(c, r, Style(fillc = Some(Yes(color))))
+
+    def ring(c: Vc, r: Float, color: Rgba, width: Float = Float.NaN): Circle =
+      new Circle(c, r, Style(fillc = Some(No("none")), linec = Some(Yes(color)), linew = Some(if (width.nan) 0.1f*r else width)))
+
+    def lots(cs: Array[Long], r: Float, style: Style): Group =
+      Group(style, cs.map{ l => new Circle(Vc from l, r, Style.empty) }: _*)
+
+    def lots(cs: Array[Long], r: Float, color: Rgba): Group = lots(cs, r, Style(fillc = Some(Yes(color))))
+
+    def rings(cs: Array[Long], r: Float, color: Rgba, width: Float = Float.NaN): Group =
+      lots(cs, r, Style(fillc = Some(No("none")), linec = Some(Yes(color)), linew = Some(if (width.nan) 0.1f*r else width)))
+  }
 
   case class Line(ps: collection.mutable.WrappedArray[Long], style: Style) extends SvgLineStyled[Line] {
     def restyle(f: Style => Style) = copy(style = f(style))
     def svgLine = f"<polyline points=$q${ if (ps.length > 0) ps.map{ l => val v = Vc from l; v.x.fmt + "," + v.y.fmt }.mkString(" ") else "" }$q $styleTag/>"
   }
 
-  case class ErrorBarY(c: Vc, r: Float, r2: Float, ey: Float, style: Style, riser: Style = Style.empty) extends SvgStyled[ErrorBarY] {
-    def restyle(f: Style => Style) = new ErrorBarY(c, r, r2, ey, f(style), f(riser))
-    lazy val g: Group = {
-      val cL = c.xFn(_ - r)
-      val cR = c.xFn(_ + r)
-      val bU = c.yFn(_ + ey)
-      val bD = c.yFn(_ - ey)
-      val bUL = bU.xFn(_ - r2)
-      val bUR = bU.xFn(_ + r2)
-      val bDL = bD.xFn(_ - r2)
-      val bDR = bD.xFn(_ + r2)
+  object ErrorLineStyle {
+    def reshuffle(style: Style, riser: Style): (Style, Style) = {
       val bs = 
         if (style.name.nonEmpty) style
         else Style(
@@ -148,6 +226,22 @@ object Chart {
           linew = riser.linew orElse bs.linew.map(_ * 0.4f),
           alpha = riser.alpha.map(_ * riser.linec.flatMap(_.map(_.a).toOption).getOrElse(1f)) orElse riser.linec.flatMap(_.map(_.a).toOption) orElse bs.alpha
         )
+      (bs, rs)      
+    }
+  }
+
+  case class ErrorBarY(c: Vc, r: Float, r2: Float, eyp: Float, eyn: Float, style: Style, riser: Style = Style.empty) extends SvgStyled[ErrorBarY] with Grouped {
+    def restyle(f: Style => Style) = new ErrorBarY(c, r, r2, eyp, eyn, f(style), f(riser))
+    lazy val group: Group = {
+      val cL = c.xFn(_ - r)
+      val cR = c.xFn(_ + r)
+      val bU = c.yFn(_ + eyp)
+      val bD = c.yFn(_ - eyn)
+      val bUL = bU.xFn(_ - r2)
+      val bUR = bU.xFn(_ + r2)
+      val bDL = bD.xFn(_ - r2)
+      val bDR = bD.xFn(_ + r2)
+      val (bs, rs) = ErrorLineStyle.reshuffle(style, riser)
       Group(
         Style.empty,
         Line(Array(cL.underlying, cR.underlying), bs),
@@ -156,35 +250,61 @@ object Chart {
         Line(Array(bDL.underlying, bDR.underlying), rs)
       )
     }
-    def toSvg = g.toSvg
   }
-  case class ErrorBracketY(c: Vc, r: Float, r2: Float, ey: Float, style: Style, riser: Style = Style.empty) extends SvgStyled[ErrorBracketY] {
-    def restyle(f: Style => Style) = copy(style = f(style))
-    def toSvg = {
+  object ErrorBarY {
+    def apply(c: Vc, r: Float, r2: Float, ey: Float, style: Style, riser: Style): ErrorBarY =
+      new ErrorBarY(c, r, r2, ey, ey, style, riser)
+
+    def apply(c: Vc, r: Float, r2: Float, ey: Float, style: Style): ErrorBarY =
+      new ErrorBarY(c, r, r2, ey, ey, style)
+
+    def apply(c: Vc, r: Float, r2: Float, eyp: Float, eyn: Float, color: Rgba, width: Float): ErrorBarY =
+      new ErrorBarY(c, r, r2, eyp, eyn, Style(linec = Some(Yes(color.opaque)), linew = Some(width), alpha = if (color.a.nan) None else Some(color.a)))
+
+    def apply(c: Vc, r: Float, r2: Float, ey: Float, color: Rgba, width: Float): ErrorBarY = apply(c, r, r2, ey, ey, color, width)
+  }
+
+  case class ErrorBracketY(c: Vc, r: Float, r2: Float, eyp: Float, eyn: Float, style: Style, riser: Style = Style.empty) extends SvgStyled[ErrorBracketY] with Grouped {
+    def restyle(f: Style => Style) = new ErrorBracketY(c, r, r2, eyp, eyn, f(style), f(riser))
+    lazy val group: Group = {
       val cL = c.xFn(_ - r)
       val cR = c.xFn(_ + r)
-      val uL = cL.yFn(_ + ey)
+      val uL = cL.yFn(_ + eyp)
       val vL = uL.xFn(_ + r2)
-      val lL = cL.yFn(_ - ey)
+      val lL = cL.yFn(_ - eyn)
       val kL = lL.xFn(_ + r2)
-      val uR = cR.yFn(_ + ey)
+      val uR = cR.yFn(_ + eyp)
       val vR = uR.xFn(_ - r2)
-      val lR = cR.yFn(_ - ey)
+      val lR = cR.yFn(_ - eyn)
       val kR = lR.xFn(_ - r2)
-      val rs = Style(fillc = None, linec = riser.linec orElse style.linec, linew = riser.linew orElse style.linew.map(_ * 0.5f), alpha = riser.alpha orElse style.alpha)
-      Vector(
-        "<g>",
-        "  " + Line(Array(cL.underlying, cR.underlying), style).svgLine,
-        "  " + Line(Array(vL.underlying, uL.underlying, lL.underlying, kL.underlying), rs).svgLine,
-        "  " + Line(Array(vR.underlying, uR.underlying, lR.underlying, kR.underlying), rs).svgLine,
-        "</g>"
+      val (bs, rs) = ErrorLineStyle.reshuffle(style, riser)
+      Group(
+        Style.empty,
+        Line(Array(cL.underlying, cR.underlying), bs),
+        Line(Array(vL.underlying, uL.underlying, lL.underlying, kL.underlying), rs),
+        Line(Array(vR.underlying, uR.underlying, lR.underlying, kR.underlying), rs)
       )
     }
   }
+  object ErrorBracketY {
+    def apply(c: Vc, r: Float, r2: Float, ey: Float, style: Style, riser: Style): ErrorBracketY =
+      new ErrorBracketY(c, r, r2, ey, ey, style, riser)
+
+    def apply(c: Vc, r: Float, r2: Float, ey: Float, style: Style): ErrorBracketY =
+      new ErrorBracketY(c, r, r2, ey, ey, style)
+
+    def apply(c: Vc, r: Float, r2: Float, eyp: Float, eyn: Float, color: Rgba, width: Float): ErrorBracketY =
+      new ErrorBracketY(c, r, r2, eyp, eyn, Style(linec = Some(Yes(color.opaque)), linew = Some(width), alpha = if (color.a.nan) None else Some(color.a)))
+
+    def apply(c: Vc, r: Float, r2: Float, ey: Float, color: Rgba, width: Float): ErrorBracketY =
+      apply(c, r, r2, ey, ey, color, width)
+  }
+
   case class AxisLine(o: Vc, e: Vc, style: Style, arrow: Option[Float] = Some(3.5f)) extends SvgLineStyled[AxisLine] {
     def restyle(f: Style => Style) = copy(style = f(style))
     def svgLine = f"<path d=${q}M ${o.x.fmt} ${o.y.fmt} L ${(o+e).x.fmt} ${(o+e).y.fmt}$q $styleTag/>"
   }
+
   case class Canvas(sz: Vc) extends Svgable {
     private val content = new collection.mutable.ArrayBuffer[SvgStyled[_]]
     def +=(ss: SvgStyled[_]): this.type = { content += ss; this }
