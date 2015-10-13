@@ -662,6 +662,15 @@ class PolyTX(val points: Array[Double]) extends Poly[PolyTX] {
       j += 1
     }
   }
+  def stride(t: Array[Double], a: Array[Double], i0: Int, step: Int) {
+    var i = i0
+    var j = 0
+    while (j < t.length) {
+      a(i) = x(t(j))
+      i += step
+      j += 1
+    }
+  }
 }
 object PolyTX {
   def apply(tnodes: Array[Double], ts: Array[Double], xs: Array[Double], i0: Int, iN: Int): PolyTX = {
@@ -843,5 +852,67 @@ object PolyTXY {
     var i = 0
     while (i < inodes.length) { tnodes(i) = ts(inodes(i)); i += 1 }
     apply(tnodes, ts, xs, ys, inodes(0), inodes(inodes.length-1)+1)
+  }
+}
+
+class PolyOLS(val polys: Array[PolyTX]) extends Poly[PolyOLS] {
+  def dims = polys.length+1
+  def t0 = polys(0).t0
+  def t1 = polys(0).t1
+  def apply(t: Double, d: Int): Double = if (d == 0) t else polys(d).x(t)
+  def apply(t: Double, a: Array[Double], i0: Int) {
+    var i = 0
+    a(i0) = t
+    while (i < polys.length) { a(i0+i+1) = polys(i).x(t); i += 1 }
+  }
+  def apply(t: Array[Double], d: Int, a: Array[Double], i0: Int) {
+    if (d == 0) System.arraycopy(t, 0, a, i0, t.length)
+    else if (d < 0 || d > polys.length) throw new NoSuchElementException("Dimension out of bounds")
+    polys(d)(t, a, i0)
+  }
+  def apply(t: Array[Double], a: Array[Double], i0: Int) {
+    var i = 0
+    while (i < t.length) {
+      a(i0+i*dims) = t(i)
+      i += 1
+    }
+    i = 0
+    while (i < polys.length) {
+      polys(i).stride(t, a, i0+i+1, dims)
+      i += 1
+    }
+  }
+}
+object PolyOLS {
+  def apply(tnodes: Array[Double], dims: Int, datas: Array[Double], i0: Int, iN: Int): PolyOLS = {
+    val xs = new Array[Double](iN - i0)
+    val ts = {
+      val ans = new Array[Double](iN - i0)
+      var i = i0
+      var j = 0
+      while (j < ans.length) {
+        ans(j) = datas(i)
+        j += 1
+        i += dims
+      }
+      ans
+    }
+    val polys = (1 until dims).map{ d =>
+      var i = i0+d
+      var j = 0
+      while (j < xs.length) {
+        xs(j) = datas(i)
+        i += dims
+        j += 1
+      }
+      PolyTX(tnodes, ts, xs, 0, xs.length)
+    }
+    new PolyOLS(polys.toArray)
+  }
+  def apply(inodes: Array[Int], dims: Int, datas: Array[Double]): PolyOLS = {
+    val tnodes = new Array[Double](inodes.length)
+    var i = 0
+    while (i < inodes.length) { tnodes(i) = datas(inodes(i)*dims); i += 1 }
+    apply(tnodes, dims, datas, inodes(0), inodes(inodes.length-1)+1)
   }
 }
