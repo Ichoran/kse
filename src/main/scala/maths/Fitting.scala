@@ -641,7 +641,7 @@ class PolyTX(val points: Array[Double]) extends Poly[PolyTX] {
     ixs
   }
   def x(t: Double) = if (t < t0 || t > t1) Double.NaN else {
-    var i = equallySpaced(((t-t0)/dt).floor.toInt)
+    var i = equallySpaced(((t-t0)/dt).floor.toInt.clip(0, equallySpaced.length-1))
     while (i+4 < points.length && t > points(i+2)) i += 2
     val tL = points(i)
     val tR = points(i+2)
@@ -744,14 +744,14 @@ class PolyTXY(val points: Array[Double]) extends Poly[PolyTXY] {
     ixs
   }
   def x(t: Double) = if (t < t0 || t > t1) Double.NaN else {
-    var i = equallySpaced(((t-t0)/dt).floor.toInt)
+    var i = equallySpaced(((t-t0)/dt).floor.toInt.clip(0, equallySpaced.length-1))
     while (i+6 < points.length && t > points(i+3)) i += 3
     val tL = points(i)
     val tR = points(i+3)
     (points(i+1)*(tR - t) + points(i+4)*(t - tL))/(tR - tL)
   }
   def y(t: Double) = if (t < t0 || t > t1) Double.NaN else {
-    var i = equallySpaced(((t-t0)/dt).floor.toInt)
+    var i = equallySpaced(((t-t0)/dt).floor.toInt.clip(0, equallySpaced.length-1))
     while (i+6 < points.length && t > points(i+3)) i += 3
     val tL = points(i)
     val tR = points(i+3)
@@ -768,7 +768,7 @@ class PolyTXY(val points: Array[Double]) extends Poly[PolyTXY] {
       a(i0+1) = Double.NaN
     }
     else {
-      var i = equallySpaced(((t-t0)/dt).floor.toInt)
+      var i = equallySpaced(((t-t0)/dt).floor.toInt.clip(0, equallySpaced.length-1))
       while (i+6 < points.length && t > points(i+3)) i += 3
       val tL = points(i)
       val tR = points(i+3)
