@@ -2,8 +2,11 @@
 // Copyright (c) 2011-15 Rex Kerr, HHMI Janelia, UCSF, and Calico Labs.
 
 package kse.maths
+package fits
 
 import scala.math._
+
+import kse.flow._
 
 /** Marker trait so we know what fits we could have */
 sealed trait Fit[F <: Fit[F]] extends scala.Cloneable {
@@ -603,8 +606,242 @@ object FitOLS {
 
   def apply(dims: Int, xs: Array[Float], i0: Int, iN: Int): FitOLS = {
     val m = max(1, dims)
-    apply(dims, (i, j) => xs(i*m + j), i0, iN)
-  }
+  apply(dims, (i, j) => xs(i*m + j), i0, iN)
+}
 
-  def apply(dims: Int, xs: Array[Float]): FitOLS = apply(dims, xs, 0, xs.length / max(1, dims))
+def apply(dims: Int, xs: Array[Float]): FitOLS = apply(dims, xs, 0, xs.length / max(1, dims))
+}
+
+
+trait Poly[P <: Poly[P]] {
+  def t0: Double
+  def t1: Double
+  def dims: Int
+  def apply(t: Double, d: Int): Double
+  def apply(t: Double, a: Array[Double], i0: Int): Unit
+  def apply(t: Array[Double], d: Int, a: Array[Double], i0: Int): Unit
+  def apply(t: Array[Double], a: Array[Double], i0: Int): Unit
+}
+
+class PolyTX(val points: Array[Double]) extends Poly[PolyTX] {
+  def dims = 1
+  private val npts = max(0, points.length / 2)
+  val t0 = points(0)
+  val t1 = points(2*(npts-1))
+  private val dt = (t1 - t0)/(npts-1)
+  private val equallySpaced = {
+    var ixs = new Array[Int](npts-1)
+    var i, j = 0
+    while (i < ixs.length) {
+      val t = points(2*j)
+      ixs(i) = 2*j
+      while (j+1 < npts && t+dt+1e-9 > points(j*2+2)) j += 1
+      i += 1
+    }
+    ixs
+  }
+  def x(t: Double) = if (t < t0 || t > t1) Double.NaN else {
+    var i = equallySpaced(((t-t0)/dt).floor.toInt)
+    while (i+4 < points.length && t > points(i+2)) i += 2
+    val tL = points(i)
+    val tR = points(i+2)
+    (points(i+1)*(tR - t) + points(i+3)*(t - tL))/(tR - tL)
+  }
+  def apply(t: Double, d: Int) = if (d != 0) throw new NoSuchElementException("Only one dimension fit.") else x(t)
+  def apply(t: Double, a: Array[Double], i0: Int) { a(i0) = x(t) }
+  def apply(t: Array[Double], d: Int, a: Array[Double], i0: Int) {
+    if (d != 0) throw new NoSuchElementException("Only one dimension fit.")
+    apply(t, a, i0)
+  }
+  def apply(t: Array[Double], a: Array[Double], i0: Int) {
+    var i = i0
+    var j = 0
+    while (j < t.length) {
+      a(i) = x(t(j))
+      i += 1
+      j += 1
+    }
+  }
+}
+object PolyTX {
+  def apply(tnodes: Array[Double], ts: Array[Double], xs: Array[Double], i0: Int, iN: Int): PolyTX = {
+    /* Note -- derivation of fit goes something like this.
+     * Each block of points has error E|j = sum(xi - x'i)|j where x'i = pi*xL + qi*xR where xL and xR are
+     * the left and rightmost endpoint, and qi and pi are the fraction of the way way from the right and
+     * left ends respectively.  By differentiating the total error we end up with relations that look like
+     * sum(xi*pi)|j + sum(xi*qi)|(j-1) = x|j-1 * sum(pi*qi)|j-1 + x|j * (sum(pi*pi)|j + sum(qi*qi)|j-1) + x|(j+1)*sum(pi*qi)
+     * where you just use 0 if the value of j is not defined.
+     */
+    val nodes = new Array[Double](tnodes.length*2)
+    val tridi = new Array[Double](tnodes.length*4)
+    var j = 1
+    var i = i0
+    while (j < tnodes.length) {
+      var ppS, pqS, qqS, pxS, qxS = 0.0
+      val tL = tnodes(j-1)
+      val tR = tnodes(j)
+      val idt = 1.0/(tR - tL)
+      while (i < iN && tR >= ts(i)) {
+        val p = (tR - ts(i))*idt
+        val q = (ts(i) - tL)*idt
+        ppS += p*p
+        pqS += p*q
+        qqS += q*q
+        pxS += p*xs(i)
+        qxS += q*xs(i)
+
+        i += 1
+      }
+      nodes(2*j) = tnodes(j)
+      tridi(4*j-3) += ppS       
+      tridi(4*j-2) += pqS      
+      tridi(4*j-1) += pxS        
+      tridi(4*j)   += pqS    
+      tridi(4*j+1) += qqS  
+      tridi(4*j+3) += qxS   
+      j += 1
+    }
+    val xnodes = LinAlg.solveTriDiagonal(tridi)
+    j = 0
+    while (j < tnodes.length) {
+      nodes(j*2+1) = xnodes(j)
+      j += 1
+    }
+    new PolyTX(nodes)
+  }
+  def apply(inodes: Array[Int], ts: Array[Double], xs: Array[Double]): PolyTX = {
+    val tnodes = new Array[Double](inodes.length)
+    var i = 0
+    while (i < inodes.length) { tnodes(i) = ts(inodes(i)); i += 1 }
+    apply(tnodes, ts, xs, inodes(0), inodes(inodes.length-1)+1)
+  }
+}
+
+class PolyTXY(val points: Array[Double]) extends Poly[PolyTXY] {
+  def dims = 2
+  private val npts = max(0, points.length / 3)
+  val t0 = points(0)
+  val t1 = points(3*(npts-1))
+  private val dt = (t1 - t0)/(npts-1)
+  private val equallySpaced = {
+    var ixs = new Array[Int](npts-1)
+    var i, j = 0
+    while (i < ixs.length) {
+      val t = points(3*j)
+      ixs(i) = 3*j
+      while (j+1 < npts && t+dt+1e-9 > points(j*3+3)) j += 1
+      i += 1
+    }
+    ixs
+  }
+  def x(t: Double) = if (t < t0 || t > t1) Double.NaN else {
+    var i = equallySpaced(((t-t0)/dt).floor.toInt)
+    while (i+6 < points.length && t > points(i+3)) i += 3
+    val tL = points(i)
+    val tR = points(i+3)
+    (points(i+1)*(tR - t) + points(i+4)*(t - tL))/(tR - tL)
+  }
+  def y(t: Double) = if (t < t0 || t > t1) Double.NaN else {
+    var i = equallySpaced(((t-t0)/dt).floor.toInt)
+    while (i+6 < points.length && t > points(i+3)) i += 3
+    val tL = points(i)
+    val tR = points(i+3)
+    (points(i+2)*(tR - t) + points(i+5)*(t - tL))/(tR - tL)
+  }
+  def apply(t: Double, d: Int) = d match {
+    case 0 => x(t)
+    case 1 => y(t)
+    case _ => throw new NoSuchElementException("Only two dimensions fit.")
+  }
+  def apply(t: Double, a: Array[Double], i0: Int) { 
+    if (t < t0 || t > t1) {
+      a(i0) = Double.NaN
+      a(i0+1) = Double.NaN
+    }
+    else {
+      var i = equallySpaced(((t-t0)/dt).floor.toInt)
+      while (i+6 < points.length && t > points(i+3)) i += 3
+      val tL = points(i)
+      val tR = points(i+3)
+      val p = (tR - t)/(tR - tL)
+      a(i0) = points(i+1)*p + points(i+4)*(1-p)
+      a(i0+1) = points(i+2)*p + points(i+5)*(1-p)
+    }
+  }
+  def apply(t: Array[Double], d: Int, a: Array[Double], i0: Int) { 
+    var i = i0
+    var j = 0
+    d match {
+      case 0 => while (j < t.length) { a(i) = x(t(j)); i += 1; j += 1 }
+      case 1 => while (j < t.length) { a(i) = y(t(j)); i += 1; j += 1 }
+      case _ => throw new NoSuchElementException("Only two dimensions fit.")
+    }
+  }
+  def apply(t: Array[Double], a: Array[Double], i0: Int) {
+    var i = i0
+    var j = 0
+    while (j < t.length) {
+      a(i) = x(t(j))
+      a(i+1) = y(t(j))
+      i += 2
+      j += 1
+    }
+  }
+}
+object PolyTXY {
+  def apply(tnodes: Array[Double], ts: Array[Double], xs: Array[Double], ys: Array[Double], i0: Int, iN: Int): PolyTXY = {
+    // Note -- fit for x and y are independent, so just (conceptually) use single solution!
+    val nodes = new Array[Double](tnodes.length*3)
+    val tridix, tridiy = new Array[Double](tnodes.length*4)
+    var j = 1
+    var i = i0
+    while (j < tnodes.length) {
+      var ppS, pqS, qqS, pxS, qxS, pyS, qyS = 0.0
+      val tL = tnodes(j-1)
+      val tR = tnodes(j)
+      val idt = 1.0/(tR - tL)
+      while (i < iN && tR >= ts(i)) {
+        val p = (tR - ts(i))*idt
+        val q = (ts(i) - tL)*idt
+        ppS += p*p
+        pqS += p*q
+        qqS += q*q
+        pxS += p*xs(i)
+        qxS += q*xs(i)
+        pyS += p*ys(i)
+        qyS += q*ys(i)
+
+        i += 1
+      }
+      nodes(3*j) = tnodes(j)
+      tridix(4*j-3) += ppS       
+      tridix(4*j-2) += pqS      
+      tridix(4*j-1) += pxS        
+      tridix(4*j)   += pqS    
+      tridix(4*j+1) += qqS  
+      tridix(4*j+3) += qxS
+      tridiy(4*j-3) += ppS
+      tridiy(4*j-2) += pqS
+      tridiy(4*j-1) += pyS
+      tridiy(4*j)   += pqS
+      tridiy(4*j+1) += qqS
+      tridiy(4*j+3) += qyS
+      j += 1
+    }
+    val xnodes = LinAlg.solveTriDiagonal(tridix)
+    val ynodes = LinAlg.solveTriDiagonal(tridiy)
+    j = 0
+    while (j < tnodes.length) {
+      nodes(j*3+1) = xnodes(j)
+      nodes(j*3+2) = ynodes(j)
+      j += 1
+    }
+    new PolyTXY(nodes)
+  }
+  def apply(inodes: Array[Int], ts: Array[Double], xs: Array[Double], ys: Array[Double]): PolyTXY = {
+    val tnodes = new Array[Double](inodes.length)
+    var i = 0
+    while (i < inodes.length) { tnodes(i) = ts(inodes(i)); i += 1 }
+    apply(tnodes, ts, xs, ys, inodes(0), inodes(inodes.length-1)+1)
+  }
 }

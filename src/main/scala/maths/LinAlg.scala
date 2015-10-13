@@ -36,6 +36,11 @@ object LinAlg {
     ans
   }
   private def solveTriDiagonalImpl(work: Array[Double], ans: Array[Double], i0: Int, iN: Int) {
+    /*
+     * Note: Mathematica solves LinearSolve[{{2, 7, 0, 0}, {1, 4, 3, 0}, {0, 5, 3, 9}, {0, 0, 6, 7}}, {1, 2, 3, 4}]
+     * as {10/27, 1/27, 40/81, 4/27}
+     * which should match solveTriDiagonal(Array[Double](0,2,7, 1, 1,4,3, 2, 5,3,9, 3, 6,7,0, 4))
+     */
     if (i0 >= iN) return;
     if (work(4*i0).abs > NumericConstants.EpsDouble100x) {
       ans(i0) = Double.NaN
