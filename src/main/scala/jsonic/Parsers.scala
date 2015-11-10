@@ -9,46 +9,69 @@ trait JsonParser[A] { def parse(input: A): JsResult }
 
 class StringParser extends JsonParser[String] {
   private[this] var idx = 0
+  private[this] var cache: JsResult = null
 
   def parse(input: String): JsResult = parseVal(input, 0)
+
+  /////////////
+  // Important invariants within methods:
+  //    Upon error return, idx is unchanged
+  //    Upon valid return, idx points after the last parsed character
+  //    c holds the current character
+  //    i points to the next character after c
+  //    If a unique character is already parsed, the method that parses the rest of it gets an index past that character 
+  /////////////
 
   private def parseVal(input: String, index: Int): JsResult = {
     var i = index
     var c: Char = 0
-    while (i < input.length && { c = input.charAt(index); c < 21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}) i += 1
-    if (i >= input.length) JsError("no value: end of input", index, index, None)
-    else if (c == '"') parseStr(input, i+1)
-    else if (c == '[') parseArr(input, i+1)
-    else if (c == '{') parseObj(input, i+1)
-    else if (c == '-') parseNum(input, i+1, true)
-    else if (c >= '0' && c <= '9') parseNum(input, i, false)
-    else if (c == 'n') parseNull(input, i+1)
-    else if (c == 't') parseTrue(input, i+1)
-    else if (c == 'f') parseFalse(input, i+1)
-    else JsError("invalid character: '" + c + "'", i, i, None)
+    while (
+      { if (i < input.length) true else return JsError("end of input, no value found", index, i, None) } && 
+      { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+    ) i += 1
+    i += 1
+    if (c == '"') parseStr(input, i)
+    else if (c == '[') parseArr(input, i)
+    else if (c == '{') parseObj(input, i)
+    else if (c == '-') {
+      parseNum(input, i-1, true)
+      val ans = cache
+      cache = null
+      ans
+    }
+    else if (c >= '0' && c <= '9') {
+      parseNum(input, i-1, false)
+      val ans = cache
+      cache = null
+      ans
+    }
+    else if (c == 'n') parseNull(input, i)
+    else if (c == 't') parseTrue(input, i)
+    else if (c == 'f') parseFalse(input, i)
+    else JsError("invalid character: '" + c + "'", index, i, None)
   }
 
   private def parseNull(input: String, index: Int): JsResult = {
-    if (index+3 < input.length && input.charAt(index) == 'u' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 'l') { idx = index+3; JsNull }
+    if (index+3 <= input.length && input.charAt(index) == 'u' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 'l') { idx = index+3; JsNull }
     else JsError("Expected 'null' but found '"+input.substring(index-1, index+3), index-1, index+3, None)
   }
 
   private def parseTrue(input: String, index: Int): JsResult = {
-    if (index+3 < input.length && input.charAt(index) == 'r' && input.charAt(index+1) == 'u' && input.charAt(index+2) == 'e') { idx = index+3; JsTrue }
-    else JsError("Expected 'true' but found '"+input.substring(index-1, index+3), index-1, index+3, None)
+    if (index+3 <= input.length && input.charAt(index) == 'r' && input.charAt(index+1) == 'u' && input.charAt(index+2) == 'e') { idx = index+3; JsTrue }
+    else JsError("Expected 'true' but found "+input.substring(index-1, index+3), index-1, index+3, None)
   }
 
   private def parseFalse(input: String, index: Int): JsResult = {
-    if (index+4 < input.length && input.charAt(index) == 'a' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 's' && input.charAt(index+3) == 'e') {
+    if (index+4 <= input.length && input.charAt(index) == 'a' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 's' && input.charAt(index+3) == 'e') {
       idx = index+4
       JsTrue
     }
-    else JsError("Expected 'false' but found '"+input.substring(index-1, index+4), index-1, index+3, None)
+    else JsError("Expected 'false' but found "+input.substring(index-1, index+4), index-1, index+3, None)
   }
 
   private def parseStr(input: String, index: Int): JsResult = {
     val i = parseSimpleStr(input, index)
-    if (i >= 0) { idx = i + 1; JsStr(input.substring(index, i)) }
+    if (i >= 0) { idx = i; JsStr(input.substring(index, i-1)) }
     else parseComplexStr(input, index, -i-1)
   }
   
@@ -56,7 +79,7 @@ class StringParser extends JsonParser[String] {
     var i = index
     var c: Char = 0
     while (i < input.length && { c = input.charAt(i); c != '"' && c != '\\' }) i += 1
-    if (c == '"') i else -i-1
+    if (c == '"') i+1 else -i-1
   }
 
   private def hexifyChar(c: Char): Int = hexifyLowerChar(c | 0x20)
@@ -84,7 +107,7 @@ class StringParser extends JsonParser[String] {
       }
       if (c == '"') {
         idx = i0+1
-        return JsStr(new String(buffer, 0, n))
+        return JsStr(new String(buffer, 0, j))
       }
       while (c == '\\') {
         i0 += 1
@@ -123,22 +146,27 @@ class StringParser extends JsonParser[String] {
       }
       if (c == '"') {
         idx = i0+1
-        return JsStr(new String(buffer, 0, n))
+        return JsStr(new String(buffer, 0, j))
       }
-      if (i0+1 < N) {
+      if (i0 < N) {
         iN = parseSimpleStr(input, i0+1)
         if (iN < 0) iN = -iN-1
+        else iN -= 1
+        if (iN < N) c = input.charAt(iN)
       }
       else i0 = N
     } while (i0 < N)
     JsError("no closing quote on string", index, iN, None)
   }
 
-  private def parseNum(input: String, index: Int, signed: Boolean) = if (index >= input.length) JsError("unfinished number", index, index, None) else {
+  private[this] val smallPowersOfTen = Array.tabulate(30)(i => s"1e$i".toDouble)
+
+  private def parseNum(input: String, index: Int, negative: Boolean, toCache: Boolean = true): Double = {
+    var i = if (negative) index+1 else index
+    if (i >= input.length) { cache = JsError("unfinished number", index, i, None); return Double.NaN }
     var dadp = 0  // How many of our digits are after the decimal point?
-    var nnzd = 0  // How many digits did we read?
+    var dbdp = 0  // How many are before the decimal point?
     var digits = 0L
-    var i = index
     var c = input.charAt(i)
     val N = input.length
     if (c > '0' && c <= '9') {
@@ -146,12 +174,150 @@ class StringParser extends JsonParser[String] {
       val M = math.min(i+15, N)
       i += 1
       while (i < M && { c = input.charAt(i); c >= '0' && c <= '9' }) { i += 1; digits = digits*10 + (c - '0') }
-      nnzd = i - index
+      if (i == M) while (i < N && { c = input.charAt(i); c >= '0' && c <= '9'}) i += 1
+      dbdp = i - index
     }
-    ???
+    else if (c == '0') {
+      i += 1
+      if (i < N && { c = input.charAt(i); c >= '0' && c <= '9'}) { cache = JsError("multi-digit number cannot start with 0", index, i, None); return Double.NaN }
+    }
+    else { cache = JsError("number should start with a numeric digit", index, i, None); return Double.NaN }
+    if (c == '.') {
+      val dp = i
+      i += 1
+      val M = math.min(if (dbdp > 15) i else i + (15 - dbdp), N)
+      while (i < M && { c = input.charAt(i); c >= '0' && c <= '9' }) { i += 1; digits = digits*10 + (c - '0') }
+      if (i >= M) while (i < N && { c = input.charAt(i); c >= '0' && c <= '9' }) i += 1
+      dadp = (i - dp) - 1
+      if (dadp == 0) { cache = JsError("need digits after . in number", index, i, None); return Double.NaN }
+    }
+    val ex =
+      if (i >= N || (c | 0x20) != 'e') 0
+      else {
+        i += 1
+        if (i >= N) { cache = JsError("need digits after e in number", index, i, None); return Double.NaN }
+        c = input.charAt(i)
+        val negex = c match {
+          case '-' =>
+            i += 1
+            if (i >= N) { cache = JsError("need digits after - in number exponent", index, i, None); return Double.NaN }
+            c = input.charAt(i)
+            true
+          case '+' =>
+            i += 1
+            if (i >= N) { cache = JsError("need digits after + in number exponent", index, i, None); return Double.NaN }
+            c = input.charAt(i)
+            false
+          case _ => false
+        }
+        var x = (c - '0')
+        if (x < 0 || x >= 10) { cache = JsError("exponent in number must be numeric digits", index, i, None); return Double.NaN }
+        i += 1
+        while (i < N && x < 99 && { c = input.charAt(i); c >= '0' && c <= '9' }) { x = x*10 + (c - '0'); i += 1 }
+        if (x > 99) {
+          while (i < N && { c = input.charAt(i); c >= '0' && c <= '9' }) i += 1
+          val str = input.substring(index, i)
+          val dbl = str.toDouble
+          if (toCache) cache = JsNum(dbl, str)
+          return dbl
+        }
+        if (negex) -x else x
+      }
+    idx = i
+    if (dadp + dbdp <= 15 && dbdp + ex <= 17 && dadp - ex <= 17) {
+      val shift = ex - dadp
+      val dbl =
+        if (shift == 0) digits.toDouble
+        else if (shift > 0) digits * smallPowersOfTen(shift)
+        else digits / smallPowersOfTen(-shift)
+      val sdbl = if (negative) -dbl else dbl
+      if (toCache) cache = JsNum(sdbl, input.substring(index, i))
+      sdbl
+    }
+    else {
+      val str = input.substring(index, i)
+      val dbl = str.toDouble
+      if (toCache) cache = JsNum(dbl, str)
+      dbl
+    }
   }
 
-  private def parseArr(input: String, index: Int) = ???
+  private def parseArr(input: String, index: Int): JsResult = {
+    val N = input.length
+    var i = index
+    var c = (0: Char)
+    while (
+      { if (i < N) true else return JsError("end of input with unclosed array", index, i, None) } && 
+      { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+    ) i += 1
+    if (c == ']') { idx = i+1; return JsArr.empty }
+    val contents = Array.newBuilder[JsVal]
+    var n = 0
+    while (c != ']') {
+      n += 1
+      parseVal(input, i) match {
+        case jv: JsVal => contents += jv
+        case je: JsError => return JsError("error in array element "+n, index, i, Some(je))
+      }
+      i = idx
+      while (
+        { if (i < N) true else return JsError("end of input with unclosed array", index, i, None) } && 
+        { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      ) i += 1
+      if (c != ']' && c != ',') return JsError("unexpected character '" + c + "' in array after index "+n, index, i, None)
+      i += 1
+    }
+    idx = i
+    JsArr(contents.result())
+  }
 
-  private def parseObj(input: String, index: Int) = ???
+  private def parseObj(input: String, index: Int): JsResult = {
+    val N = input.length
+    var i = index
+    var c = (0: Char)
+    while (
+      { if (i < N) true else return JsError("end of input with unclosed object", index, i, None) } && 
+      { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+    ) i += 1
+    if (c == '}') { idx = i; return JsObj.empty }
+    var keys = new Array[String](6)
+    var values = new Array[JsVal](6)
+    var n = 0
+    while (c != '}') {
+      if (n >= keys.length) {
+        keys = java.util.Arrays.copyOf(keys, 0x7FFFFFFE & ((keys.length << 1) | 0x2))
+        values = java.util.Arrays.copyOf(values, keys.length)
+      }
+      parseVal(input, i) match {
+        case js: JsStr => keys(n) = js.value
+        case je: JsError => return JsError("error reading key "+(n+1)+" in object", index, i, Some(je))
+        case _ => return JsError("object keys must be strings", index, i, None)
+      }
+      i = idx
+      while (
+        { if (i < N) true else return JsError("end of input after object key but no value", index, i, None) } && 
+        { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      ) i += 1
+      if (c != ':') return JsError("object key not followed with ':'", index, i, None)
+      i += 1
+      parseVal(input, i) match {
+        case jv: JsVal => values(n) = jv
+        case je: JsError => return JsError("error reading value "+(n+1)+" (key " + keys(n) + ") in object", index, i, Some(je))
+      }
+      i = idx
+      while (
+        { if (i < N) true else return JsError("end of input after object key but no value", index, i, None) } && 
+        { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      ) i += 1
+      if (c != '}' && c != ',') return JsError("unexpected character '" + c + "' in object after entry " + (n+1) + "(key " + keys(n) + ")", index, i, None)
+      i += 1
+      n += 1
+    }
+    idx = i
+    val m = collection.mutable.AnyRefMap.empty[String, JsVal]
+    var k = 0
+    while (k < n) { m += (keys(k), values(k)); k +=1 }
+    if (n == keys.length) JsObj(keys, values, m)
+    else JsObj(java.util.Arrays.copyOf(keys, n), java.util.Arrays.copyOf(values, n), m)
+  }
 }
