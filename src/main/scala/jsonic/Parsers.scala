@@ -10,6 +10,9 @@ trait JsonParser[A] { def parse(input: A): JsResult }
 class StringParser extends JsonParser[String] {
   private[this] var idx = 0
   private[this] var cache: JsResult = null
+  private[this] var myParseDoubleArrays = false
+
+  def parseDoubleArrays(value: Boolean): this.type = { myParseDoubleArrays = value; this }
 
   def parse(input: String): JsResult = parseVal(input, 0)
 
@@ -242,6 +245,40 @@ class StringParser extends JsonParser[String] {
     }
   }
 
+  private def parseArrD(input: String, index: Int, c0: Char): Boolean = {
+    val N = input.length
+    var i = index
+    var c = c0
+    var buffer = new Array[Double](6)
+    var n = 0
+    while (c != ']') {
+      val ans = 
+        if (c == '-') parseNum(input, i, true, false)
+        else if (c >= '0' && c <= '9') parseNum(input, i, false, false)
+        else return false
+      i = idx
+      if (ans.isNaN && (cache ne null) && cache.isInstanceOf[JsError]) return false
+      if (n >= buffer.length) buffer = java.util.Arrays.copyOf(buffer, 0x7FFFFFFE & ((buffer.length << 1) | 0x2))
+      buffer(n) = ans
+      n += 1
+      while (
+        { if (i < N) true else return false } && 
+        { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      ) i += 1
+      if (c == ',') {
+        i += 1
+        while (
+          { if (i < N) true else return false } && 
+          { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+        ) i += 1
+        if (c == ']') return false
+      }
+    }
+    idx = i+1
+    cache = JsArrD(if (buffer.length != n) java.util.Arrays.copyOf(buffer, n) else buffer)
+    true
+  }
+
   private def parseArr(input: String, index: Int): JsResult = {
     val N = input.length
     var i = index
@@ -251,6 +288,18 @@ class StringParser extends JsonParser[String] {
       { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
     ) i += 1
     if (c == ']') { idx = i+1; return JsArr.empty }
+    if (myParseDoubleArrays) {
+      val idx0 = idx
+      if (parseArrD(input, i, c)) {
+        val ans = cache
+        cache = null
+        return ans
+      }
+      else {
+        cache = null
+        idx = idx0
+      }
+    }
     val contents = Array.newBuilder[JsVal]
     var n = 0
     while (c != ']') {
@@ -268,7 +317,7 @@ class StringParser extends JsonParser[String] {
       i += 1
     }
     idx = i
-    JsArr(contents.result())
+    JsArrV(contents.result())
   }
 
   private def parseObj(input: String, index: Int): JsResult = {

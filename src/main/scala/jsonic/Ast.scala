@@ -19,8 +19,12 @@ object JsStr { def empty = new JsStr("") }
 final case class JsNum(value: Double, literal: String) extends JsVal {}
 object JsNum { def nan = new JsNum(Double.NaN, "null") }
 
-final case class JsArr(values: Array[JsVal]) extends JsVal {}
-object JsArr { def empty = new JsArr(new Array[JsVal](0)) }
+sealed trait JsArr extends JsVal { def values: Array[JsVal] }
+final case class JsArrV(values: Array[JsVal]) extends JsArr {}
+final case class JsArrD(doubles: Array[Double]) extends JsArr {
+  def values = { var i = 0; val v = new Array[JsVal](doubles.length); while (i < doubles.length) { v(i) = JsNum(doubles(i), doubles(i).toString); i += 1 }; v }
+}
+object JsArr { def empty: JsArr = new JsArrV(new Array[JsVal](0)) }
 
 final case class JsObj(keys: Array[String], values: Array[JsVal], table: collection.Map[String, JsVal]) extends JsVal {
   def apply(s: String): Option[JsVal] = if (table ne null) table get s else {
