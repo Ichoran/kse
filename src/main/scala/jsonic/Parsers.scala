@@ -370,3 +370,7 @@ class StringParser extends JsonParser[String] {
     else JsObj(java.util.Arrays.copyOf(keys, n), java.util.Arrays.copyOf(values, n), m)
   }
 }
+object StringParser{
+  def apply(s: String): JsResult = (new StringParser).parse(s)
+  def withDoubleArrays(s: String): JsResult = (new StringParser).parseDoubleArrays(true).parse(s)
+}
