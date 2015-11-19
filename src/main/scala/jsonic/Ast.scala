@@ -13,11 +13,54 @@ sealed trait JsBool extends JsVal { def value: Boolean }
 case object JsTrue extends JsBool { def value = true; override def toString = "true" }
 case object JsFalse extends JsBool { def value = false; override def toString = "false" }
 
-final case class JsStr(value: String) extends JsVal { override def toString = JsStr.quoted(value) }
+final case class JsStr(value: String) extends JsVal { override def toString = JsStr.escaped(value, quotes=true) }
 object JsStr {
+  private[this] def hx(i: Int) = { val j = i&0xF; if (j < 10) (j + '0').toChar else (j + 55).toChar }
   def empty = new JsStr("")
-  def quoted(s: String): String = '"' + s + '"'
-  def escaped(s: String): String = s
+  def escaped(s: String, quotes: Boolean = false, ascii: Boolean = false): String = {
+    var i = 0
+    var n = 0
+    while (i < s.length) {
+      val c = s.charAt(i)
+      if (c < 32) {
+        if (c == '\n' || c == '\r' || c == '\t' || c == '\r' || c == '\f' || c == '\b') n += 2
+        else n += 6
+      }
+      else if (c == '"' || c == '\\') n += 2
+      else if ({ if (ascii) c >= 127 else java.lang.Character.isSurrogate(c) }) n += 6
+      else n += 1
+      i += 1
+    }
+    if (n == i) { if (quotes) "\"" + s + "\"" else s }
+    else {
+      if (quotes) n += 2
+      var buf = new Array[Char](n)
+      if (quotes) { buf(0) = '"'; n = 1 } else n = 0
+      i = 0
+      while (i < s.length) {
+        val c = s.charAt(i)
+        if (c < 32) {
+          if      (c == '\n') { buf(n) = '\\'; buf(n+1) = 'n'; n += 2 }
+          else if (c == '\t') { buf(n) = '\\'; buf(n+1) = 't'; n += 2 }
+          else if (c == '\r') { buf(n) = '\\'; buf(n+1) = 'r'; n += 2 }
+          else if (c == '\f') { buf(n) = '\\'; buf(n+1) = 'f'; n += 2 }
+          else if (c == '\b') { buf(n) = '\\'; buf(n+1) = 'b'; n += 2 }
+          else {
+            buf(n) = '\\'; buf(n+1) = 'u'; buf(n+2) = hx(c >> 12); buf(n+3) = hx(c >> 8); buf(n+4) = hx(c >> 4); buf(n+5) = hx(c); n += 6
+          }
+        }
+        else if (c == '\\') { buf(n) = '\\'; buf(n+1) = '\\'; n += 2 }
+        else if (c == '"') { buf(n) = '\\'; buf(n+1) = '"'; n += 2 }
+        else if ({ if (ascii) c >= 127 else java.lang.Character.isSurrogate(c) }) {
+          buf(n) = '\\'; buf(n+1) = 'u'; buf(n+2) = hx(c >> 12); buf(n+3) = hx(c >> 8); buf(n+4) = hx(c >> 4); buf(n+5) = hx(c); n += 6
+        }
+        else { buf(n) = c; n += 1 }
+        i += 1
+      }
+      if (quotes) { buf(n) = '"'; n += 1 }
+      new String(buf)
+    }
+  }
 }
 
 final case class JsNum(value: Double, literal: String) extends JsVal { override def toString = literal }
