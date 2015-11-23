@@ -63,7 +63,14 @@ object JsStr {
   }
 }
 
-final case class JsNum(value: Double, literal: String) extends JsVal { override def toString = literal }
+final case class JsNum(value: Double, literal: String) extends JsVal {
+  override def equals(a: Any) = a match {
+    case JsNum(v, l) => value == v || (v.isNaN && value.isNaN)
+    case d: Double => value == d || (d.isNaN && value.isNaN)
+    case _ => false
+  } 
+  override def toString = literal
+}
 object JsNum {
   def nan = new JsNum(Double.NaN, "null")
   def approx(value: Double): String = ???
@@ -71,6 +78,15 @@ object JsNum {
 
 sealed trait JsArr extends JsVal { def values: Array[JsVal] }
 final case class JsArrV(values: Array[JsVal]) extends JsArr {
+  override def equals(a: Any): Boolean = a match {
+    case JsArrV(v) => 
+      v.length == values.length && 
+      { var i = 0; while (i < values.length) { if (v(i) != values(i)) return false; i += 1 }; true }
+    case JsArrD(ds) => 
+      ds.length == values.length && 
+      { var i = 0; while (i < values.length) { if (values(i) != ds(i)) return false; i += 1 }; true }
+    case _ => false
+  }
   override def toString = {
     val parts = new Array[String](values.length)
     var i = 0
@@ -98,6 +114,16 @@ final case class JsArrV(values: Array[JsVal]) extends JsArr {
 }
 final case class JsArrD(doubles: Array[Double]) extends JsArr {
   def values = { var i = 0; val v = new Array[JsVal](doubles.length); while (i < doubles.length) { v(i) = JsNum(doubles(i), doubles(i).toString); i += 1 }; v }
+  override def equals(a: Any): Boolean = a match {
+    case JsArrD(ds) => 
+      ds.length == values.length && 
+      { var i = 0; while (i < values.length) { if (values(i) != ds(i)) return false; i += 1 }; true }
+      true
+    case JsArrV(v) => 
+      v.length == values.length && 
+      { var i = 0; while (i < values.length) { if (v(i) != values(i)) return false; i += 1 }; true }
+    case _ => false
+  }
   override def toString = {
     val parts = new Array[String](doubles.length)
     var i = 0
@@ -139,7 +165,22 @@ final case class JsObj(keys: Array[String], values: Array[JsVal], table: collect
     }
     None
   }
-  def hasDuplicateKeys = table.size < keys.length
+  def hasDuplicateKeys = ((table eq null) && keys.length > 0) || table.size < keys.length
+  override def equals(a: Any): Boolean = a match {
+    case JsObj(k, v, t) =>
+      if (k.length == 0 && keys.length == 0) true
+      else if (k.length != keys.length) false
+      else if (hasDuplicateKeys) {
+        var i = 0
+        while (i < keys.length) {
+          if (k(i) != keys(i) || v(i) != values(i)) return false;
+          i += 1
+        }
+        true
+      }
+      else table == t
+    case _ => false
+  }
   override def toString = {
     val parts = new Array[String](2 * values.length)
     var i, j = 0
