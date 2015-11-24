@@ -482,16 +482,16 @@ class BytesParser extends JsonParser[Array[Byte]] {
 
   // Lower 24 bits are for code point, upper 8 are for number of characters consumed
   private def utf8CodePoint(input: Array[Byte], index: Int, limit: Int, c: Int, cc: Int): Int = {
-    if ((c & 0xC0) == 0x80) 0xFFFE
+    if ((c & 0xC0) == 0x80) 0xFFFD
     if ((c & 0xE0) == 0xC0) (((c & 0x1F) << 6) | (cc & 0x3F)).toChar match {
-      case x if x < 0x40 => if (x != 0) 0xFFFE else x | 0x1000000
+      case x if x < 0x40 => if (x != 0) 0xFFFD else x | 0x1000000
       case x => x | 0x1000000
     }
     else if ((c & 0xF0) == 0xE0) {
       if (index + 1 < limit) {
         val ccc = input(index+1)
         (((c & 0xF) << 12) | ((cc & 0x3F) << 6) | (ccc & 0x3F)).toChar match {
-          case x if x < 0x800 => 0xFFFE
+          case x if x < 0x800 => 0xFFFD
           case x => x | 0x2000000
         }
       }
@@ -502,12 +502,12 @@ class BytesParser extends JsonParser[Array[Byte]] {
         val ccc = input(index+1)
         val cccc = input(index+2)
         val cp = ((c & 0xF) << 18) | ((cc & 0x3F) << 12) | ((ccc & 0x3F) << 6) | (cccc & 0x3F)
-        if (cp < 0x10000 | cp > 0x10FFFF) 0xFFFE
+        if (cp < 0x10000 | cp > 0x10FFFF) 0xFFFD
         else cp | 0x3000000
       }
       else -1
     }
-    else 0xFFFE
+    else 0xFFFD
   }
 
   private def parseComplexStr(input: Array[Byte], index: Int, limit: Int, cleanUntil: Int): JsResult = {
@@ -812,3 +812,22 @@ object BytesParser {
   def parseWithDoubleArrays(b: Array[Byte]): JsResult = (new BytesParser).parseDoubleArrays(true).parse(b)
   def parseWithDoubleArrays(b: Array[Byte], start: Int, end: Int): JsResult = (new BytesParser).parseDoubleArrays(true).parse(b, start, end)
 }
+
+trait JsonWisdom[A] {
+  def in(i: Int, p: JsonParser[A]): Unit
+  def in(key: String, p: JsonParser[A]): Unit
+  def out(i: Int, p: JsonParser[A]): Unit
+  def out(key: String, p: JsonParser[A]): Unit
+  def edit(jr: JsResult, p: JsonParser[A]): JsResult
+  def fail(je: JsError, p: JsonParser[A]): JsError
+}
+
+trait JsonChunker[@specialized(Byte, Char, Int) A] {
+  def goto(delta: Long): Long
+  def available: Long
+  def read(buffer: Array[A], start: Int, end: Int): Int
+}
+
+class ByteChunkParser(val wisdom: JsonWisdom[JsonChunker[Byte]]) extends JsonParser[JsonChunker[Byte]] {}
+
+class CharChunkParser(val wisdom: JsonWisdom[JsonChunker[Char]]) extends JsonParser[JsonChunker[Char]] {}
