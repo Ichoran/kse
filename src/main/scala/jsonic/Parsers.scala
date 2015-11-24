@@ -828,6 +828,10 @@ trait JsonChunker[@specialized(Byte, Char, Int) A] {
   def read(buffer: Array[A], start: Int, end: Int): Int
 }
 
-class ByteChunkParser(val wisdom: JsonWisdom[JsonChunker[Byte]]) extends JsonParser[JsonChunker[Byte]] {}
+class ByteChunkParser(val wisdom: JsonWisdom[JsonChunker[Byte]]) extends JsonParser[JsonChunker[Byte]] {
+  def parse(chunker: JsonChunker[Byte]): JsResult = ???
+}
 
-class CharChunkParser(val wisdom: JsonWisdom[JsonChunker[Char]]) extends JsonParser[JsonChunker[Char]] {}
+class CharChunkParser(val wisdom: JsonWisdom[JsonChunker[Char]]) extends JsonParser[JsonChunker[Char]] {
+  def parse(chunker: JsonChunker[Char]): JsResult = ???
+}
