@@ -64,6 +64,7 @@ object JsStr {
 }
 
 final case class JsNum(value: Double, literal: String) extends JsVal {
+  def hasValue(d: Double) = value == d || (d.isNaN && value.isNaN)
   override def equals(a: Any) = a match {
     case JsNum(v, l) => value == v || (v.isNaN && value.isNaN)
     case d: Double => value == d || (d.isNaN && value.isNaN)
@@ -84,7 +85,17 @@ final case class JsArrV(values: Array[JsVal]) extends JsArr {
       { var i = 0; while (i < values.length) { if (v(i) != values(i)) return false; i += 1 }; true }
     case JsArrD(ds) => 
       ds.length == values.length && 
-      { var i = 0; while (i < values.length) { if (values(i) != ds(i)) return false; i += 1 }; true }
+      { 
+        var i = 0
+        while (i < values.length) {
+          values(i) match {
+            case jn: JsNum => if (!(jn hasValue ds(i))) return false
+            case _ => return false
+          }
+          i += 1
+        }
+        true
+      }
     case _ => false
   }
   override def toString = {
@@ -113,15 +124,19 @@ final case class JsArrV(values: Array[JsVal]) extends JsArr {
   }
 }
 final case class JsArrD(doubles: Array[Double]) extends JsArr {
-  def values = { var i = 0; val v = new Array[JsVal](doubles.length); while (i < doubles.length) { v(i) = JsNum(doubles(i), doubles(i).toString); i += 1 }; v }
+  lazy val values = { var i = 0; val v = new Array[JsVal](doubles.length); while (i < doubles.length) { v(i) = JsNum(doubles(i), doubles(i).toString); i += 1 }; v }
   override def equals(a: Any): Boolean = a match {
     case JsArrD(ds) => 
-      ds.length == values.length && 
-      { var i = 0; while (i < values.length) { if (values(i) != ds(i)) return false; i += 1 }; true }
-      true
-    case JsArrV(v) => 
-      v.length == values.length && 
-      { var i = 0; while (i < values.length) { if (v(i) != values(i)) return false; i += 1 }; true }
+      ds.length == doubles.length && 
+      { 
+        var i = 0
+        while (i < doubles.length) {
+          if (doubles(i) != ds(i) && !(doubles(i).isNaN && ds(i).isNaN)) return false
+          i += 1
+        }
+        true
+      }
+    case jv: JsArrV => jv == this 
     case _ => false
   }
   override def toString = {
