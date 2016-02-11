@@ -3,6 +3,8 @@
 
 package kse.tests
 
+import java.nio._
+
 import kse.flow._
 import kse.coll._
 import kse.maths.hashing._
@@ -451,6 +453,15 @@ object Test_Maths_Hashing extends Test_Kse {
     (dataToHash zip xxHashCanonicalZeroSeed).forall{ case (a, (i, l)) =>
       (XX.hash32(a, 0) == i).tap(x => if (!x) println(f"$i%x != ${XX.hash32(a,0)}%x on ${a.mkString(", ")}")) && 
       (XX.hash64(a, 0) == l).tap(x => if (!x) println(f"$l%s != ${XX.hash64(a,0)}%x on ${a.mkString(", ")}"))        
+    }
+  }
+
+  def test_xx_bb = {
+    (dataToHash zip xxHashCanonicalZeroSeed).forall{ case (a, (i,l)) =>
+      (XX.hash32(ByteBuffer.wrap(a), 0) == i).tap(x => if (!x) println(f"Failed XX.hash32 on $i%x")) &&
+      ((new XxHash32(0)).result(ByteBuffer wrap a) == i).tap(x => if (!x) println(f"Failed XxHash32 on $i%x")) &&
+      (XX.hash64(ByteBuffer.wrap(a), 0) == l).tap(x => if (!x) println(f"Failed XX.hash64 on $l%x")) &&
+      ((new XxHash64(0)).result(ByteBuffer wrap a) == l).tap(x => if (!x) println(f"Failed XxHash64 on $l%x"))
     }
   }
 
