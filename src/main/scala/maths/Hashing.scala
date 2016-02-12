@@ -137,7 +137,7 @@ package hashing {
       v2 = rotl64(v2 +   two * Prime64_2, 31) * Prime64_1
       v3 = rotl64(v3 + three * Prime64_2, 31) * Prime64_1
       v4 = rotl64(v4 +  four * Prime64_2, 31) * Prime64_1
-      v5 += 16
+      v5 += 32
       hadBlock = true
       this
     }

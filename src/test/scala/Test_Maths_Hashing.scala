@@ -449,6 +449,22 @@ object Test_Maths_Hashing extends Test_Kse {
     (0xe9d02a6e, 0x610136aa8b405242L)
   )
 
+  def littleL(a: Array[Byte], i: Int) =
+    ((a(i + 0) & 0xFF).toLong      ) |
+    ((a(i + 1) & 0xFF).toLong <<  8) |
+    ((a(i + 2) & 0xFF).toLong << 16) |
+    ((a(i + 3) & 0xFF).toLong << 24) |
+    ((a(i + 4) & 0xFF).toLong << 32) |
+    ((a(i + 5) & 0xFF).toLong << 40) |
+    ((a(i + 6) & 0xFF).toLong << 48) |
+    ((a(i + 7) & 0xFF).toLong << 56)
+
+  def littleI(a: Array[Byte], i: Int) =
+    ((a(i + 0) & 0xFF)      ) |
+    ((a(i + 1) & 0xFF) <<  8) |
+    ((a(i + 2) & 0xFF) << 16) |
+    ((a(i + 3) & 0xFF) << 24)
+
   def test_xx = {
     (dataToHash zip xxHashCanonicalZeroSeed).forall{ case (a, (i, l)) =>
       (XX.hash32(a, 0) == i).tap(x => if (!x) println(f"$i%x != ${XX.hash32(a,0)}%x on ${a.mkString(", ")}")) && 
@@ -458,10 +474,57 @@ object Test_Maths_Hashing extends Test_Kse {
 
   def test_xx_bb = {
     (dataToHash zip xxHashCanonicalZeroSeed).forall{ case (a, (i,l)) =>
-      (XX.hash32(ByteBuffer.wrap(a), 0) == i).tap(x => if (!x) println(f"Failed XX.hash32 on $i%x")) &&
-      ((new XxHash32(0)).result(ByteBuffer wrap a) == i).tap(x => if (!x) println(f"Failed XxHash32 on $i%x")) &&
-      (XX.hash64(ByteBuffer.wrap(a), 0) == l).tap(x => if (!x) println(f"Failed XX.hash64 on $l%x")) &&
-      ((new XxHash64(0)).result(ByteBuffer wrap a) == l).tap(x => if (!x) println(f"Failed XxHash64 on $l%x"))
+      (XX.hash32(ByteBuffer.wrap(a), 0) == i).tap(x => if (!x) println(f"Failed XX.hash32 on $i%x (length ${a.length}")) &&
+      ((new XxHash32(0)).result(ByteBuffer wrap a) == i).tap(x => if (!x) println(f"Failed XxHash32 on $i%x (length ${a.length})")) &&
+      (XX.hash64(ByteBuffer.wrap(a), 0) == l).tap(x => if (!x) println(f"Failed XX.hash64 on $l%x (length ${a.length}")) &&
+      ((new XxHash64(0)).result(ByteBuffer wrap a) == l).tap(x => if (!x) println(f"Failed XxHash64 on $l%x (length ${a.length}"))
+    }
+  }
+
+  def test_xx_inc = {
+    (dataToHash zip xxHashCanonicalZeroSeed).forall{ case (a,(i,l)) =>
+      val x32 = {
+        val xx32 = new XxHash32
+        var j = 0
+        while (j+16 <= a.length) {
+          xx32(littleI(a,j), littleI(a,j+4), littleI(a,j+8), littleI(a,j+12))
+          j += 16
+        }
+        xx32.counting(a.length - j)
+        while (j+4 <= a.length) {
+          xx32 trailing littleI(a,j)
+          j += 4
+        }
+        while (j < a.length) {
+          xx32 trailing a(j)
+          j += 1
+        }
+        xx32.complete()
+      }
+      val x64 = {
+        val xx64 = new XxHash64
+        var k = 0
+        while (k+32 <= a.length) {
+          xx64(littleL(a,k), littleL(a,k+8), littleL(a,k+16), littleL(a,k+24))
+          k += 32
+        }
+        xx64.counting(a.length - k)
+        while (k+8 <= a.length) {
+          xx64 trailing littleL(a,k)
+          k += 8
+        }
+        if (k+4 <= a.length) {
+          xx64 trailing littleI(a,k)
+          k += 4
+        }
+        while (k < a.length) {
+          xx64 trailing a(k)
+          k += 1
+        }
+        xx64.complete()
+      }
+      (x32 == i).tap(x => if (!x) println(f"Failed incremental XxHash32 on $i%x (length ${a.length}")) &&
+      (x64 == l).tap(x => if (!x) println(f"Failed incremental XxHash64 on $l%x (length ${a.length}"))
     }
   }
 
