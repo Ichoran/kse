@@ -13,7 +13,7 @@
   *
   * It is easy to build: just say the name of what you want to build, e.g. `Js.Obj`,
   * add in the pieces with `~`, and end with the same name (`Js.Obj`).  Or, use `~~` to add
-  * whole collections!  Want to built your own types in?  No problem--just extend `AsJson` or
+  * whole collections.  Want to build from your own types?  No problem--just extend `AsJson` or
   * provide the `Jsonable` typeclass.
   *
   * It cleans up its own messes: the error data type is part of the AST.
@@ -27,18 +27,20 @@
 
 package kse.jsonal
 
+import java.nio._
+
 trait AsJson {
   def json: Js
   def jsonString(sb: java.lang.StringBuilder) { json.jsonString(sb) }
-  def jsonBytes(bb: java.nio.ByteBuffer, refresh: java.nio.ByteBuffer => Unit) { json.jsonBytes(bb, refresh) }
-  def jsonChars(cb: java.nio.CharBuffer, refresh: java.nio.CharBuffer => Unit) { json.jsonChars(cb, refresh) }
+  def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { json.jsonBytes(bb, refresh) }
+  def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) { json.jsonChars(cb, refresh) }
 }
 
 trait Jsonize[A] {
   def jsonize(a: A): Js
   def jsonizeString(a: A, sb: java.lang.StringBuilder) { jsonize(a).jsonString(sb) }
-  def jsonizeBytes(a: A, bb: java.nio.ByteBuffer, refresh: java.nio.ByteBuffer => Unit) { jsonize(a).jsonBytes(bb, refresh) }
-  def jsonizeChars(a: A, cb: java.nio.CharBuffer, refresh: java.nio.CharBuffer => Unit) { jsonize(a).jsonChars(cb, refresh) }
+  def jsonizeBytes(a: A, bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { jsonize(a).jsonBytes(bb, refresh) }
+  def jsonizeChars(a: A, cb: CharBuffer, refresh: CharBuffer => CharBuffer) { jsonize(a).jsonChars(cb, refresh) }
 }
 
 trait FromJson[A] {
@@ -50,12 +52,12 @@ trait FromJson[A] {
   }
   def parse(input: String): Either[JastError, A] = parse(input, 0, input.length, new FromJson.Endpoint(0))
 
-  def parse(input: java.nio.ByteBuffer): Either[JastError, A] = Js.parse(input) match {
+  def parse(input: ByteBuffer): Either[JastError, A] = Js.parse(input) match {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
 
-  def parse(input: java.nio.CharBuffer): Either[JastError, A] = Js.parse(input) match {
+  def parse(input: CharBuffer): Either[JastError, A] = Js.parse(input) match {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
@@ -74,53 +76,170 @@ sealed trait Jast {}
 final case class JastError(msg: String, where: Long = -1L, because: Jast = Js.Null) extends Jast {}
 
 sealed trait Js extends Jast with AsJson {
+  def double = Double.NaN
+
   def json: Js = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
 }
 object Js extends FromJson[Js] {
+  private[jsonal] def loadByteBuffer(bytes: Array[Byte], bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) {
+    var b = bb
+    var i = 0
+    while(true) {
+      val n = math.max(bytes.length - i, bb.remaining) match { case 0 => bytes.length - i; case x => x }
+      b.put(bytes, i, n)
+      i += n
+      if (i < bytes.length) b = refresh(b) else return
+    }
+  }
+  private[jsonal] def loadCharBuffer(chars: Array[Char], cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
+    var c = cb
+    var i = 0
+    while(true) {
+      val n = math.max(chars.length - i, cb.remaining) match { case 0 => chars.length - i; case x => x }
+      c.put(chars, i, n)
+      i += n
+      if (i < chars.length) c = refresh(c) else return
+    }
+  }
+
   def parse(input: Js): Either[JastError, Js] = Right(input)
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Js(input, i0, iN, ep)
-  override def parse(input: java.nio.ByteBuffer) = JsonByteBufferParser.Js(input)
-  override def parse(input: java.nio.CharBuffer) = JsonCharBufferParser.Js(input)
+  override def parse(input: ByteBuffer) = JsonByteBufferParser.Js(input)
+  override def parse(input: CharBuffer) = JsonCharBufferParser.Js(input)
   override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Js(input, ep)
 
-  sealed trait Null extends Js {}
+  sealed abstract class Null extends Js {}
   final object Null extends Null with FromJson[Null] {
     final private[this] val myBytesSayNull = "null".getBytes
     final private[this] val myCharsSayNull = "null".toCharArray
     override def jsonString(sb: java.lang.StringBuilder) { sb append "null" }
-    override def jsonBytes(bb: java.nio.ByteBuffer, refresh: java.nio.ByteBuffer => Unit) {
-      if (bb.capacity < 4) refresh(bb)
-      bb put myBytesSayNull
+    override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) {
+      (if (bb.remaining < 4) refresh(bb) else bb) put myBytesSayNull
     }
-    override def jsonChars(cb: java.nio.CharBuffer, refresh: java.nio.CharBuffer => Unit) {
-      if (cb.capacity < 4) refresh(cb)
-      cb put myCharsSayNull
+    override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
+      (if (cb.remaining < 4) refresh(cb) else cb) put myCharsSayNull
     }
     override def toString = "null"
     def parse(input: Js): Either[JastError, Null] = if (this eq input) Right(this) else Left(JastError("expected null"))
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Null(input, i0, iN, ep)
-    override def parse(input: java.nio.ByteBuffer) = JsonByteBufferParser.Null(input)
-    override def parse(input: java.nio.CharBuffer) = JsonCharBufferParser.Null(input)
+    override def parse(input: ByteBuffer) = JsonByteBufferParser.Null(input)
+    override def parse(input: CharBuffer) = JsonCharBufferParser.Null(input)
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Null(input, ep)
   }
 
-  sealed trait Bool extends Js { def value: Boolean }
+  sealed abstract class Bool extends Js { def value: Boolean }
   object Bool extends FromJson[Bool] { 
+    final private val myBytesSayTrue = "true".getBytes
+    final private val myBytesSayFalse = "false".getBytes
+    final private val myCharsSayTrue = "true".toCharArray
+    final private val myCharsSayFalse = "false".toCharArray
     def unapply(js: Js): Option[Boolean] = js match { case b: Bool => Some(b.value); case _ => None }
-    case object True extends Bool { def value = true }
-    case object False extends Bool { def value = false }
+    case object True extends Bool { 
+      def value = true
+      override def jsonString(sb: java.lang.StringBuilder) { sb append "true" }
+      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) {
+        (if (bb.remaining < 4) refresh(bb) else bb) put myBytesSayTrue
+      }
+      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
+        (if (cb.remaining < 4) refresh(cb) else cb) put myCharsSayTrue
+      }
+    }
+    case object False extends Bool {
+      def value = false
+      override def jsonString(sb: java.lang.StringBuilder) { sb append "false" }
+      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) {
+        (if (bb.remaining < 5) refresh(bb) else bb) put myBytesSayFalse
+      }
+      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
+        (if (cb.remaining < 4) refresh(cb) else cb) put myCharsSayFalse
+      }
+    }
     override def parse(input: Js): Either[JastError, Bool] = input match {
       case b: Bool => Right(b)
       case _       => Left(JastError("expected Js.Bool"))
     }
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Bool(input, i0, iN, ep)
-    override def parse(input: java.nio.ByteBuffer) = JsonByteBufferParser.Bool(input)
-    override def parse(input: java.nio.CharBuffer) = JsonCharBufferParser.Bool(input)
+    override def parse(input: ByteBuffer) = JsonByteBufferParser.Bool(input)
+    override def parse(input: CharBuffer) = JsonCharBufferParser.Bool(input)
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Bool(input, ep)
   }
-  final case class Str(text: String) extends Js {}
-  final class Num(what: Int, content: Long, text: String) extends Js {}
+
+  final case class Str(text: String) extends Js {
+    override def jsonString(sb: java.lang.StringBuilder) { JsonStringParser.encodeString(text, sb) }
+    override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { 
+      JsonByteBufferParser.encodeString(text, bb, refresh)
+    }
+    override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
+      JsonCharBufferParser.encodeString(text, cb, refresh)
+    }    
+  }
+  object Str extends FromJson[Str] {
+    override def parse(input: Js): Either[JastError, Str] = input match {
+      case s: Str => Right(s)
+      case _      => Left(JastError("expected Js.Str"))
+    }
+    override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Str(input, i0, iN, ep)
+    override def parse(input: ByteBuffer) = JsonByteBufferParser.Str(input)
+    override def parse(input: CharBuffer) = JsonCharBufferParser.Str(input)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Str(input, ep)    
+  }
+
+  sealed abstract class Num extends Js {
+    def isDouble: Boolean
+    def isLong: Boolean
+    def long: Long
+    def longOr(fallback: Long): Long
+    def big: BigDecimal
+  }
+  object Num {
+    private[jsonal] val numericFormatTable: Array[String] = ???
+
+    final class Dbl(format: Int, content: Double) extends Num {
+      def isDouble = true
+      override def double = content
+      def isLong = content.toLong == content
+      def long = content.toLong
+      def longOr(fallback: Long) = { val ans = content.toLong; if (ans == content) ans else fallback }
+      def big = BigDecimal(toString)
+      override def toString = numericFormatTable(format).format(content)
+      override def jsonString(sb: java.lang.StringBuilder) { sb append toString }
+      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { 
+        (if (bb.remaining < 30) refresh(bb) else bb) put toString.getBytes
+      }
+      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
+        (if (cb.remaining < 30) refresh(cb) else cb) put toString.toCharArray
+      }
+    }
+    final class LongNotDbl(content: Long) extends Num {
+      def isDouble = false
+      override def double = content.toDouble
+      def isLong = true
+      def long = content
+      def longOr(fallback: Long) = content
+      def big: BigDecimal = BigDecimal(content)
+      override def toString = content.toString
+      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { 
+        (if (bb.remaining < 20) refresh(bb) else bb) put toString.getBytes
+      }
+      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
+        (if (cb.remaining < 20) refresh(cb) else cb) put toString.toCharArray
+      }
+    }
+    final class Big(text: String) extends Num {
+      def isDouble = false
+      override def double = text.toDouble
+      def isLong = false
+      def long = if (text startsWith "-") Long.MaxValue else Long.MinValue
+      def longOr(fallback: Long) = fallback
+      def big = BigDecimal(text)
+      override def toString = text
+      override def jsonString(sb: java.lang.StringBuilder) { sb append text }
+      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { loadByteBuffer(text.getBytes, bb, refresh) }
+      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) { loadCharBuffer(text.toCharArray, cb, refresh) }
+    }
+  }
+
   sealed trait Arr extends Js { def size: Int; def apply(i: Int): Jast }
   object Arr {
     final class Jses(jses: Array[Js]) extends Arr {
@@ -129,7 +248,7 @@ object Js extends FromJson[Js] {
     }
     final class Dbls(precision: Int, xs: Array[Double]) extends Arr {
       def size = xs.length
-      def apply(i: Int) = new Num(precision, java.lang.Double.doubleToRawLongBits(xs(i)), null)
+      def apply(i: Int) = ???
     }
   }
   final class Obj(kvs: Array[Js]) extends Js {
@@ -452,6 +571,11 @@ trait JsonGenericParser {
   def Bool(a: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
   def Bool(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
   def Bool(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
+  def Str(a: Any): Either[JastError, kse.jsonal.Js.Str] = ???
+  def Str(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Str] = ???
+  def Str(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Str] = ???
+  def encodeString(a: Any, b: Any) {}
+  def encodeString(a: Any, b: Any, c: Any) {}
 }
 
 object JsonInputStreamParser extends JsonGenericParser {}
