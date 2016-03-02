@@ -1,6 +1,7 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
 // Copyright (c) 2015 Rex Kerr and Calico Life Sciences.
 
+/* 
 package kse.jsonic.parsers
 
 import kse.jsonic.ast._
@@ -17,3 +18,4 @@ object JsonParser {
   def parseWithDoubleArrays(b: Array[Byte]): JsResult = BytesParser parseWithDoubleArrays b
 }
 
+*/

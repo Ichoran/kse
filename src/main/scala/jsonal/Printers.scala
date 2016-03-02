@@ -1,6 +1,8 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
 // Copyright (c) 2015 Rex Kerr and Calico Life Sciences.
 
+/*
+
 package kse.jsonic.printers
 
 import kse.jsonic.ast._
@@ -71,3 +73,5 @@ object PrintIndented {
   def ascii(jr: JsResult): String = (new PrintIndented(ascii = true))(jr)
   def asciiLines(jr: JsResult): Array[String] = (new PrintIndented(ascii = true)).lines(jr)
 }
+
+*/

@@ -1,18 +1,211 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2015 Rex Kerr and Calico Life Sciences.
+// Copyright (c) 2015, 2016 Rex Kerr and Calico Life Sciences.
 
-package kse.jsonic.ast
+/** The Jsonal AST is an opinionated Scala representation of a JSON file.
+  * 
+  * It is minimal: data structures are as close as possible to the underlying JSON specification.
+  *
+  * It is compact: composite data structures are all stored in arrays.
+  *
+  * It is powerful: objects have a custom map implementation that enables rapid lookup in the underlying array.
+  *
+  * It loves numbers: arrays of numbers end up as arrays of numbers, not a clunky boxed mess!
+  *
+  * It is easy to build: just say the name of what you want to build, e.g. `Js.Obj`,
+  * add in the pieces with `~`, and end with the same name (`Js.Obj`).  Or, use `~~` to add
+  * whole collections!  Want to built your own types in?  No problem--just extend `AsJson` or
+  * provide the `Jsonable` typeclass.
+  *
+  * It cleans up its own messes: the error data type is part of the AST.
+  *
+  * You can take it out in public: it will serialize itself to String or Byte representations, and it
+  * comes with default parsers to deserialize itself.
+  *
+  * It is NOT meant for repeated modification of a JSON AST; for that you want a lot of structural
+  * sharing and/or exposed mutable data structures, neither of which this AST provides.
+  */
 
-sealed trait JsResult
+package kse.jsonal
 
-sealed trait JsVal extends JsResult
+trait AsJson {
+  def json: Js
+  def jsonString(sb: java.lang.StringBuilder) { json.jsonString(sb) }
+  def jsonBytes(bb: java.nio.ByteBuffer, refresh: java.nio.ByteBuffer => Unit) { json.jsonBytes(bb, refresh) }
+  def jsonChars(cb: java.nio.CharBuffer, refresh: java.nio.CharBuffer => Unit) { json.jsonChars(cb, refresh) }
+}
 
+trait Jsonize[A] {
+  def jsonize(a: A): Js
+  def jsonizeString(a: A, sb: java.lang.StringBuilder) { jsonize(a).jsonString(sb) }
+  def jsonizeBytes(a: A, bb: java.nio.ByteBuffer, refresh: java.nio.ByteBuffer => Unit) { jsonize(a).jsonBytes(bb, refresh) }
+  def jsonizeChars(a: A, cb: java.nio.CharBuffer, refresh: java.nio.CharBuffer => Unit) { jsonize(a).jsonChars(cb, refresh) }
+}
+
+trait FromJson[A] {
+  def parse(input: Js): Either[JastError, A]
+
+  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, A] = Js.parse(input, i0, iN, ep) match {
+    case Left(je)  => Left(je)
+    case Right(js) => parse(js)
+  }
+  def parse(input: String): Either[JastError, A] = parse(input, 0, input.length, new FromJson.Endpoint(0))
+
+  def parse(input: java.nio.ByteBuffer): Either[JastError, A] = Js.parse(input) match {
+    case Left(je)  => Left(je)
+    case Right(js) => parse(js)
+  }
+
+  def parse(input: java.nio.CharBuffer): Either[JastError, A] = Js.parse(input) match {
+    case Left(je)  => Left(je)
+    case Right(js) => parse(js)
+  }
+
+  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, A] = Js.parse(input, ep) match {
+    case Left(je)  => Left(je)
+    case Right(js) => parse(js)
+  }
+}
+object FromJson {
+  case class Endpoint(var index: Long) {}
+}
+
+sealed trait Jast {}
+
+final case class JastError(msg: String, where: Long = -1L, because: Jast = Js.Null) extends Jast {}
+
+sealed trait Js extends Jast with AsJson {
+  def json: Js = this
+  override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
+}
+object Js extends FromJson[Js] {
+  def parse(input: Js): Either[JastError, Js] = Right(input)
+  override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Js(input, i0, iN, ep)
+  override def parse(input: java.nio.ByteBuffer) = JsonByteBufferParser.Js(input)
+  override def parse(input: java.nio.CharBuffer) = JsonCharBufferParser.Js(input)
+  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Js(input, ep)
+
+  sealed trait Null extends Js {}
+  final object Null extends Null with FromJson[Null] {
+    final private[this] val myBytesSayNull = "null".getBytes
+    final private[this] val myCharsSayNull = "null".toCharArray
+    override def jsonString(sb: java.lang.StringBuilder) { sb append "null" }
+    override def jsonBytes(bb: java.nio.ByteBuffer, refresh: java.nio.ByteBuffer => Unit) {
+      if (bb.capacity < 4) refresh(bb)
+      bb put myBytesSayNull
+    }
+    override def jsonChars(cb: java.nio.CharBuffer, refresh: java.nio.CharBuffer => Unit) {
+      if (cb.capacity < 4) refresh(cb)
+      cb put myCharsSayNull
+    }
+    override def toString = "null"
+    def parse(input: Js): Either[JastError, Null] = if (this eq input) Right(this) else Left(JastError("expected null"))
+    override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Null(input, i0, iN, ep)
+    override def parse(input: java.nio.ByteBuffer) = JsonByteBufferParser.Null(input)
+    override def parse(input: java.nio.CharBuffer) = JsonCharBufferParser.Null(input)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Null(input, ep)
+  }
+
+  sealed trait Bool extends Js { def value: Boolean }
+  object Bool extends FromJson[Bool] { 
+    def unapply(js: Js): Option[Boolean] = js match { case b: Bool => Some(b.value); case _ => None }
+    case object True extends Bool { def value = true }
+    case object False extends Bool { def value = false }
+    override def parse(input: Js): Either[JastError, Bool] = input match {
+      case b: Bool => Right(b)
+      case _       => Left(JastError("expected Js.Bool"))
+    }
+    override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Bool(input, i0, iN, ep)
+    override def parse(input: java.nio.ByteBuffer) = JsonByteBufferParser.Bool(input)
+    override def parse(input: java.nio.CharBuffer) = JsonCharBufferParser.Bool(input)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Bool(input, ep)
+  }
+  final case class Str(text: String) extends Js {}
+  final class Num(what: Int, content: Long, text: String) extends Js {}
+  sealed trait Arr extends Js { def size: Int; def apply(i: Int): Jast }
+  object Arr {
+    final class Jses(jses: Array[Js]) extends Arr {
+      def size = jses.length
+      def apply(i: Int) = jses(i)
+    }
+    final class Dbls(precision: Int, xs: Array[Double]) extends Arr {
+      def size = xs.length
+      def apply(i: Int) = new Num(precision, java.lang.Double.doubleToRawLongBits(xs(i)), null)
+    }
+  }
+  final class Obj(kvs: Array[Js]) extends Js {
+    private lazy val mapped = { 
+      val m = new collection.mutable.AnyRefMap[String, Js]
+      var i = 0
+      while (i < kvs.length - 1) {
+        m += (kvs(i).asInstanceOf[Str].text, kvs(i+1))
+        i += 2
+      }
+      m
+    }
+    def size: Int = kvs.length >> 1
+    def apply(key: String): Jast = mapped.getOrElse(key, JastError("no key: " + key))
+  }
+}
+
+/*
+
+/** Anything that implements `ToJson` can try to turn itself into a JSON AST.
+  * It may fail, in which case it will generate a `JsError`.
+  */
+trait ToJson {
+  def toJson: JsResult
+}
+
+trait FromJson[A] {
+  def from(source: A): JsResult
+}
+
+/** `Jsonal` objects can always turn themselves into a JSON AST.  They also
+  * know how to serialize themselves as a JSON string.
+  */
+trait Jsonal extends ToJson {
+  override def toJson: JsVal
+  def jsString(sb: java.lang.StringBuilder): Unit
+}
+
+/** `Jsonize` encapsulates the functionality of producing a JSON AST from a class. */
+trait Jsonize[A] {
+  def jsonize(a: A): JsVal
+  def serialize(a: A): String = jsonize(a).toString
+}
+
+/** The supertype of the Jsonal AST hierarchy.  Any parsing that might fail should return a JsResult. */
+sealed trait JsResult extends ToJson { def toJson = this }
+
+/** Represents an error in conversion to a JSON AST, including range positions if available. */
+case class JsError(msg: String, index: Long = -1L, because: JsResult = JsNull) extends JsResult {
+  override def toString =
+    if (index >= 0)
+      if (because eq JsNull) f"At $index, error $message"
+      else                   f"At $index, error $message\nbecause $because"
+    else
+      if (because eq JsNull) f"Error $message"
+      else f"Error $message\nbecause $because"
+}
+
+/** `Js` corresponds to a JSON value--it can hold any valid JSON. */
+sealed trait Js extends JsResult with Jsonal {
+  override def toString = { val sb = new java.lang.StringBuilder; jsString(sb); sb.result }
+}
+
+/** `JsNull` corresponds to a JSON `null`. */
 case object JsNull extends JsVal { override def toString = "null" }
 
+/** `JsBool` covers both `JsTrue` and `JsFalse` (the `true` and `false` values in JSON). */
 sealed trait JsBool extends JsVal { def value: Boolean }
+
+/** `JsTrue` corresponds to a JSON `true`. */
 case object JsTrue extends JsBool { def value = true; override def toString = "true" }
+
+/** `JsFalse` corresponds to a JSON `false`. */
 case object JsFalse extends JsBool { def value = false; override def toString = "false" }
 
+/** `JsStr` corresponds to a JSON string. */
 final case class JsStr(value: String) extends JsVal { override def toString = JsStr.escaped(value, quotes=true) }
 object JsStr {
   private[this] def hx(i: Int) = { val j = i&0xF; if (j < 10) (j + '0').toChar else (j + 55).toChar }
@@ -63,6 +256,9 @@ object JsStr {
   }
 }
 
+/** `JsNum` corresponds to a JSON number.  If the number fits nicely into a `Double`, that's where it will be.
+  * Otherwise, the literal value will be stored as a `String`.
+  */
 final case class JsNum(value: Double, literal: String) extends JsVal {
   def hasValue(d: Double) = value == d || (d.isNaN && value.isNaN)
   override def equals(a: Any) = a match {
@@ -76,6 +272,7 @@ object JsNum {
   def nan = new JsNum(Double.NaN, "null")
   def approx(value: Double): String = ???
 }
+
 
 sealed trait JsArr extends JsVal { def values: Array[JsVal] }
 final case class JsArrV(values: Array[JsVal]) extends JsArr {
@@ -243,4 +440,24 @@ final case class JsObj(keys: Array[String], values: Array[JsVal], table: collect
 }
 object JsObj { def empty = new JsObj(new Array[String](0), new Array[JsVal](0), Map.empty[String, JsVal]) }
 
-case class JsError(msg: String, from: Int, to: Int, because: Option[JsError]) extends JsResult {}
+*/
+
+trait JsonGenericParser {
+  def Js(a: Any): Either[JastError, kse.jsonal.Js] = ???
+  def Js(a: Any, b: Any): Either[JastError, kse.jsonal.Js] = ???
+  def Js(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js] = ???
+  def Null(a: Any): Either[JastError, kse.jsonal.Js.Null.type] = ???
+  def Null(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Null.type] = ???
+  def Null(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Null.type] = ???
+  def Bool(a: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
+  def Bool(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
+  def Bool(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
+}
+
+object JsonInputStreamParser extends JsonGenericParser {}
+
+object JsonByteBufferParser extends JsonGenericParser {}
+
+object JsonCharBufferParser extends JsonGenericParser {}
+
+object JsonStringParser extends JsonGenericParser {}

@@ -2,6 +2,8 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
 // Copyright (c) 2015 Rex Kerr and Calico Life Sciences.
 
+/*
+
 package kse.jsonic.parsers
 
 import kse.jsonic.ast._
@@ -383,3 +385,5 @@ object StringParser{
   def parse(s: String): JsResult = (new StringParser).parse(s)
   def parseWithDoubleArrays(s: String): JsResult = (new StringParser).parseDoubleArrays(true).parse(s)
 }
+
+*/

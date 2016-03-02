@@ -1,6 +1,8 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
 // Copyright (c) 2015 Rex Kerr and Calico Life Sciences.
 
+/*
+
 package kse
 
 package object jsonic {
@@ -39,3 +41,5 @@ package object jsonic {
     def apply(s: String): Option[JsVal] = oj match { case Some(jo: JsObj) => jo(s); case _ => None }
   }
 }
+
+*/
