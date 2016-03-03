@@ -76,12 +76,14 @@ sealed trait Jast {}
 final case class JastError(msg: String, where: Long = -1L, because: Jast = Js.Null) extends Jast {}
 
 sealed trait Js extends Jast with AsJson {
-  def double = Double.NaN
+  def double = Js.not_a_normal_NaN
 
   def json: Js = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
 }
 object Js extends FromJson[Js] {
+  private[jsonal] val not_a_normal_NaN = java.lang.Double.longBitsToDouble(0x7FF9000000000000L)
+
   private[jsonal] def loadByteBuffer(bytes: Array[Byte], bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) {
     var b = bb
     var i = 0
@@ -185,59 +187,36 @@ object Js extends FromJson[Js] {
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Str(input, ep)    
   }
 
-  sealed abstract class Num extends Js {
-    def isDouble: Boolean
-    def isLong: Boolean
-    def long: Long
-    def longOr(fallback: Long): Long
-    def big: BigDecimal
+  class Num private[jsonal] (format: Int, content: Double, text: String) extends Js {
+    def isDouble: Boolean = format >= 0
+    override def double = content
+    def isLong: Boolean = (format == -1) || (format > 0 && content.toLong == content)
+    def long: Long = if (format == -1) java.lang.Double.doubleToRawLongBits(content) else content.toLong
+    def longOr(fallback: Long): Long =
+      if (format == -1) java.lang.Double.doubleToRawLongBits(content)
+      else if (format >= 0) {
+        val l = content.toLong
+        if (l == content) l else fallback
+      }
+      else fallback
+    def big: BigDecimal =
+      if (text ne null) BigDecimal(text)
+      else if (isDouble) BigDecimal.decimal(content)
+      else BigDecimal(java.lang.Double.doubleToRawLongBits(content))
+    override def toString =
+      if (text ne null) text
+      else if (format >= 0) Num.formatTable(format).format(content)
+      else java.lang.Double.doubleToRawLongBits(content).toString
+    override def jsonString(sb: java.lang.StringBuilder) {
+      if (text ne null) sb append text
+      else if (format >= 0) sb append Num.formatTable(format).format(content)
+      else sb append java.lang.Double.doubleToRawLongBits(content)
+    }
+    override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { loadByteBuffer(toString.getBytes, bb, refresh) }
+    override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) { loadCharBuffer(toString.toCharArray, cb, refresh) }
   }
   object Num {
-    private[jsonal] val numericFormatTable: Array[String] = ???
-
-    final class Dbl(format: Int, content: Double) extends Num {
-      def isDouble = true
-      override def double = content
-      def isLong = content.toLong == content
-      def long = content.toLong
-      def longOr(fallback: Long) = { val ans = content.toLong; if (ans == content) ans else fallback }
-      def big = BigDecimal(toString)
-      override def toString = numericFormatTable(format).format(content)
-      override def jsonString(sb: java.lang.StringBuilder) { sb append toString }
-      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { 
-        (if (bb.remaining < 30) refresh(bb) else bb) put toString.getBytes
-      }
-      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
-        (if (cb.remaining < 30) refresh(cb) else cb) put toString.toCharArray
-      }
-    }
-    final class LongNotDbl(content: Long) extends Num {
-      def isDouble = false
-      override def double = content.toDouble
-      def isLong = true
-      def long = content
-      def longOr(fallback: Long) = content
-      def big: BigDecimal = BigDecimal(content)
-      override def toString = content.toString
-      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { 
-        (if (bb.remaining < 20) refresh(bb) else bb) put toString.getBytes
-      }
-      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) {
-        (if (cb.remaining < 20) refresh(cb) else cb) put toString.toCharArray
-      }
-    }
-    final class Big(text: String) extends Num {
-      def isDouble = false
-      override def double = text.toDouble
-      def isLong = false
-      def long = if (text startsWith "-") Long.MaxValue else Long.MinValue
-      def longOr(fallback: Long) = fallback
-      def big = BigDecimal(text)
-      override def toString = text
-      override def jsonString(sb: java.lang.StringBuilder) { sb append text }
-      override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer) { loadByteBuffer(text.getBytes, bb, refresh) }
-      override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer) { loadCharBuffer(text.toCharArray, cb, refresh) }
-    }
+    private[jsonal] val formatTable: Array[String] = ???
   }
 
   sealed trait Arr extends Js { def size: Int; def apply(i: Int): Jast }
