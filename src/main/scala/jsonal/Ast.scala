@@ -213,10 +213,40 @@ object Js extends FromJson[Js] {
         i += 1
       }
     }
-    override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = 
-      JsonByteBufferParser.encodeString(text, bb, refresh)
-    override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer =
-      JsonCharBufferParser.encodeString(text, cb, refresh)
+    override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
+      var b = bb
+      var i = 0
+      while (i < text.length) {
+        val c = text.charAt(i)
+        if (c == '"' || c == '\\') { if (b.remaining < 2) b = refresh(b); b put '\\'.toByte put c.toByte }
+        else if (c >= ' ' && c <= '~') { if (!b.hasRemaining) b = refresh(b); b put c.toByte }
+        else if (c == '\n') { if (b.remaining < 2) b = refresh(b); b put '\\'.toByte put 'n'.toByte }
+        else if (c == '\t') { if (b.remaining < 2) b = refresh(b); b put '\\'.toByte put 't'.toByte }
+        else if (c == '\r') { if (b.remaining < 2) b = refresh(b); b put '\\'.toByte put 'r'.toByte }
+        else if (c == '\f') { if (b.remaining < 2) b = refresh(b); b put '\\'.toByte put 'f'.toByte }
+        else if (c == '\b') { if (b.remaining < 2) b = refresh(b); b put '\\'.toByte put 'b'.toByte }
+        else { if (b.remaining < 6) b = refresh(b); b put "\\u%04x".format(c.toInt).getBytes }
+        i += 1
+      }
+      b
+    }
+    override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
+      var b = cb  // Normally we name this c, but call it b to avoid collision with char c below
+      var i = 0
+      while (i < text.length) {
+        val c = text.charAt(i)
+        if (c == '"' || c == '\\') { if (b.remaining < 2) b = refresh(b); b put '\\' put c }
+        else if (c >= ' ' && c <= '~') { if (!b.hasRemaining) b = refresh(b); b put c }
+        else if (c == '\n') { if (b.remaining < 2) b = refresh(b); b put '\\' put 'n' }
+        else if (c == '\t') { if (b.remaining < 2) b = refresh(b); b put '\\' put 't' }
+        else if (c == '\r') { if (b.remaining < 2) b = refresh(b); b put '\\' put 'r' }
+        else if (c == '\f') { if (b.remaining < 2) b = refresh(b); b put '\\' put 'f' }
+        else if (c == '\b') { if (b.remaining < 2) b = refresh(b); b put '\\' put 'b' }
+        else { if (b.remaining < 6) b = refresh(b); b put "\\u%04x".format(c.toInt).toCharArray }
+        i += 1
+      }
+      b
+    }
   }
   object Str extends FromJson[Str] {
     override def parse(input: Js): Either[JastError, Str] = input match {
@@ -791,8 +821,6 @@ trait JsonGenericParser {
   def Obj(a: Any): Either[JastError, kse.jsonal.Js.Obj] = ???
   def Obj(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Obj] = ???
   def Obj(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Obj] = ???
-  def encodeString(a: Any, b: Any) {}
-  def encodeString[B](a: Any, b: B, c: Any): B = ???
 }
 
 object JsonInputStreamParser extends JsonGenericParser {}
