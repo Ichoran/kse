@@ -11,8 +11,8 @@
   *
   * It loves numbers: arrays of numbers end up as arrays of numbers, not a clunky boxed mess!
   *
-  * It is easy to build: just say the name of what you want to build, e.g. `Js.Obj`,
-  * add in the pieces with `~`, and end with the same name (`Js.Obj`).  Or, use `~~` to add
+  * It is easy to build: just say the name of what you want to build, e.g. `Json.Obj`,
+  * add in the pieces with `~`, and end with the same name (`Json.Obj`).  Or, use `~~` to add
   * whole collections.  Want to build from your own types?  No problem--just extend `AsJson` or
   * provide the `Jsonable` typeclass.
   *
@@ -30,39 +30,39 @@ package kse.jsonal
 import java.nio._
 
 trait AsJson {
-  def json: Js
+  def json: Json
   def jsonString(sb: java.lang.StringBuilder) { json.jsonString(sb) }
   def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = json.jsonBytes(bb, refresh)
   def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = json.jsonChars(cb, refresh)
 }
 
 trait Jsonize[A] {
-  def jsonize(a: A): Js
+  def jsonize(a: A): Json
   def jsonizeString(a: A, sb: java.lang.StringBuilder) { jsonize(a).jsonString(sb) }
   def jsonizeBytes(a: A, bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = jsonize(a).jsonBytes(bb, refresh)
   def jsonizeChars(a: A, cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = jsonize(a).jsonChars(cb, refresh)
 }
 
 trait FromJson[A] {
-  def parse(input: Js): Either[JastError, A]
+  def parse(input: Json): Either[JastError, A]
 
-  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, A] = Js.parse(input, i0, iN, ep) match {
+  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, A] = Json.parse(input, i0, iN, ep) match {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
   def parse(input: String): Either[JastError, A] = parse(input, 0, input.length, new FromJson.Endpoint(0))
 
-  def parse(input: ByteBuffer): Either[JastError, A] = Js.parse(input) match {
+  def parse(input: ByteBuffer): Either[JastError, A] = Json.parse(input) match {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
 
-  def parse(input: CharBuffer): Either[JastError, A] = Js.parse(input) match {
+  def parse(input: CharBuffer): Either[JastError, A] = Json.parse(input) match {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
 
-  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, A] = Js.parse(input, ep) match {
+  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, A] = Json.parse(input, ep) match {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
@@ -80,27 +80,27 @@ sealed trait Jast {
   def apply(key: String): Jast
 }
 
-final case class JastError(msg: String, where: Long = -1L, because: Jast = Js.Null) extends Jast {
+final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.Null) extends Jast {
   def simple = false
-  def double = Js.not_a_normal_NaN
+  def double = Json.not_a_normal_NaN
   def bool = None
   def string = None
   def apply(i: Int) = this
   def apply(key: String) = this
 }
 
-sealed trait Js extends Jast with AsJson {
+sealed trait Json extends Jast with AsJson {
   protected def myName: String
-  def double = Js.not_a_normal_NaN
+  def double = Json.not_a_normal_NaN
   def bool: Option[Boolean] = None
   def string: Option[String] = None
   def apply(i: Int): Jast = JastError("Indexing into "+myName)
   def apply(key: String): Jast = JastError("Map looking on "+myName)
 
-  def json: Js = this
+  def json: Json = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
 }
-object Js extends FromJson[Js] {
+object Json extends FromJson[Json] {
   private[jsonal] val not_a_normal_NaN = java.lang.Double.longBitsToDouble(0x7FF9000000000000L)
 
   private[jsonal] def loadByteBuffer(bytes: Array[Byte], bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
@@ -152,22 +152,22 @@ object Js extends FromJson[Js] {
     c
   }
 
-  def apply(): Js = Null
-  def apply(b: Boolean): Js = if (b) Bool.True else Bool.False
-  def apply(s: String): Js = Str(s)
-  def apply(d: Double): Js = Num(d)
-  def apply(bd: BigDecimal): Js = Num(bd)
-  def apply(aj: Array[Js]): Js = Arr.All(aj)
-  def apply(xs: Array[Double]): Js = Arr.Dbl(xs)
-  def apply(kvs: Map[String, Js]): Js = Obj(kvs)
+  def apply(): Json = Null
+  def apply(b: Boolean): Json = if (b) Bool.True else Bool.False
+  def apply(s: String): Json = Str(s)
+  def apply(d: Double): Json = Num(d)
+  def apply(bd: BigDecimal): Json = Num(bd)
+  def apply(aj: Array[Json]): Json = Arr.All(aj)
+  def apply(xs: Array[Double]): Json = Arr.Dbl(xs)
+  def apply(kvs: Map[String, Json]): Json = Obj(kvs)
 
-  def parse(input: Js): Either[JastError, Js] = Right(input)
+  def parse(input: Json): Either[JastError, Json] = Right(input)
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Js(input, i0, iN, ep)
   override def parse(input: ByteBuffer) = JsonByteBufferParser.Js(input)
   override def parse(input: CharBuffer) = JsonCharBufferParser.Js(input)
   override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Js(input, ep)
 
-  sealed abstract class Null extends Js {}
+  sealed abstract class Null extends Json {}
   final object Null extends Null with FromJson[Null] {
     final private[this] val myBytesSayNull = "null".getBytes
     final private[this] val myCharsSayNull = "null".toCharArray
@@ -179,7 +179,7 @@ object Js extends FromJson[Js] {
     override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer =
       (if (cb.remaining < 4) refresh(cb) else cb) put myCharsSayNull
     override def toString = "null"
-    def parse(input: Js): Either[JastError, Null] =
+    def parse(input: Json): Either[JastError, Null] =
       if (this eq input) Right(this)
       else Left(JastError("expected null"))
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = 
@@ -190,7 +190,7 @@ object Js extends FromJson[Js] {
       JsonInputStreamParser.Null(input, ep)
   }
 
-  sealed abstract class Bool extends Js { 
+  sealed abstract class Bool extends Json { 
     protected def myName = "boolean"
     def simple = true
     override def bool = Some(value)
@@ -201,7 +201,7 @@ object Js extends FromJson[Js] {
     final private val myBytesSayFalse = "false".getBytes
     final private val myCharsSayTrue = "true".toCharArray
     final private val myCharsSayFalse = "false".toCharArray
-    def unapply(js: Js): Option[Boolean] = js match { case b: Bool => Some(b.value); case _ => None }
+    def unapply(js: Json): Option[Boolean] = js match { case b: Bool => Some(b.value); case _ => None }
     case object True extends Bool { 
       def value = true
       override def jsonString(sb: java.lang.StringBuilder) { sb append "true" }
@@ -218,9 +218,9 @@ object Js extends FromJson[Js] {
       override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer =
         (if (cb.remaining < 4) refresh(cb) else cb) put myCharsSayFalse
     }
-    override def parse(input: Js): Either[JastError, Bool] = input match {
+    override def parse(input: Json): Either[JastError, Bool] = input match {
       case b: Bool => Right(b)
-      case _       => Left(JastError("expected Js.Bool"))
+      case _       => Left(JastError("expected Json.Bool"))
     }
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = 
       JsonStringParser.Bool(input, i0, iN, ep)
@@ -230,7 +230,7 @@ object Js extends FromJson[Js] {
       JsonInputStreamParser.Bool(input, ep)
   }
 
-  final case class Str(text: String) extends Js {
+  final case class Str(text: String) extends Json {
     protected def myName = "string"
     def simple = true
     override def jsonString(sb: java.lang.StringBuilder) {
@@ -290,9 +290,9 @@ object Js extends FromJson[Js] {
     }
   }
   object Str extends FromJson[Str] {
-    override def parse(input: Js): Either[JastError, Str] = input match {
+    override def parse(input: Json): Either[JastError, Str] = input match {
       case s: Str => Right(s)
-      case _      => Left(JastError("expected Js.Str"))
+      case _      => Left(JastError("expected Json.Str"))
     }
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
       JsonStringParser.Str(input, i0, iN, ep)
@@ -302,7 +302,7 @@ object Js extends FromJson[Js] {
       JsonInputStreamParser.Str(input, ep)    
   }
 
-  class Num private[jsonal] (format: Int, content: Double, text: String) extends Js {
+  class Num private[jsonal] (format: Int, content: Double, text: String) extends Json {
     protected def myName = "number"
     def simple = true
     def isDouble: Boolean = format >= 0
@@ -342,9 +342,9 @@ object Js extends FromJson[Js] {
     def apply(d: Double, precision: Int = 16): Num = ???
     def apply(bd: BigDecimal): Num = ???
 
-    override def parse(input: Js): Either[JastError, Num] = input match {
+    override def parse(input: Json): Either[JastError, Num] = input match {
       case n: Num => Right(n)
-      case _      => Left(JastError("expected Js.Num"))
+      case _      => Left(JastError("expected Json.Num"))
     }
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
       JsonStringParser.Num(input, i0, iN, ep)
@@ -354,15 +354,15 @@ object Js extends FromJson[Js] {
       JsonInputStreamParser.Num(input, ep)    
   }
 
-  sealed trait Arr extends Js {
+  sealed trait Arr extends Json {
     protected def myName = "array"
     def simple = false
     def size: Int
   }
   object Arr extends FromJson[Arr] {
-    def apply(aj: Array[Js]): Arr = All(aj)
+    def apply(aj: Array[Json]): Arr = All(aj)
     def apply(xs: Array[Double], precision: Int = 16): Arr = Dbl(xs, precision)
-    final class All(alls: Array[Js]) extends Arr {
+    final class All(alls: Array[Json]) extends Arr {
       def size = alls.length
       override def apply(i: Int) = if (i < 0 || i >= alls.length) JastError("bad index "+i) else alls(i)
       override def jsonString(sb: java.lang.StringBuilder) {
@@ -412,7 +412,7 @@ object Js extends FromJson[Js] {
       }
     }
     object All {
-      def apply(aj: Array[Js]) = new All(aj)
+      def apply(aj: Array[Json]) = new All(aj)
     }
 
     final class Dbl(format: Int, val direct: Array[Double]) extends Arr {
@@ -474,9 +474,9 @@ object Js extends FromJson[Js] {
       def apply(xs: Array[Int]): Dbl = ???
     }
 
-    override def parse(input: Js): Either[JastError, Arr] = input match {
+    override def parse(input: Json): Either[JastError, Arr] = input match {
       case n: Arr => Right(n)
-      case _      => Left(JastError("expected Js.Arr"))
+      case _      => Left(JastError("expected Json.Arr"))
     }
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
       JsonStringParser.Arr(input, i0, iN, ep)
@@ -486,9 +486,9 @@ object Js extends FromJson[Js] {
       JsonInputStreamParser.Arr(input, ep)    
   }
 
-  final class Obj(kvs: Array[Js]) extends Js {
+  final class Obj(kvs: Array[Json]) extends Json {
     private lazy val mapped = { 
-      val m = new collection.mutable.AnyRefMap[String, Js]
+      val m = new collection.mutable.AnyRefMap[String, Json]
       var i = 0
       while (i < kvs.length - 1) {
         m += (kvs(i).asInstanceOf[Str].text, kvs(i+1))
@@ -500,7 +500,7 @@ object Js extends FromJson[Js] {
     def simple = false
     def size: Int = kvs.length >> 1
     override def apply(key: String): Jast = mapped.getOrElse(key, JastError("no key: " + key))
-    def get(key: String): Option[Js] = mapped.get(key)
+    def get(key: String): Option[Json] = mapped.get(key)
     override def jsonString(sb: java.lang.StringBuilder) {
       sb append '{'
       var i = 0
@@ -573,15 +573,15 @@ object Js extends FromJson[Js] {
     }
   }
   object Obj extends FromJson[Obj] {
-    def apply(kvs: collection.Map[String, Js]) = {
-      val a = new Array[Js](2*kvs.size)
+    def apply(kvs: collection.Map[String, Json]) = {
+      val a = new Array[Json](2*kvs.size)
       var i = 0
       kvs.foreach{ case (k,v) => a(i) = new Str(k); a(i+1) = v; i += 2 }
       new Obj(a)
     }
-    override def parse(input: Js): Either[JastError, Obj] = input match {
+    override def parse(input: Json): Either[JastError, Obj] = input match {
       case n: Obj => Right(n)
-      case _      => Left(JastError("expected Js.Obj"))
+      case _      => Left(JastError("expected Json.Obj"))
     }
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
       JsonStringParser.Obj(input, i0, iN, ep)
@@ -888,27 +888,27 @@ object JsObj { def empty = new JsObj(new Array[String](0), new Array[JsVal](0), 
 */
 
 trait JsonGenericParser {
-  def Js(a: Any): Either[JastError, kse.jsonal.Js] = ???
-  def Js(a: Any, b: Any): Either[JastError, kse.jsonal.Js] = ???
-  def Js(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js] = ???
-  def Null(a: Any): Either[JastError, kse.jsonal.Js.Null.type] = ???
-  def Null(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Null.type] = ???
-  def Null(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Null.type] = ???
-  def Bool(a: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
-  def Bool(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
-  def Bool(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Bool] = ???
-  def Str(a: Any): Either[JastError, kse.jsonal.Js.Str] = ???
-  def Str(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Str] = ???
-  def Str(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Str] = ???
-  def Num(a: Any): Either[JastError, kse.jsonal.Js.Num] = ???
-  def Num(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Num] = ???
-  def Num(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Num] = ???
-  def Arr(a: Any): Either[JastError, kse.jsonal.Js.Arr] = ???
-  def Arr(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Arr] = ???
-  def Arr(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Arr] = ???
-  def Obj(a: Any): Either[JastError, kse.jsonal.Js.Obj] = ???
-  def Obj(a: Any, b: Any): Either[JastError, kse.jsonal.Js.Obj] = ???
-  def Obj(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Js.Obj] = ???
+  def Js(a: Any): Either[JastError, kse.jsonal.Json] = ???
+  def Js(a: Any, b: Any): Either[JastError, kse.jsonal.Json] = ???
+  def Js(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json] = ???
+  def Null(a: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
+  def Null(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
+  def Null(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
+  def Bool(a: Any): Either[JastError, kse.jsonal.Json.Bool] = ???
+  def Bool(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Bool] = ???
+  def Bool(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Bool] = ???
+  def Str(a: Any): Either[JastError, kse.jsonal.Json.Str] = ???
+  def Str(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Str] = ???
+  def Str(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Str] = ???
+  def Num(a: Any): Either[JastError, kse.jsonal.Json.Num] = ???
+  def Num(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Num] = ???
+  def Num(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Num] = ???
+  def Arr(a: Any): Either[JastError, kse.jsonal.Json.Arr] = ???
+  def Arr(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Arr] = ???
+  def Arr(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Arr] = ???
+  def Obj(a: Any): Either[JastError, kse.jsonal.Json.Obj] = ???
+  def Obj(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Obj] = ???
+  def Obj(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Obj] = ???
 }
 
 object JsonInputStreamParser extends JsonGenericParser {}
