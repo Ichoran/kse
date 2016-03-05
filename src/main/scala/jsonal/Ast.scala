@@ -114,6 +114,19 @@ object Js extends FromJson[Js] {
     }
     null
   }
+  private[jsonal] def loadByteBuffer(bytes: String, bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
+    var b = bb
+    var i = 0
+    while (i < bytes.length) {
+      val j = i
+      if (!b.hasRemaining) b = refresh(b)
+      while (i < bytes.length && b.hasRemaining) {
+        b put bytes.charAt(i).toByte
+        i += 1
+      }
+    }
+    b
+  }
   private[jsonal] def loadCharBuffer(chars: Array[Char], cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
     var c = cb
     var i = 0
@@ -125,6 +138,28 @@ object Js extends FromJson[Js] {
     }
     null
   }
+  private[jsonal] def loadCharBuffer(chars: String, cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
+    var c = cb
+    var i = 0
+    while (i < chars.length) {
+      val j = i
+      if (!c.hasRemaining) c = refresh(c)
+      while (i < chars.length && c.hasRemaining) {
+        c put chars.charAt(i)
+        i += 1
+      }
+    }
+    c
+  }
+
+  def apply(): Js = Null
+  def apply(b: Boolean): Js = if (b) Bool.True else Bool.False
+  def apply(s: String): Js = Str(s)
+  def apply(d: Double): Js = Num(d)
+  def apply(bd: BigDecimal): Js = Num(bd)
+  def apply(aj: Array[Js]): Js = Arr.All(aj)
+  def apply(xs: Array[Double]): Js = Arr.Dbl(xs)
+  def apply(kvs: Map[String, Js]): Js = Obj(kvs)
 
   def parse(input: Js): Either[JastError, Js] = Right(input)
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Js(input, i0, iN, ep)
@@ -200,6 +235,7 @@ object Js extends FromJson[Js] {
     def simple = true
     override def jsonString(sb: java.lang.StringBuilder) {
       var i = 0
+      sb append '"'
       while (i < text.length) {
         val c = text.charAt(i)
         if (c == '"' || c == '\\') sb append '\\' append c
@@ -212,9 +248,11 @@ object Js extends FromJson[Js] {
         else sb append "\\u%04x".format(c.toInt)
         i += 1
       }
+      sb append '"'
     }
     override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
-      var b = bb
+      var b = if (bb.hasRemaining) bb else refresh(bb)
+      b put '"'.toByte
       var i = 0
       while (i < text.length) {
         val c = text.charAt(i)
@@ -228,10 +266,12 @@ object Js extends FromJson[Js] {
         else { if (b.remaining < 6) b = refresh(b); b put "\\u%04x".format(c.toInt).getBytes }
         i += 1
       }
-      b
+      if (!b.hasRemaining) b = refresh(b)
+      b put '"'.toByte
     }
     override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
-      var b = cb  // Normally we name this c, but call it b to avoid collision with char c below
+      var b = if (cb.hasRemaining) cb else refresh(cb) // Normally we name this c, but call it b to avoid collision with char c below
+      b put '"'
       var i = 0
       while (i < text.length) {
         val c = text.charAt(i)
@@ -245,7 +285,8 @@ object Js extends FromJson[Js] {
         else { if (b.remaining < 6) b = refresh(b); b put "\\u%04x".format(c.toInt).toCharArray }
         i += 1
       }
-      b
+      if (!b.hasRemaining) b = refresh(b)
+      b put '"'
     }
   }
   object Str extends FromJson[Str] {
@@ -297,6 +338,10 @@ object Js extends FromJson[Js] {
   }
   object Num extends FromJson[Num] {
     private[jsonal] val formatTable: Array[String] = ???
+
+    def apply(d: Double, precision: Int = 16): Num = ???
+    def apply(bd: BigDecimal): Num = ???
+
     override def parse(input: Js): Either[JastError, Num] = input match {
       case n: Num => Right(n)
       case _      => Left(JastError("expected Js.Num"))
@@ -315,6 +360,8 @@ object Js extends FromJson[Js] {
     def size: Int
   }
   object Arr extends FromJson[Arr] {
+    def apply(aj: Array[Js]): Arr = All(aj)
+    def apply(xs: Array[Double], precision: Int = 16): Arr = Dbl(xs, precision)
     final class All(alls: Array[Js]) extends Arr {
       def size = alls.length
       override def apply(i: Int) = if (i < 0 || i >= alls.length) JastError("bad index "+i) else alls(i)
@@ -364,6 +411,10 @@ object Js extends FromJson[Js] {
         c put ']'
       }
     }
+    object All {
+      def apply(aj: Array[Js]) = new All(aj)
+    }
+
     final class Dbl(format: Int, val direct: Array[Double]) extends Arr {
       def size = direct.length
       override def apply(i: Int) = if (i < 0 || i >= direct.length) JastError("bad index "+i) else new Num(0, direct(i),"%e")
@@ -414,6 +465,15 @@ object Js extends FromJson[Js] {
         c put ']'
       }
     }
+    object Dbl {
+      def apply(xs: Array[Double], precision: Int): Dbl = ???
+      def apply(xs: Array[Double]): Dbl = apply(xs, 16)
+      def apply(xs: Array[Float], precision: Int): Dbl = ???
+      def apply(xs: Array[Float]): Dbl = apply(xs, 7)
+      def apply(xs: Array[Long]): Dbl = ???
+      def apply(xs: Array[Int]): Dbl = ???
+    }
+
     override def parse(input: Js): Either[JastError, Arr] = input match {
       case n: Arr => Right(n)
       case _      => Left(JastError("expected Js.Arr"))
@@ -445,22 +505,27 @@ object Js extends FromJson[Js] {
       sb append '{'
       var i = 0
       while (i < kvs.length-1) {
-        if (i > 0) sb append ", "
+        sb append (if (i > 0) ", " else " ")
         kvs(i).jsonString(sb)
         sb append ':'
         kvs(i+1).jsonString(sb)
         i += 2
       }
-      sb append '}'      
+      sb append (if (i > 0) " }" else "}")
     }
     override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
-      var b = if (bb.hasRemaining) bb else refresh(bb)
+      var b = if (bb.remaining >= 2) bb else refresh(bb)
       b put '{'.toByte
+      if (kvs.length > 0) b put ' '.toByte
       var i = 0
       while (i < kvs.length-1) {
         if (i > 0) {
           if (b.remaining < 2) b = refresh(b)
-          b put '['.toByte put ' '.toByte
+          b put ','.toByte put ' '.toByte
+        }
+        else {
+          if (!b.hasRemaining) b = refresh(b)
+          b put ' '.toByte
         }
         b = kvs(i).jsonBytes(b, refresh)
         if (!b.hasRemaining) b = refresh(b)
@@ -468,17 +533,28 @@ object Js extends FromJson[Js] {
         kvs(i+1).jsonBytes(b, refresh)
         i += 2
       }
-      if (!b.hasRemaining) b = refresh(b)
-      b put '}'.toByte
+      if (kvs.length > 0) {
+        if (b.remaining < 2) b = refresh(b)
+        b put ' '.toByte put '}'.toByte
+      }
+      else {
+        if (!b.hasRemaining) b = refresh(b)
+        b put '}'.toByte
+      }
     }
     override def jsonChars(bb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
-      var b = if (bb.hasRemaining) bb else refresh(bb)
+      var b = if (bb.remaining >= 2) bb else refresh(bb)
       b put '{'
+      if (kvs.length > 0) b put ' '
       var i = 0
       while (i < kvs.length-1) {
         if (i > 0) {
           if (b.remaining < 2) b = refresh(b)
           b put '[' put ' '
+        }
+        else {
+          if (!b.hasRemaining) b = refresh(b)
+          b put ' '
         }
         b = kvs(i).jsonChars(b, refresh)
         if (!b.hasRemaining) b = refresh(b)
@@ -486,11 +562,23 @@ object Js extends FromJson[Js] {
         b = kvs(i+1).jsonChars(b, refresh)
         i += 2
       }
-      if (!b.hasRemaining) b = refresh(b)
-      b put '}'
+      if (kvs.length > 0) {
+        if (b.remaining < 2) b = refresh(b)
+        b put ' ' put '}'
+      }
+      else {
+        if (!b.hasRemaining) b = refresh(b)
+        b put '}'
+      }
     }
   }
   object Obj extends FromJson[Obj] {
+    def apply(kvs: collection.Map[String, Js]) = {
+      val a = new Array[Js](2*kvs.size)
+      var i = 0
+      kvs.foreach{ case (k,v) => a(i) = new Str(k); a(i+1) = v; i += 2 }
+      new Obj(a)
+    }
     override def parse(input: Js): Either[JastError, Obj] = input match {
       case n: Obj => Right(n)
       case _      => Left(JastError("expected Js.Obj"))
