@@ -89,7 +89,7 @@ final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.
   def apply(key: String) = this
 }
 
-sealed trait JsonBuildTerminator[T] {}
+trait JsonBuildTerminator[T] {}
 
 sealed trait Json extends Jast with AsJson {
   protected def myName: String
@@ -164,6 +164,20 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   def apply(kvs: Map[String, Json]): Json = Obj(kvs)
 
   def ~(dbl: Double): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ dbl
+  def ~(nul: scala.Null): Arr.All.Build[Json] = (new Arr.All.Build[Json]) ~ Null
+  def ~(js: Json): Arr.All.Build[Json] = (new Arr.All.Build[Json]) ~ js
+  def ~[A: Jsonize](a: A): Arr.All.Build[Json] = (new Arr.All.Build[Json]) ~ a
+
+  def ~(key: Str, nul: scala.Null) = (new Obj.Build[Json]) ~ (key, nul)
+  def ~(key: String, nul: scala.Null) = (new Obj.Build[Json]) ~ (key, nul)
+  def ~(key: Str, js: Json) = (new Obj.Build[Json]) ~ (key, js)
+  def ~(key: String, js: Json) = (new Obj.Build[Json]) ~ (Str(key), js)
+  def ~[A](key: Str, a: A)(implicit jser: Jsonize[A]) = (new Obj.Build[Json]) ~ (key, jser.jsonize(a))
+  def ~[A](key: String, a: A)(implicit jser: Jsonize[A]) = (new Obj.Build[Json]) ~ (Str(key), jser.jsonize(a))
+  def ~~(coll: collection.TraversableOnce[(Str,Json)]) = (new Obj.Build[Json]) ~~ coll
+  def ~~[S](coll: collection.TraversableOnce[(S,Json)])(implicit ev: S =:= String) = (new Obj.Build[Json]) ~~ coll
+  def ~~[A: Jsonize](coll: collection.TraversableOnce[(Str,A)]) = (new Obj.Build[Json]) ~~ coll
+  def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= String) = (new Obj.Build[Json]) ~~ coll
 
   def parse(input: Json): Either[JastError, Json] = Right(input)
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Js(input, i0, iN, ep)
@@ -391,9 +405,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def apply(aj: Array[Json]): Arr = All(aj)
     def apply(xs: Array[Double], precision: Int = 16): Arr = Dbl(xs, precision)
 
-    def ~(dbl: Double): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ dbl
     def ~(done: Json.type): Json = Dbl.empty
     def ~(done: Arr.type): Arr = Dbl.empty
+    def ~(dbl: Double): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ dbl
+    def ~(nul: scala.Null): All.Build[Arr] = (new All.Build[Arr]) ~ null
+    def ~(js: Json): All.Build[Arr] = (new All.Build[Arr]) ~ js
+    def ~[A: Jsonize](a: A): All.Build[Arr] = (new All.Build[Arr]) ~ a
 
     final class All(alls: Array[Json]) extends Arr {
       def size = alls.length
@@ -689,13 +706,65 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
     }
   }
-  object Obj extends FromJson[Obj] {
+  object Obj extends FromJson[Obj] with JsonBuildTerminator[Obj] {
+    val empty = new Obj(Array())
+
     def apply(kvs: collection.Map[String, Json]) = {
       val a = new Array[Json](2*kvs.size)
       var i = 0
       kvs.foreach{ case (k,v) => a(i) = new Str(k); a(i+1) = v; i += 2 }
       new Obj(a)
     }
+
+    def ~(done: Obj.type) = empty
+    def ~~(done: Obj.type) = empty
+    def ~(key: Str, nul: scala.Null) = (new Build[Obj]) ~ (key, nul)
+    def ~(key: String, nul: scala.Null) = (new Build[Obj]) ~ (key, nul)
+    def ~(key: Str, js: Json) = (new Build[Obj]) ~ (key, js)
+    def ~(key: String, js: Json) = (new Build[Obj]) ~ (Str(key), js)
+    def ~[A](key: Str, a: A)(implicit jser: Jsonize[A]) = (new Build[Obj]) ~ (key, jser.jsonize(a))
+    def ~[A](key: String, a: A)(implicit jser: Jsonize[A]) = (new Build[Obj]) ~ (Str(key), jser.jsonize(a))
+    def ~~(coll: collection.TraversableOnce[(Str,Json)]) = (new Build[Obj]) ~~ coll
+    def ~~[S](coll: collection.TraversableOnce[(S,Json)])(implicit ev: S =:= String) = (new Build[Obj]) ~~ coll
+    def ~~[A: Jsonize](coll: collection.TraversableOnce[(Str,A)]) = (new Build[Obj]) ~~ coll
+    def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= String) = (new Build[Obj]) ~~ coll
+
+    class Build[T >: Obj] {
+      private[this] var i = 0
+      private[this] var a: Array[Json] = new Array[Json](6)
+      def ~(done: JsonBuildTerminator[T]): T =
+        new Obj(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+      def ~~(done: JsonBuildTerminator[T]): T = this ~ done
+      def ~(key: Str, js: Json): this.type = {
+        if (i >= a.length-1) a = java.util.Arrays.copyOf(a, ((a.length << 1) | a.length) & 0x7FFFFFFE)
+        a(i) = key
+        a(i+1) = js
+        i += 2
+        this
+      }
+      def ~(key: String, js: Json): this.type = this ~ (Str(key), js)
+      def ~(key: Str, nul: scala.Null): this.type = this ~ (key, Null)
+      def ~(key: String, nul: scala.Null): this.type = this ~ (Str(key), Null)
+      def ~[A](key: Str, a: A)(implicit jser: Jsonize[A]): this.type = this ~ (key, jser.jsonize(a))
+      def ~[A](key: String, a: A)(implicit jser: Jsonize[A]): this.type = this ~(Str(key), jser.jsonize(a))
+      def ~~(coll: collection.TraversableOnce[(Str,Json)]): this.type = {
+        coll.foreach{ case (k,v) => this ~ (k,v) }
+        this
+      }
+      def ~~[S](coll: collection.TraversableOnce[(S,Json)])(implicit ev: S =:= String): this.type = {
+        coll.foreach{ case (k,v) => this ~ (Str(ev(k)),v) }
+        this
+      }
+      def ~~[A: Jsonize](coll: collection.TraversableOnce[(Str,A)]): this.type = {
+        coll.foreach{ case (k,a) => this ~ (k,a) }
+        this
+      }
+      def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= String): this.type = {
+        coll.foreach{ case (k,a) => this ~ (Str(ev(k)),a) }
+        this
+      }
+    }
+
     override def parse(input: Json): Either[JastError, Obj] = input match {
       case n: Obj => Right(n)
       case _      => Left(JastError("expected Json.Obj"))
