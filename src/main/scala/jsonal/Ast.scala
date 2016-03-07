@@ -29,8 +29,40 @@ package kse.jsonal
 
 import java.nio._
 
+class PrettyJson(val lines: collection.mutable.ArrayBuilder[String], val lastLine: java.lang.StringBuilder, indent: Int = 2, margin: Int = 80) {
+  private[jsonal] val myLine = new java.lang.StringBuilder
+  private var lastSpaces = 0
+  private var myIndent = math.max(0, indent)
+  private var myMargin = math.max(0, margin)
+  private var mySpaces = PrettyJson.lotsOfSpaces
+  private var myDepth = 0
+  def depth = myDepth
+  def deeper: this.type = { myDepth += 1; this }
+  def shallower: this.type = { myDepth = if (myDepth > 0) myDepth -1 else 0; this }
+  def tooDeep = lastSpaces >= myMargin
+  def append(s: String): this.type = { lastLine append s; this }
+  def advance(depth: Int): this.type = {
+    myDepth = depth
+    val nsp = math.min(myMargin, depth * myIndent)
+    if (lastLine.length > 0) { lines += lastLine.toString; lastLine.setLength(math.min(lastSpaces, nsp)) }
+    val missing = lastLine.length - nsp
+    if (missing > 0) {
+      if (missing > mySpaces.length) mySpaces = Array.fill(mySpaces.length * 2)(' ')
+      lastLine.append(mySpaces, 0, missing)
+    }
+    lastSpaces = lastLine.length
+    this
+  }
+  def advance(): this.type = advance(myDepth)
+  def result() = { if (lastLine.length > 0) { lines += lastLine.toString ; lastLine.setLength(0) }; lines.result() }
+}
+object PrettyJson {
+  private[jsonal] val lotsOfSpaces: Array[Char] = Array.fill(1022)(' ')
+}
+
 trait AsJson {
   def json: Json
+  def jsonPretty(pretty: PrettyJson, depth: Int) { json.jsonPretty(pretty, depth) }
   def jsonString(sb: java.lang.StringBuilder) { json.jsonString(sb) }
   def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = json.jsonBytes(bb, refresh)
   def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = json.jsonChars(cb, refresh)
@@ -38,6 +70,7 @@ trait AsJson {
 
 trait Jsonize[A] {
   def jsonize(a: A): Json
+  def jsonizePretty(a: A, pretty: PrettyJson, depth: Int) { jsonize(a).jsonPretty(pretty, depth) }
   def jsonizeString(a: A, sb: java.lang.StringBuilder) { jsonize(a).jsonString(sb) }
   def jsonizeBytes(a: A, bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = jsonize(a).jsonBytes(bb, refresh)
   def jsonizeChars(a: A, cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = jsonize(a).jsonChars(cb, refresh)
@@ -164,9 +197,20 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   def apply(kvs: Map[String, Json]): Json = Obj(kvs)
 
   def ~(dbl: Double): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ dbl
-  def ~(nul: scala.Null): Arr.All.Build[Json] = (new Arr.All.Build[Json]) ~ Null
-  def ~(js: Json): Arr.All.Build[Json] = (new Arr.All.Build[Json]) ~ js
-  def ~[A: Jsonize](a: A): Arr.All.Build[Json] = (new Arr.All.Build[Json]) ~ a
+  def ~(dbl: Double, precision: Int): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ (dbl, precision)
+  def ~(flt: Float): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ flt
+  def ~~(doubles: Array[Double]): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~~ doubles
+  def ~~(floats: Array[Float]): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~~ floats
+  def ~~(coll: collection.TraversableOnce[Double]) = (new Arr.Dbl.Build[Json]) ~~ coll
+  def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float) = (new Arr.Dbl.Build[Json]) ~~ coll
+
+  def ~(js: Json) = (new Arr.All.Build[Json]) ~ js
+  def ~(nul: scala.Null) = (new Arr.All.Build[Json]) ~ Null
+  def ~[A: Jsonize](a: A) = (new Arr.All.Build[Json]) ~ a
+  def ~~(jses: Array[Json]) = (new Arr.All.Build[Json]) ~~ jses
+  def ~~[A: Jsonize](as: Array[A]) = (new Arr.All.Build[Json]) ~~ as
+  def ~~(coll: collection.TraversableOnce[Json]) = (new Arr.All.Build[Json]) ~~ coll
+  def ~~[A: Jsonize](coll: collection.TraversableOnce[A]) = (new Arr.All.Build[Json]) ~~ coll
 
   def ~(key: Str, nul: scala.Null) = (new Obj.Build[Json]) ~ (key, nul)
   def ~(key: String, nul: scala.Null) = (new Obj.Build[Json]) ~ (key, nul)
@@ -191,6 +235,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     final private[this] val myCharsSayNull = "null".toCharArray
     protected def myName = "null"
     def simple = true
+    override def jsonPretty(pretty: PrettyJson, depth: Int) { pretty append "null" }
     override def jsonString(sb: java.lang.StringBuilder) { sb append "null" }
     override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
       (if (bb.remaining < 4) refresh(bb) else bb) put myBytesSayNull
@@ -222,6 +267,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def unapply(js: Json): Option[Boolean] = js match { case b: Bool => Some(b.value); case _ => None }
     case object True extends Bool { 
       def value = true
+      override def jsonPretty(pretty: PrettyJson, depth: Int) { pretty append ""}
       override def jsonString(sb: java.lang.StringBuilder) { sb append "true" }
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
         (if (bb.remaining < 4) refresh(bb) else bb) put myBytesSayTrue
@@ -405,24 +451,35 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def apply(aj: Array[Json]): Arr = All(aj)
     def apply(xs: Array[Double], precision: Int = 16): Arr = Dbl(xs, precision)
 
-    def ~(done: Json.type): Json = Dbl.empty
-    def ~(done: Arr.type): Arr = Dbl.empty
+    def ~(me: Arr.type) = Dbl.empty
     def ~(dbl: Double): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ dbl
-    def ~(nul: scala.Null): All.Build[Arr] = (new All.Build[Arr]) ~ null
-    def ~(js: Json): All.Build[Arr] = (new All.Build[Arr]) ~ js
-    def ~[A: Jsonize](a: A): All.Build[Arr] = (new All.Build[Arr]) ~ a
+    def ~(dbl: Double, precision: Int): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ (dbl, precision)
+    def ~(flt: Float): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ flt
+    def ~~(me: Arr.type) = Dbl.empty
+    def ~~(doubles: Array[Double]): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~~ doubles
+    def ~~(floats: Array[Float]): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~~ floats
+    def ~~(coll: collection.TraversableOnce[Double]) = (new Dbl.Build[Arr]) ~~ coll
+    def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float) = (new Dbl.Build[Arr]) ~~ coll
 
-    final class All(alls: Array[Json]) extends Arr {
-      def size = alls.length
-      override def apply(i: Int) = if (i < 0 || i >= alls.length) JastError("bad index "+i) else alls(i)
+    def ~(js: Json) = (new All.Build[Arr]) ~ js
+    def ~(nul: scala.Null) = (new All.Build[Arr]) ~ Null
+    def ~[A: Jsonize](a: A) = (new All.Build[Arr]) ~ a
+    def ~~(jses: Array[Json]) = (new All.Build[Arr]) ~~ jses
+    def ~~[A: Jsonize](as: Array[A]) = (new All.Build[Arr]) ~~ as
+    def ~~(coll: collection.TraversableOnce[Json]) = (new All.Build[Arr]) ~~ coll
+    def ~~[A: Jsonize](coll: collection.TraversableOnce[A]) = (new All.Build[Arr]) ~~ coll
+
+    final class All(values: Array[Json]) extends Arr {
+      def size = values.length
+      override def apply(i: Int) = if (i < 0 || i >= values.length) JastError("bad index "+i) else values(i)
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
-        if (alls.length > 0) {
-          alls(0).jsonString(sb)
+        if (values.length > 0) {
+          values(0).jsonString(sb)
           var i = 1
-          while (i < alls.length) {
+          while (i < values.length) {
             sb append ", "
-            alls(i).jsonString(sb)
+            values(i).jsonString(sb)
             i += 1
           }
         }
@@ -431,13 +488,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
         var b = if (bb.hasRemaining) bb else refresh(bb)
         b put '['.toByte
-        if (alls.length > 0) {
-          b = alls(0).jsonBytes(b, refresh)
+        if (values.length > 0) {
+          b = values(0).jsonBytes(b, refresh)
           var i = 1
-          while (i < alls.length) {
+          while (i < values.length) {
             if (b.remaining < 2) b = refresh(b)
             b put ','.toByte put ' '.toByte
-            b = alls(i).jsonBytes(b, refresh)
+            b = values(i).jsonBytes(b, refresh)
             i += 1
           }
         }
@@ -447,13 +504,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
         var c = if (cb.hasRemaining) cb else refresh(cb)
         c put '['
-        if (alls.length > 0) {
-          c = alls(0).jsonChars(c, refresh)
+        if (values.length > 0) {
+          c = values(0).jsonChars(c, refresh)
           var i = 1
-          while (i < alls.length) {
+          while (i < values.length) {
             if (c.remaining < 2) c = refresh(c)
             c put ',' put ' '
-            c = alls(i).jsonChars(c, refresh)
+            c = values(i).jsonChars(c, refresh)
             i += 1
           }
         }
@@ -464,9 +521,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     object All extends JsonBuildTerminator[All] {
       def apply(aj: Array[Json]) = new All(aj)
 
-      def ~(nul: scala.Null) = (new Build[All]) ~ Null
       def ~(js: Json) = (new Build[All]) ~ js
+      def ~(nul: scala.Null) = (new Build[All]) ~ Null
       def ~[A: Jsonize](a: A) = (new Build[All]) ~ a
+      def ~~(jses: Array[Json]) = (new Build[All]) ~~ jses
+      def ~~[A: Jsonize](as: Array[A]) = (new Build[All]) ~~ as
+      def ~~(coll: collection.TraversableOnce[Json]) = (new Build[All]) ~~ coll
+      def ~~[A: Jsonize](coll: collection.TraversableOnce[A]) = (new Build[All]) ~~ coll
 
       class Build[T >: All] {
         private[this] var i = 0
@@ -481,6 +542,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         }
         def ~(nul: scala.Null): this.type = this ~ Null
         def ~[A](a: A)(implicit jser: Jsonize[A]): this.type = this ~ jser.jsonize(a)
+        def ~~(done: JsonBuildTerminator[T]): T = this ~ done
         def ~~(jses: Array[Json]): this.type = {
           // TODO - make this efficient!
           var i = 0
@@ -504,15 +566,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
     }
 
-    final class Dbl(format: Int, val direct: Array[Double]) extends Arr {
-      def size = direct.length
-      override def apply(i: Int) = if (i < 0 || i >= direct.length) JastError("bad index "+i) else new Num(0, direct(i),"%e")
+    final class Dbl(format: Int, val doubles: Array[Double]) extends Arr {
+      def size = doubles.length
+      override def apply(i: Int) = if (i < 0 || i >= doubles.length) JastError("bad index "+i) else new Num(0, doubles(i),"%e")
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
         var i = 0
-        while (i < direct.length) {
+        while (i < doubles.length) {
           if (i > 0) sb append ", "
-          val d = direct(i)
+          val d = doubles(i)
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) sb append "null"
           else sb append Num.formatNum(format, d)
           i += 1
@@ -523,12 +585,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         var b = if (bb.hasRemaining) bb else refresh(bb)
         b put '['.toByte
         var i = 0
-        while (i < direct.length) {
+        while (i < doubles.length) {
           if (i > 0) {
             if (b.remaining < 2) b = refresh(b)
             b put '['.toByte put ' '.toByte
           }
-          val d = direct(i)
+          val d = doubles(i)
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) b = Null.jsonBytes(b, refresh)
           else b = loadByteBuffer(Num.formatTable(format).format(d).getBytes, b, refresh)
           i += 1
@@ -540,12 +602,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         var c = if (cb.hasRemaining) cb else refresh(cb)
         c put '['
         var i = 0
-        while (i < direct.length) {
+        while (i < doubles.length) {
           if (i > 0) {
             if (c.remaining < 2) c = refresh(c)
             c put '[' put ' '
           }
-          val d = direct(i)
+          val d = doubles(i)
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) c = Null.jsonChars(c, refresh)
           else c = loadCharBuffer(Num.formatTable(format).format(d).toCharArray, c, refresh)
           i += 1
@@ -567,11 +629,19 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       def ~(me: Dbl.type) = empty
       def ~(dbl: Double): Build[Dbl] = (new Build[Dbl]) ~ dbl
       def ~(dbl: Double, precision: Int): Build[Dbl] = (new Build[Dbl]) ~ (dbl, precision)
+      def ~(flt: Float): Build[Dbl] = (new Build[Dbl]) ~ flt
+      def ~~(me: Dbl.type) = empty
+      def ~~(doubles: Array[Double]): Build[Dbl] = (new Build[Dbl]) ~~ doubles
+      def ~~(floats: Array[Float]): Build[Dbl] = (new Build[Dbl]) ~~ floats
+      def ~~(coll: collection.TraversableOnce[Double]) = (new Build[Dbl]) ~~ coll
+      def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float) = (new Build[Dbl]) ~~ coll
 
       class Build[T >: Dbl] {
         private[this] var i = 0
         private[this] var a: Array[Double] = new Array[Double](6)
         private[this] var prec: Int = -1
+        def ~(done: JsonBuildTerminator[T]): T =
+          new Dbl(if (prec < 0) 16 else prec, if (i==a.length) a else java.util.Arrays.copyOf(a, i))
         def ~(dbl: Double): this.type = {
           if (i >= a.length) a = java.util.Arrays.copyOf(a, ((a.length << 1) | a.length) & 0x7FFFFFFE)
           a(i) = dbl
@@ -583,12 +653,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           this ~ dbl
         }
         def ~(flt: Float): this.type = this ~ (flt.toDouble, 7)
-        def ~(done: JsonBuildTerminator[T]): T =
-          new Dbl(if (prec < 0) 16 else prec, if (i==a.length) a else java.util.Arrays.copyOf(a, i))
-        def ~~(dbls: Array[Double]): this.type = {
+        def ~~(done: JsonBuildTerminator[T]): T = this ~ done
+        def ~~(doubles: Array[Double]): this.type = {
           // TODO - make this efficient!
           var i = 0
-          while (i < dbls.length) { this ~ dbls(i); i += 1 }
+          while (i < doubles.length) { this ~ doubles(i); i += 1 }
           this
         }
         def ~~(floats: Array[Float]): this.type = {
@@ -605,6 +674,16 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           coll.foreach(x => this ~ x.asInstanceOf[Float])
           this
         }
+
+        def toAll[U >: All](that: All.Build[U]): All.Build[U] = {
+          var j = 0
+          while (j < i) {
+            if (java.lang.Double.isNaN(a(j)) && java.lang.Double.isInfinite(a(j))) that ~ Null
+            else that ~ Num(a(j))
+            j += 1
+          }
+          that
+        }
       }
     }
 
@@ -620,39 +699,102 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       JsonInputStreamParser.Arr(input, ep)    
   }
 
-  final class Obj(kvs: Array[Json]) extends Json {
-    private lazy val mapped = { 
-      val m = new collection.mutable.AnyRefMap[String, Json]
-      var i = 0
-      while (i < kvs.length - 1) {
-        m += (kvs(i).asInstanceOf[Str].text, kvs(i+1))
-        i += 2
-      }
-      m
-    }
+  sealed trait Obj extends Json {
     protected def myName = "object"
     def simple = false
-    def size: Int = kvs.length >> 1
-    override def apply(key: String): Jast = mapped.getOrElse(key, JastError("no key: " + key))
-    def get(key: String): Option[Json] = mapped.get(key)
-    override def jsonString(sb: java.lang.StringBuilder) {
-      sb append '{'
+    def size: Int = underlying.length >> 1
+    def hasDuplicateKeys: Boolean
+    def get(key: String): Option[Json]
+    def underlying: Array[AnyRef]
+  }
+  private[jsonal] final class AtomicObj(val underlying: Array[AnyRef])
+  extends java.util.concurrent.atomic.AtomicReference[collection.Map[String, Json]](null) with Obj {
+    private[this] def linearSearchOrNull(key: String): Json = {
       var i = 0
-      while (i < kvs.length-1) {
-        sb append (if (i > 0) ", " else " ")
-        kvs(i).jsonString(sb)
-        sb append ':'
-        kvs(i+1).jsonString(sb)
+      while (i < underlying.length - 1) {
+        if (key == (underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text })) return underlying(i+1).asInstanceOf[Json]
         i += 2
       }
-      sb append (if (i > 0) " }" else "}")
+      null
+    }
+    private[this] def getOrNull(key: String): Json = {
+      if (size < 6) linearSearchOrNull(key)
+      else {
+        var m = get()
+        var gotMap = false
+        do {
+          if (m eq Obj.mapBuildingInProcess) linearSearchOrNull(key)
+          else if (m eq null) {
+            if (compareAndSet(null, Obj.mapBuildingInProcess)) {
+              val arm = new collection.mutable.AnyRefMap[String, Json]()
+              var i = 0
+              while (i < underlying.length - 1) {
+                arm += (underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }, underlying(i+1).asInstanceOf[Json])
+                i += 2
+              }
+              set(arm)
+              return arm.getOrNull(key)
+            }
+            else m = get()
+          }
+          else gotMap = true
+        } while (!gotMap)
+        m.getOrElse(key, null)
+      }
+    }
+    override def apply(key: String): Jast = {
+      val ans = getOrNull(key)
+      if (ans eq null) JastError("no key: " + key) else ans
+    }
+    def hasDuplicateKeys: Boolean = size < 2 || {
+      if (size < 6) {
+        var i = 2
+        while (i < underlying.length -1) {
+          val key = underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }
+          var j = 0
+          while (j < i) {
+            if (key == (underlying(j) match { case s: String => s; case x => x.asInstanceOf[Str].text })) return false
+            j += 2
+          }
+          i += 2
+        }
+        true
+      }
+      else {
+        var m = get()
+        if ((m eq null) || (m eq Obj.mapBuildingInProcess)) {
+          val useWhatWeMake = compareAndSet(null, Obj.mapBuildingInProcess)
+          val arm = new collection.mutable.AnyRefMap[String, Json]()
+          var i = 0
+          while (i < underlying.length - 1) {
+            arm += (underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }, underlying(i+1).asInstanceOf[Json])
+            i += 2
+          }
+          if (useWhatWeMake) set(arm)
+          m = arm
+        }
+        m.size == size
+      }
+    }
+    def get(key: String): Option[Json] = Option(getOrNull(key))
+    override def jsonString(sb: java.lang.StringBuilder) {
+      if (underlying.length > 3) sb append "{ " else sb append '{'
+      var i = 0
+      while (i < underlying.length-1) {
+        if (i > 0) sb append ", " else " "
+        (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonString(sb)
+        sb append ':'
+        underlying(i+1).asInstanceOf[Json].jsonString(sb)
+        i += 2
+      }
+      sb append (if (i > 2) " }" else "}")
     }
     override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
       var b = if (bb.remaining >= 2) bb else refresh(bb)
       b put '{'.toByte
-      if (kvs.length > 0) b put ' '.toByte
+      if (underlying.length > 3) b put ' '.toByte
       var i = 0
-      while (i < kvs.length-1) {
+      while (i < underlying.length-1) {
         if (i > 0) {
           if (b.remaining < 2) b = refresh(b)
           b put ','.toByte put ' '.toByte
@@ -661,13 +803,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (!b.hasRemaining) b = refresh(b)
           b put ' '.toByte
         }
-        b = kvs(i).jsonBytes(b, refresh)
+        b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonBytes(b, refresh)
         if (!b.hasRemaining) b = refresh(b)
         b put ':'.toByte
-        kvs(i+1).jsonBytes(b, refresh)
+        underlying(i+1).asInstanceOf[Json].jsonBytes(b, refresh)
         i += 2
       }
-      if (kvs.length > 0) {
+      if (underlying.length > 3) {
         if (b.remaining < 2) b = refresh(b)
         b put ' '.toByte put '}'.toByte
       }
@@ -679,24 +821,20 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def jsonChars(bb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
       var b = if (bb.remaining >= 2) bb else refresh(bb)
       b put '{'
-      if (kvs.length > 0) b put ' '
+      if (underlying.length > 3) b put ' '
       var i = 0
-      while (i < kvs.length-1) {
+      while (i < underlying.length-1) {
         if (i > 0) {
           if (b.remaining < 2) b = refresh(b)
-          b put '[' put ' '
+          b put ',' put ' '
         }
-        else {
-          if (!b.hasRemaining) b = refresh(b)
-          b put ' '
-        }
-        b = kvs(i).jsonChars(b, refresh)
+        b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonChars(b, refresh)
         if (!b.hasRemaining) b = refresh(b)
         b put ':'
-        b = kvs(i+1).jsonChars(b, refresh)
+        b = underlying(i+1).asInstanceOf[Json].jsonChars(b, refresh)
         i += 2
       }
-      if (kvs.length > 0) {
+      if (underlying.length > 3) {
         if (b.remaining < 2) b = refresh(b)
         b put ' ' put '}'
       }
@@ -707,23 +845,26 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
   }
   object Obj extends FromJson[Obj] with JsonBuildTerminator[Obj] {
-    val empty = new Obj(Array())
+    val empty: Obj = new AtomicObj(Array())
+    private[jsonal] val mapBuildingInProcess = new collection.mutable.AnyRefMap[String, Json]()
 
     def apply(kvs: collection.Map[String, Json]) = {
-      val a = new Array[Json](2*kvs.size)
+      val a = new Array[AnyRef](2*kvs.size)
       var i = 0
-      kvs.foreach{ case (k,v) => a(i) = new Str(k); a(i+1) = v; i += 2 }
-      new Obj(a)
+      kvs.foreach{ case (k,v) => a(i) = k; a(i+1) = v; i += 2 }
+      val ans = new AtomicObj(a)
+      ans.set(kvs)
+      ans
     }
 
     def ~(done: Obj.type) = empty
-    def ~~(done: Obj.type) = empty
     def ~(key: Str, nul: scala.Null) = (new Build[Obj]) ~ (key, nul)
     def ~(key: String, nul: scala.Null) = (new Build[Obj]) ~ (key, nul)
     def ~(key: Str, js: Json) = (new Build[Obj]) ~ (key, js)
-    def ~(key: String, js: Json) = (new Build[Obj]) ~ (Str(key), js)
+    def ~(key: String, js: Json) = (new Build[Obj]) ~ (key, js)
     def ~[A](key: Str, a: A)(implicit jser: Jsonize[A]) = (new Build[Obj]) ~ (key, jser.jsonize(a))
-    def ~[A](key: String, a: A)(implicit jser: Jsonize[A]) = (new Build[Obj]) ~ (Str(key), jser.jsonize(a))
+    def ~[A](key: String, a: A)(implicit jser: Jsonize[A]) = (new Build[Obj]) ~ (key, jser.jsonize(a))
+    def ~~(done: Obj.type) = empty
     def ~~(coll: collection.TraversableOnce[(Str,Json)]) = (new Build[Obj]) ~~ coll
     def ~~[S](coll: collection.TraversableOnce[(S,Json)])(implicit ev: S =:= String) = (new Build[Obj]) ~~ coll
     def ~~[A: Jsonize](coll: collection.TraversableOnce[(Str,A)]) = (new Build[Obj]) ~~ coll
@@ -731,28 +872,29 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     class Build[T >: Obj] {
       private[this] var i = 0
-      private[this] var a: Array[Json] = new Array[Json](6)
-      def ~(done: JsonBuildTerminator[T]): T =
-        new Obj(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
-      def ~~(done: JsonBuildTerminator[T]): T = this ~ done
-      def ~(key: Str, js: Json): this.type = {
+      private[this] var a: Array[AnyRef] = new Array[AnyRef](6)
+      private[this] def append(key: AnyRef, js: Json): this.type = {
         if (i >= a.length-1) a = java.util.Arrays.copyOf(a, ((a.length << 1) | a.length) & 0x7FFFFFFE)
         a(i) = key
         a(i+1) = js
         i += 2
         this
       }
-      def ~(key: String, js: Json): this.type = this ~ (Str(key), js)
-      def ~(key: Str, nul: scala.Null): this.type = this ~ (key, Null)
-      def ~(key: String, nul: scala.Null): this.type = this ~ (Str(key), Null)
+      def ~(done: JsonBuildTerminator[T]): T =
+        new AtomicObj(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+      def ~(key: Str, js: Json): this.type = append(key, js)
+      def ~(key: String, js: Json): this.type = append(key, js)
+      def ~(key: Str, nul: scala.Null): this.type = append(key, Null)
+      def ~(key: String, nul: scala.Null): this.type = append(key, Null)
       def ~[A](key: Str, a: A)(implicit jser: Jsonize[A]): this.type = this ~ (key, jser.jsonize(a))
-      def ~[A](key: String, a: A)(implicit jser: Jsonize[A]): this.type = this ~(Str(key), jser.jsonize(a))
+      def ~[A](key: String, a: A)(implicit jser: Jsonize[A]): this.type = this ~ (key, jser.jsonize(a))
+      def ~~(done: JsonBuildTerminator[T]): T = this ~ done
       def ~~(coll: collection.TraversableOnce[(Str,Json)]): this.type = {
         coll.foreach{ case (k,v) => this ~ (k,v) }
         this
       }
       def ~~[S](coll: collection.TraversableOnce[(S,Json)])(implicit ev: S =:= String): this.type = {
-        coll.foreach{ case (k,v) => this ~ (Str(ev(k)),v) }
+        coll.foreach{ case (k,v) => this ~ (ev(k),v) }
         this
       }
       def ~~[A: Jsonize](coll: collection.TraversableOnce[(Str,A)]): this.type = {
@@ -760,7 +902,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         this
       }
       def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= String): this.type = {
-        coll.foreach{ case (k,a) => this ~ (Str(ev(k)),a) }
+        coll.foreach{ case (k,a) => this ~ (ev(k),a) }
         this
       }
     }
