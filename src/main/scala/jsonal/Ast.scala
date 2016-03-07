@@ -89,6 +89,8 @@ final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.
   def apply(key: String) = this
 }
 
+sealed trait JsonBuildTerminator[T] {}
+
 sealed trait Json extends Jast with AsJson {
   protected def myName: String
   def double = Json.not_a_normal_NaN
@@ -100,7 +102,7 @@ sealed trait Json extends Jast with AsJson {
   def json: Json = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
 }
-object Json extends FromJson[Json] {
+object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   private[jsonal] val not_a_normal_NaN = java.lang.Double.longBitsToDouble(0x7FF9000000000000L)
 
   private[jsonal] def loadByteBuffer(bytes: Array[Byte], bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
@@ -160,6 +162,8 @@ object Json extends FromJson[Json] {
   def apply(aj: Array[Json]): Json = Arr.All(aj)
   def apply(xs: Array[Double]): Json = Arr.Dbl(xs)
   def apply(kvs: Map[String, Json]): Json = Obj(kvs)
+
+  def ~(dbl: Double): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ dbl
 
   def parse(input: Json): Either[JastError, Json] = Right(input)
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Js(input, i0, iN, ep)
@@ -302,6 +306,7 @@ object Json extends FromJson[Json] {
       JsonInputStreamParser.Str(input, ep)    
   }
 
+  // TODO -- remove format parameter.  Need to infer from String what's going on.
   class Num private[jsonal] (format: Int, content: Double, text: String) extends Json {
     protected def myName = "number"
     def simple = true
@@ -337,7 +342,30 @@ object Json extends FromJson[Json] {
       loadCharBuffer(toString.toCharArray, cb, refresh)
   }
   object Num extends FromJson[Num] {
-    private[jsonal] val formatTable: Array[String] = ???
+    private[jsonal] val formatTable: Array[String] = (0 until 30).map(i => s"%.${i}f").toArray ++ (0 until 20).map(i => s"%.${i}e")
+    private[jsonal] def formatNum(precision: Int, value: Double): String = {
+      // Note--returns used to untangle deeply nested conditionals.
+      if (precision < 0) return value.toString
+      val fmt = formatTable(precision)
+      val s = fmt.format(value)
+      if (fmt.charAt(fmt.length-1) == 'f') {
+        if (s.charAt(s.length-1) != '0') return s
+        val i = s.indexOf('.')
+        if (i < 0) return s
+        var j = s.length - 2
+        while (j > i && s.charAt(j) == '0') j -= 1
+        if (j == i) j -= 1
+        s.substring(0,j+1)
+      }
+      else {
+        val i = s.lastIndexOf('e')
+        if (i <= 2 || s.charAt(i-1) != '0') return s
+        var j = i-2
+        while (j > 0 && s.charAt(j) == '0') j -= 1
+        if (s.charAt(j) != '.') j += 1
+        s.substring(0, j) + s.substring(i) 
+      }
+    }
 
     def apply(d: Double, precision: Int = 16): Num = ???
     def apply(bd: BigDecimal): Num = ???
@@ -359,9 +387,14 @@ object Json extends FromJson[Json] {
     def simple = false
     def size: Int
   }
-  object Arr extends FromJson[Arr] {
+  object Arr extends FromJson[Arr] with JsonBuildTerminator[Arr] {
     def apply(aj: Array[Json]): Arr = All(aj)
     def apply(xs: Array[Double], precision: Int = 16): Arr = Dbl(xs, precision)
+
+    def ~(dbl: Double): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ dbl
+    def ~(done: Json.type): Json = Dbl.empty
+    def ~(done: Arr.type): Arr = Dbl.empty
+
     final class All(alls: Array[Json]) extends Arr {
       def size = alls.length
       override def apply(i: Int) = if (i < 0 || i >= alls.length) JastError("bad index "+i) else alls(i)
@@ -411,8 +444,47 @@ object Json extends FromJson[Json] {
         c put ']'
       }
     }
-    object All {
+    object All extends JsonBuildTerminator[All] {
       def apply(aj: Array[Json]) = new All(aj)
+
+      def ~(nul: scala.Null) = (new Build[All]) ~ Null
+      def ~(js: Json) = (new Build[All]) ~ js
+      def ~[A: Jsonize](a: A) = (new Build[All]) ~ a
+
+      class Build[T >: All] {
+        private[this] var i = 0
+        private[this] var a: Array[Json] = new Array[Json](6)
+        def ~(done: JsonBuildTerminator[T]): T =
+          new All(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+        def ~(js: Json): this.type = {
+          if (i >= a.length) a = java.util.Arrays.copyOf(a, ((a.length << 1) | a.length) & 0x7FFFFFFE)
+          a(i) = js
+          i += 1
+          this
+        }
+        def ~(nul: scala.Null): this.type = this ~ Null
+        def ~[A](a: A)(implicit jser: Jsonize[A]): this.type = this ~ jser.jsonize(a)
+        def ~~(jses: Array[Json]): this.type = {
+          // TODO - make this efficient!
+          var i = 0
+          while (i < jses.length) { this ~ jses(i); i += 1 }
+          this
+        }
+        def ~~[A: Jsonize](as: Array[A]): this.type = {
+          // TODO - make this efficient!
+          var i = 0
+          while (i < as.length) { this ~ as(i); i += 1 }
+          this
+        }
+        def ~~(coll: collection.TraversableOnce[Json]): this.type = {
+          coll.foreach(this ~ _)
+          this
+        }
+        def ~~[A: Jsonize](coll: collection.TraversableOnce[A]): this.type = {
+          coll.foreach(x => this ~ x)
+          this
+        }
+      }
     }
 
     final class Dbl(format: Int, val direct: Array[Double]) extends Arr {
@@ -425,7 +497,7 @@ object Json extends FromJson[Json] {
           if (i > 0) sb append ", "
           val d = direct(i)
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) sb append "null"
-          else sb append Num.formatTable(format).format(d)
+          else sb append Num.formatNum(format, d)
           i += 1
         }
         sb append ']'
@@ -465,13 +537,58 @@ object Json extends FromJson[Json] {
         c put ']'
       }
     }
-    object Dbl {
+    object Dbl extends JsonBuildTerminator[Dbl] {
       def apply(xs: Array[Double], precision: Int): Dbl = ???
       def apply(xs: Array[Double]): Dbl = apply(xs, 16)
       def apply(xs: Array[Float], precision: Int): Dbl = ???
       def apply(xs: Array[Float]): Dbl = apply(xs, 7)
       def apply(xs: Array[Long]): Dbl = ???
       def apply(xs: Array[Int]): Dbl = ???
+
+      val empty = new Dbl(0, new Array[Double](0))
+
+      def ~(me: Dbl.type) = empty
+      def ~(dbl: Double): Build[Dbl] = (new Build[Dbl]) ~ dbl
+      def ~(dbl: Double, precision: Int): Build[Dbl] = (new Build[Dbl]) ~ (dbl, precision)
+
+      class Build[T >: Dbl] {
+        private[this] var i = 0
+        private[this] var a: Array[Double] = new Array[Double](6)
+        private[this] var prec: Int = -1
+        def ~(dbl: Double): this.type = {
+          if (i >= a.length) a = java.util.Arrays.copyOf(a, ((a.length << 1) | a.length) & 0x7FFFFFFE)
+          a(i) = dbl
+          i += 1
+          this
+        }
+        def ~(dbl: Double, precision: Int): this.type = {
+          prec = math.max(prec, precision)
+          this ~ dbl
+        }
+        def ~(flt: Float): this.type = this ~ (flt.toDouble, 7)
+        def ~(done: JsonBuildTerminator[T]): T =
+          new Dbl(if (prec < 0) 16 else prec, if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+        def ~~(dbls: Array[Double]): this.type = {
+          // TODO - make this efficient!
+          var i = 0
+          while (i < dbls.length) { this ~ dbls(i); i += 1 }
+          this
+        }
+        def ~~(floats: Array[Float]): this.type = {
+          // TODO - make this efficient!
+          var i = 0
+          while (i < floats.length) { this ~ floats(i); i += 1 }
+          this
+        }
+        def ~~(coll: collection.TraversableOnce[Double]): this.type = {
+          coll.foreach(this ~ _)
+          this
+        }
+        def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float): this.type = {
+          coll.foreach(x => this ~ x.asInstanceOf[Float])
+          this
+        }
+      }
     }
 
     override def parse(input: Json): Either[JastError, Arr] = input match {
