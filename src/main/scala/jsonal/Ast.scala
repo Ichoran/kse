@@ -190,14 +190,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   def apply(): Json = Null
   def apply(b: Boolean): Json = if (b) Bool.True else Bool.False
   def apply(s: String): Json = Str(s)
+  def apply(l: Long): Json = Num(l)
   def apply(d: Double): Json = Num(d)
   def apply(bd: BigDecimal): Json = Num(bd)
   def apply(aj: Array[Json]): Json = Arr.All(aj)
   def apply(xs: Array[Double]): Json = Arr.Dbl(xs)
   def apply(kvs: Map[String, Json]): Json = Obj(kvs)
+  def apply(keys: Array[String], values: Array[Json]): Jast = Obj(keys, values)
 
   def ~(dbl: Double): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ dbl
-  def ~(dbl: Double, precision: Int): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ (dbl, precision)
   def ~(flt: Float): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ flt
   def ~~(doubles: Array[Double]): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~~ doubles
   def ~~(floats: Array[Float]): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~~ floats
@@ -366,43 +367,35 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       JsonInputStreamParser.Str(input, ep)    
   }
 
-  // TODO -- remove format parameter.  Need to infer from String what's going on.
-  class Num private[jsonal] (format: Int, content: Double, text: String) extends Json {
+  class Num private[jsonal] (content: Double, text: String) extends Json {
     protected def myName = "number"
     def simple = true
-    def isDouble: Boolean = format >= 0
-    override def double = content
-    def isLong: Boolean = (format == -1) || (format > 0 && content.toLong == content)
-    def long: Long =
-      if (format == -1) java.lang.Double.doubleToRawLongBits(content)
-      else content.toLong
+    def isDouble: Boolean = (text ne null) && !java.lang.Double.isNaN(content) && !java.lang.Double.isInfinite(content)
+    override def double = if (text eq null) java.lang.Double.doubleToRawLongBits(content).toDouble else content
+    def isLong: Boolean = text eq null
+    def long: Long = if (text eq null) java.lang.Double.doubleToRawLongBits(content) else content.toLong
     def longOr(fallback: Long): Long =
-      if (format == -1) java.lang.Double.doubleToRawLongBits(content)
-      else if (format >= 0) {
+      if (text eq null) java.lang.Double.doubleToRawLongBits(content)
+      else {
         val l = content.toLong
         if (l == content) l else fallback
       }
-      else fallback
     def big: BigDecimal =
-      if (text ne null) BigDecimal(text)
-      else if (isDouble) BigDecimal.decimal(content)
-      else BigDecimal(java.lang.Double.doubleToRawLongBits(content))
+      if (text eq null) BigDecimal(long)
+      else if (text.isEmpty) BigDecimal(content)
+      else BigDecimal(text)
     override def toString =
-      if (text ne null) text
-      else if (format >= 0) Num.formatTable(format).format(content)
-      else java.lang.Double.doubleToRawLongBits(content).toString
-    override def jsonString(sb: java.lang.StringBuilder) {
-      if (text ne null) sb append text
-      else if (format >= 0) sb append Num.formatTable(format).format(content)
-      else sb append java.lang.Double.doubleToRawLongBits(content)
-    }
+      if (text eq null) java.lang.Double.doubleToRawLongBits(content).toString
+      else if (text.isEmpty) content.toString
+      else text
+    override def jsonString(sb: java.lang.StringBuilder) { sb append this.toString }
     override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
       loadByteBuffer(toString.getBytes, bb, refresh)
     override def jsonChars(cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer =
       loadCharBuffer(toString.toCharArray, cb, refresh)
   }
   object Num extends FromJson[Num] {
-    private[jsonal] val formatTable: Array[String] = (0 until 30).map(i => s"%.${i}f").toArray ++ (0 until 20).map(i => s"%.${i}e")
+    /*
     private[jsonal] def formatNum(precision: Int, value: Double): String = {
       // Note--returns used to untangle deeply nested conditionals.
       if (precision < 0) return value.toString
@@ -426,9 +419,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         s.substring(0, j) + s.substring(i) 
       }
     }
+    */
 
-    def apply(d: Double, precision: Int = 16): Num = ???
-    def apply(bd: BigDecimal): Num = ???
+    def apply(l: Long): Num = new Num(java.lang.Double.longBitsToDouble(l), null)
+    def apply(d: Double): Json = if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) Null else new Num(d, "")
+    def apply(bd: BigDecimal): Num = new Num(bd.doubleValue, bd.toString)
 
     override def parse(input: Json): Either[JastError, Num] = input match {
       case n: Num => Right(n)
@@ -453,7 +448,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     def ~(me: Arr.type) = Dbl.empty
     def ~(dbl: Double): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ dbl
-    def ~(dbl: Double, precision: Int): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ (dbl, precision)
     def ~(flt: Float): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ flt
     def ~~(me: Arr.type) = Dbl.empty
     def ~~(doubles: Array[Double]): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~~ doubles
@@ -566,9 +560,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
     }
 
-    final class Dbl(format: Int, val doubles: Array[Double]) extends Arr {
+    final class Dbl(val doubles: Array[Double]) extends Arr {
       def size = doubles.length
-      override def apply(i: Int) = if (i < 0 || i >= doubles.length) JastError("bad index "+i) else new Num(0, doubles(i),"%e")
+      override def apply(i: Int) = if (i < 0 || i >= doubles.length) JastError("bad index "+i) else new Num(doubles(i), "")
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
         var i = 0
@@ -576,7 +570,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (i > 0) sb append ", "
           val d = doubles(i)
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) sb append "null"
-          else sb append Num.formatNum(format, d)
+          else sb append d.toString
           i += 1
         }
         sb append ']'
@@ -592,7 +586,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           }
           val d = doubles(i)
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) b = Null.jsonBytes(b, refresh)
-          else b = loadByteBuffer(Num.formatTable(format).format(d).getBytes, b, refresh)
+          else b = loadByteBuffer(d.toString.getBytes, b, refresh)
           i += 1
         }
         if (!b.hasRemaining) b = refresh(b)
@@ -609,7 +603,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           }
           val d = doubles(i)
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) c = Null.jsonChars(c, refresh)
-          else c = loadCharBuffer(Num.formatTable(format).format(d).toCharArray, c, refresh)
+          else c = loadCharBuffer(d.toString.toCharArray, c, refresh)
           i += 1
         }
         if (!c.hasRemaining) c = refresh(c)
@@ -624,11 +618,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       def apply(xs: Array[Long]): Dbl = ???
       def apply(xs: Array[Int]): Dbl = ???
 
-      val empty = new Dbl(0, new Array[Double](0))
+      val empty = new Dbl(new Array[Double](0))
 
       def ~(me: Dbl.type) = empty
       def ~(dbl: Double): Build[Dbl] = (new Build[Dbl]) ~ dbl
-      def ~(dbl: Double, precision: Int): Build[Dbl] = (new Build[Dbl]) ~ (dbl, precision)
       def ~(flt: Float): Build[Dbl] = (new Build[Dbl]) ~ flt
       def ~~(me: Dbl.type) = empty
       def ~~(doubles: Array[Double]): Build[Dbl] = (new Build[Dbl]) ~~ doubles
@@ -639,20 +632,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       class Build[T >: Dbl] {
         private[this] var i = 0
         private[this] var a: Array[Double] = new Array[Double](6)
-        private[this] var prec: Int = -1
         def ~(done: JsonBuildTerminator[T]): T =
-          new Dbl(if (prec < 0) 16 else prec, if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+          new Dbl(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
         def ~(dbl: Double): this.type = {
           if (i >= a.length) a = java.util.Arrays.copyOf(a, ((a.length << 1) | a.length) & 0x7FFFFFFE)
           a(i) = dbl
           i += 1
           this
         }
-        def ~(dbl: Double, precision: Int): this.type = {
-          prec = math.max(prec, precision)
-          this ~ dbl
-        }
-        def ~(flt: Float): this.type = this ~ (flt.toDouble, 7)
+        def ~(flt: Float): this.type = this ~ flt.toDouble
         def ~~(done: JsonBuildTerminator[T]): T = this ~ done
         def ~~(doubles: Array[Double]): this.type = {
           // TODO - make this efficient!
