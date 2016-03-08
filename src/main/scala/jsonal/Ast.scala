@@ -106,6 +106,7 @@ object FromJson {
 
 sealed trait Jast {
   def simple: Boolean   // Is null, boolean, number, or string
+  def isNull: Boolean
   def double: Double
   def bool: Option[Boolean]
   def string: Option[String]
@@ -115,6 +116,7 @@ sealed trait Jast {
 
 final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.Null) extends Jast {
   def simple = false
+  def isNull = false
   def double = Json.not_a_normal_NaN
   def bool = None
   def string = None
@@ -126,6 +128,7 @@ trait JsonBuildTerminator[T] {}
 
 sealed trait Json extends Jast with AsJson {
   protected def myName: String
+  def isNull = false
   def double = Json.not_a_normal_NaN
   def bool: Option[Boolean] = None
   def string: Option[String] = None
@@ -199,17 +202,18 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   def apply(keys: Array[String], values: Array[Json]): Jast = Obj(keys, values)
 
   def ~(dbl: Double): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ dbl
-  def ~(flt: Float): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ flt
   def ~~(doubles: Array[Double]): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~~ doubles
-  def ~~(floats: Array[Float]): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~~ floats
+  def ~~(doubles: Array[Double], i0: Int, iN: Int): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~~ (doubles, i0, iN)
   def ~~(coll: collection.TraversableOnce[Double]) = (new Arr.Dbl.Build[Json]) ~~ coll
-  def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float) = (new Arr.Dbl.Build[Json]) ~~ coll
+  def ~~(existing: Arr.Dbl) = (new Arr.Dbl.Build[Json]) ~~ existing
 
   def ~(js: Json) = (new Arr.All.Build[Json]) ~ js
   def ~(nul: scala.Null) = (new Arr.All.Build[Json]) ~ Null
   def ~[A: Jsonize](a: A) = (new Arr.All.Build[Json]) ~ a
   def ~~(jses: Array[Json]) = (new Arr.All.Build[Json]) ~~ jses
+  def ~~(jses: Array[Json], i0: Int, iN: Int) = (new Arr.All.Build[Json]) ~~ (jses, i0, iN)
   def ~~[A: Jsonize](as: Array[A]) = (new Arr.All.Build[Json]) ~~ as
+  def ~~[A: Jsonize](as: Array[A], i0: Int, iN: Int) = (new Arr.All.Build[Json]) ~~ (as, i0, iN)
   def ~~(coll: collection.TraversableOnce[Json]) = (new Arr.All.Build[Json]) ~~ coll
   def ~~[A: Jsonize](coll: collection.TraversableOnce[A]) = (new Arr.All.Build[Json]) ~~ coll
 
@@ -235,6 +239,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     final private[this] val myBytesSayNull = "null".getBytes
     final private[this] val myCharsSayNull = "null".toCharArray
     protected def myName = "null"
+    override def isNull = true
     def simple = true
     override def jsonPretty(pretty: PrettyJson, depth: Int) { pretty append "null" }
     override def jsonString(sb: java.lang.StringBuilder) { sb append "null" }
@@ -444,22 +449,25 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   }
   object Arr extends FromJson[Arr] with JsonBuildTerminator[Arr] {
     def apply(aj: Array[Json]): Arr = All(aj)
-    def apply(xs: Array[Double], precision: Int = 16): Arr = Dbl(xs, precision)
+    def apply(xs: Array[Double]): Arr = Dbl(xs)
+    def decimal(xs: Array[Float]): Arr = Dbl decimal xs
+    def exact(xs: Array[Float]): Arr = Dbl exact xs
 
     def ~(me: Arr.type) = Dbl.empty
     def ~(dbl: Double): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ dbl
-    def ~(flt: Float): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ flt
     def ~~(me: Arr.type) = Dbl.empty
     def ~~(doubles: Array[Double]): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~~ doubles
-    def ~~(floats: Array[Float]): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~~ floats
+    def ~~(doubles: Array[Double], i0: Int, iN: Int): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~~ (doubles, i0, iN)
     def ~~(coll: collection.TraversableOnce[Double]) = (new Dbl.Build[Arr]) ~~ coll
-    def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float) = (new Dbl.Build[Arr]) ~~ coll
+    def ~~(existing: Dbl) = (new Dbl.Build[Arr]) ~~ existing
 
     def ~(js: Json) = (new All.Build[Arr]) ~ js
     def ~(nul: scala.Null) = (new All.Build[Arr]) ~ Null
     def ~[A: Jsonize](a: A) = (new All.Build[Arr]) ~ a
     def ~~(jses: Array[Json]) = (new All.Build[Arr]) ~~ jses
+    def ~~(jses: Array[Json], i0: Int, iN: Int) = (new All.Build[Arr]) ~~ (jses, i0, iN)
     def ~~[A: Jsonize](as: Array[A]) = (new All.Build[Arr]) ~~ as
+    def ~~[A: Jsonize](as: Array[A], i0: Int, iN: Int) = (new All.Build[Arr]) ~~ (as, i0, iN)
     def ~~(coll: collection.TraversableOnce[Json]) = (new All.Build[Arr]) ~~ coll
     def ~~[A: Jsonize](coll: collection.TraversableOnce[A]) = (new All.Build[Arr]) ~~ coll
 
@@ -526,6 +534,14 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       class Build[T >: All] {
         private[this] var i = 0
         private[this] var a: Array[Json] = new Array[Json](6)
+        private[this] def ensureAtLeast(n: Int) {
+          if (n > a.length && a.length < 0x7FFFFFFE) {
+            var m = a.length
+            while (m < n && (m&0x40000000) == 0) m = ((m << 1) | m) & 0x7FFFFFFE
+            if (m < n) m = 0x7FFFFFFE
+            a = java.util.Arrays.copyOf(a, m)
+          }
+        }
         def ~(done: JsonBuildTerminator[T]): T =
           new All(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
         def ~(js: Json): this.type = {
@@ -538,15 +554,45 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         def ~[A](a: A)(implicit jser: Jsonize[A]): this.type = this ~ jser.jsonize(a)
         def ~~(done: JsonBuildTerminator[T]): T = this ~ done
         def ~~(jses: Array[Json]): this.type = {
-          // TODO - make this efficient!
-          var i = 0
-          while (i < jses.length) { this ~ jses(i); i += 1 }
+          ensureAtLeast(i + jses.length)
+          System.arraycopy(jses, 0, a, i, jses.length)
+          i += jses.length
           this
         }
-        def ~~[A: Jsonize](as: Array[A]): this.type = {
-          // TODO - make this efficient!
-          var i = 0
-          while (i < as.length) { this ~ as(i); i += 1 }
+        def ~~(jses: Array[Json], i0: Int, iN: Int): this.type = {
+          val j0 = math.max(i0, 0)
+          val jN = math.max(j0, math.min(jses.length, iN))
+          val n = jN - j0
+          if (n > 0) {
+            ensureAtLeast(i + n)
+            System.arraycopy(jses, j0, a, i, n)
+            i += n
+          }
+          this
+        }
+        def ~~[A](as: Array[A])(implicit jser: Jsonize[A]): this.type = {
+          ensureAtLeast(i + as.length)
+          var j = 0
+          while (j < as.length) {
+            a(i) = jser.jsonize(as(j))
+            i += 1
+            j += 1
+          }
+          this
+        }
+        def ~~[A](as: Array[A], i0: Int, iN: Int)(implicit jser: Jsonize[A]): this.type = {
+          val j0 = math.max(i0, 0)
+          val jN = math.max(j0, math.min(as.length, iN))
+          val n = jN - j0
+          if (n > 0) {
+            ensureAtLeast(i + as.length)
+            var j = j0
+            while (j < jN) {
+              a(i) = jser.jsonize(as(j))
+              i += 1
+              j += 1
+            }
+          }
           this
         }
         def ~~(coll: collection.TraversableOnce[Json]): this.type = {
@@ -562,7 +608,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     final class Dbl(val doubles: Array[Double]) extends Arr {
       def size = doubles.length
-      override def apply(i: Int) = if (i < 0 || i >= doubles.length) JastError("bad index "+i) else new Num(doubles(i), "")
+      override def apply(i: Int) =
+        if (i < 0 || i >= doubles.length) JastError("bad index "+i)
+        else {
+          val di = doubles(i)
+          if (java.lang.Double.isNaN(di) || java.lang.Double.isInfinite(di)) Null
+          else new Num(doubles(i), "")
+        }
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
         var i = 0
@@ -611,27 +663,53 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
     }
     object Dbl extends JsonBuildTerminator[Dbl] {
-      def apply(xs: Array[Double], precision: Int): Dbl = ???
-      def apply(xs: Array[Double]): Dbl = apply(xs, 16)
-      def apply(xs: Array[Float], precision: Int): Dbl = ???
-      def apply(xs: Array[Float]): Dbl = apply(xs, 7)
-      def apply(xs: Array[Long]): Dbl = ???
-      def apply(xs: Array[Int]): Dbl = ???
+      def apply(xs: Array[Double]): Dbl = new Dbl(xs)
+      def apply(xs: Array[Long]): Dbl = { 
+        val ys = new Array[Double](xs.length)
+        var i = 0
+        while (i < xs.length) { ys(i) = xs(i).toDouble; i += 1}
+        new Dbl(ys)
+      }
+      def apply(xs: Array[Int]): Dbl = { 
+        val ys = new Array[Double](xs.length)
+        var i = 0
+        while (i < xs.length) { ys(i) = xs(i).toDouble; i += 1}
+        new Dbl(ys)
+      }
+      def decimal(xs: Array[Float]): Dbl = { 
+        val ys = new Array[Double](xs.length)
+        var i = 0
+        while (i < xs.length) { ys(i) = xs(i).toString.toDouble; i += 1}
+        new Dbl(ys)
+      }
+      def exact(xs: Array[Float]): Dbl = { 
+        val ys = new Array[Double](xs.length)
+        var i = 0
+        while (i < xs.length) { ys(i) = xs(i).toString.toDouble; i += 1}
+        new Dbl(ys)
+      }
 
       val empty = new Dbl(new Array[Double](0))
 
       def ~(me: Dbl.type) = empty
       def ~(dbl: Double): Build[Dbl] = (new Build[Dbl]) ~ dbl
-      def ~(flt: Float): Build[Dbl] = (new Build[Dbl]) ~ flt
       def ~~(me: Dbl.type) = empty
       def ~~(doubles: Array[Double]): Build[Dbl] = (new Build[Dbl]) ~~ doubles
-      def ~~(floats: Array[Float]): Build[Dbl] = (new Build[Dbl]) ~~ floats
+      def ~~(doubles: Array[Double], i0: Int, iN: Int): Build[Dbl] = (new Build[Dbl]) ~~ (doubles, i0, iN)
       def ~~(coll: collection.TraversableOnce[Double]) = (new Build[Dbl]) ~~ coll
-      def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float) = (new Build[Dbl]) ~~ coll
+      def ~~(existing: Dbl) = (new Build[Dbl]) ~~ existing.doubles
 
       class Build[T >: Dbl] {
         private[this] var i = 0
         private[this] var a: Array[Double] = new Array[Double](6)
+        private[this] def ensureAtLeast(n: Int) {
+          if (n > a.length && a.length < 0x7FFFFFFE) {
+            var m = a.length
+            while (m < n && (m&0x40000000) == 0) m = ((m << 1) | m) & 0x7FFFFFFE
+            if (m < n) m = 0x7FFFFFFE
+            a = java.util.Arrays.copyOf(a, m)
+          }
+        }
         def ~(done: JsonBuildTerminator[T]): T =
           new Dbl(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
         def ~(dbl: Double): this.type = {
@@ -640,34 +718,35 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           i += 1
           this
         }
-        def ~(flt: Float): this.type = this ~ flt.toDouble
         def ~~(done: JsonBuildTerminator[T]): T = this ~ done
         def ~~(doubles: Array[Double]): this.type = {
-          // TODO - make this efficient!
-          var i = 0
-          while (i < doubles.length) { this ~ doubles(i); i += 1 }
+          ensureAtLeast(i + doubles.length)
+          System.arraycopy(doubles, 0, a, i, doubles.length)
+          i += doubles.length
           this
         }
-        def ~~(floats: Array[Float]): this.type = {
-          // TODO - make this efficient!
-          var i = 0
-          while (i < floats.length) { this ~ floats(i); i += 1 }
+        def ~~(doubles: Array[Double], i0: Int, iN: Int): this.type = {
+          val j0 = math.max(i0, 0)
+          val jN = math.max(j0, math.min(doubles.length, iN))
+          val n = jN - j0
+          if (n > 0) {
+            ensureAtLeast(i + n)
+            System.arraycopy(doubles, j0, a, i, n)
+            i += n
+          }
           this
         }
         def ~~(coll: collection.TraversableOnce[Double]): this.type = {
           coll.foreach(this ~ _)
           this
         }
-        def ~~[A](coll: collection.TraversableOnce[A])(implicit ev: A =:= Float): this.type = {
-          coll.foreach(x => this ~ x.asInstanceOf[Float])
-          this
-        }
+        def ~~(existing: Dbl): this.type = this ~~ existing.doubles
 
         def toAll[U >: All](that: All.Build[U]): All.Build[U] = {
           var j = 0
           while (j < i) {
             if (java.lang.Double.isNaN(a(j)) && java.lang.Double.isInfinite(a(j))) that ~ Null
-            else that ~ Num(a(j))
+            else that ~ (new Num(a(j), ""))
             j += 1
           }
           that
