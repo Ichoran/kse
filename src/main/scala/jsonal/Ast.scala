@@ -719,7 +719,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       null
     }
-    private[this] def getOrNull(key: String): Json = {
+    def getOrNull(key: String): Json = {
       if (myMap ne null) myMap.getOrElse(key, null)
       else if (size < 6) linearSearchOrNull(key)
       else {
@@ -961,6 +961,19 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     private[jsonal] val mapBuildingInProcess = new collection.mutable.AnyRefMap[String, Json]()
 
     def apply(kvs: collection.Map[String, Json]) = new AtomicObj(null, kvs)
+    def apply(keys: Array[String], values: Array[Json]): Jast = 
+      if (keys.length != values.length) JastError("cannot create object with unequal numbers of keys and values")
+      else {
+        val a = new Array[AnyRef](keys.length*2)
+        var i, j = 0
+        while (i < keys.length) {
+          a(j) = keys(i)
+          a(j+1) = values(i)
+          j += 2
+          i += 1
+        }
+        new AtomicObj(a)
+      }
 
     def ~(done: Obj.type) = empty
     def ~(key: Str, nul: scala.Null) = (new Build[Obj]) ~ (key, nul)
