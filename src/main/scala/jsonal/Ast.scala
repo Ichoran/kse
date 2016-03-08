@@ -702,13 +702,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   sealed trait Obj extends Json {
     protected def myName = "object"
     def simple = false
-    def size: Int = underlying.length >> 1
+    def size: Int
     def hasDuplicateKeys: Boolean
     def get(key: String): Option[Json]
-    def underlying: Array[AnyRef]
+    def foreach[U](f: (String, Json) => U): Unit
+    def asMap: collection.Map[String, Json]
+    def asFlatArray: Array[AnyRef]
   }
-  private[jsonal] final class AtomicObj(val underlying: Array[AnyRef])
-  extends java.util.concurrent.atomic.AtomicReference[collection.Map[String, Json]](null) with Obj {
+  private[jsonal] final class AtomicObj(val underlying: Array[AnyRef], myMap: collection.Map[String, Json] = null)
+  extends java.util.concurrent.atomic.AtomicReference[collection.mutable.AnyRefMap[String, Json]](null) with Obj {
     private[this] def linearSearchOrNull(key: String): Json = {
       var i = 0
       while (i < underlying.length - 1) {
@@ -718,7 +720,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       null
     }
     private[this] def getOrNull(key: String): Json = {
-      if (size < 6) linearSearchOrNull(key)
+      if (myMap ne null) myMap.getOrElse(key, null)
+      else if (size < 6) linearSearchOrNull(key)
       else {
         var m = get()
         var gotMap = false
@@ -739,26 +742,27 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           }
           else gotMap = true
         } while (!gotMap)
-        m.getOrElse(key, null)
+        m.getOrNull(key)
       }
     }
+    def size = if (myMap eq null) underlying.size >> 1 else myMap.size
     override def apply(key: String): Jast = {
       val ans = getOrNull(key)
       if (ans eq null) JastError("no key: " + key) else ans
     }
-    def hasDuplicateKeys: Boolean = size < 2 || {
+    def hasDuplicateKeys: Boolean = size > 1 && (myMap eq null) && {
       if (size < 6) {
         var i = 2
         while (i < underlying.length -1) {
           val key = underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }
           var j = 0
           while (j < i) {
-            if (key == (underlying(j) match { case s: String => s; case x => x.asInstanceOf[Str].text })) return false
+            if (key == (underlying(j) match { case s: String => s; case x => x.asInstanceOf[Str].text })) return true
             j += 2
           }
           i += 2
         }
-        true
+        false
       }
       else {
         var m = get()
@@ -773,43 +777,92 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (useWhatWeMake) set(arm)
           m = arm
         }
-        m.size == size
+        m.size != size
       }
     }
     def get(key: String): Option[Json] = Option(getOrNull(key))
-    override def jsonString(sb: java.lang.StringBuilder) {
-      if (underlying.length > 3) sb append "{ " else sb append '{'
-      var i = 0
-      while (i < underlying.length-1) {
-        if (i > 0) sb append ", " else " "
-        (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonString(sb)
-        sb append ':'
-        underlying(i+1).asInstanceOf[Json].jsonString(sb)
-        i += 2
+    def foreach[U](f: (String, Json) => U) {
+      if (myMap eq null) {
+        var i = 0
+        while (i < underlying.length - 1) {
+          f(underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }, underlying(i+1).asInstanceOf[Json])
+          i += 2
+        }
       }
-      sb append (if (i > 2) " }" else "}")
+      else myMap.foreach{ case (k,v) => f(k,v) }
     }
-    override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
+    def asMap: collection.Map[String, Json] = 
+      if (myMap ne null) myMap
+      else {
+        val m = get()
+        if (size < 6 || (m eq null) || (m eq Obj.mapBuildingInProcess)) {
+          val useWhatWeMake = (size >= 6) && compareAndSet(null, Obj.mapBuildingInProcess)
+          val arm = new collection.mutable.AnyRefMap[String, Json]()
+          var i = 0
+          while (i < underlying.length - 1) {
+            arm += (underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }, underlying(i+1).asInstanceOf[Json])
+            i += 2
+          }
+          if (useWhatWeMake) set(arm)
+          arm        
+        }
+        else m
+      }
+    def asFlatArray: Array[AnyRef] =
+      if (underlying ne null) underlying
+      else {
+        val a = new Array[AnyRef](myMap.size * 2)
+        var i = 0
+        myMap.foreach{ case (k,v) => a(i) = k; a(i+1) = v; i += 2 }
+        a
+      }
+    private def jsonStringFromMap(sb: java.lang.StringBuilder) {
+      if (myMap.size > 1) sb append "{ " else sb append '{'
+      var first = true
+      val it = myMap.iterator
+      while (it.hasNext) {
+        val kv = it.next
+        if (!first) sb append ", "
+        Str(kv._1).jsonString(sb)
+        sb append ':'
+        kv._2.jsonString(sb)
+        first = false
+      }
+      if (myMap.size > 1) sb append " }" else sb append '}'
+    }
+    override def jsonString(sb: java.lang.StringBuilder) {
+      if (underlying ne null) {
+        if (underlying.length > 3) sb append "{ " else sb append '{'
+        var i = 0
+        while (i < underlying.length-1) {
+          if (i > 0) sb append ", "
+          (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonString(sb)
+          sb append ':'
+          underlying(i+1).asInstanceOf[Json].jsonString(sb)
+          i += 2
+        }
+        if (i > 2) sb append " }" else sb append '}'
+      }
+      else jsonStringFromMap(sb)
+    }
+    private def jsonBytesFromMap(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
       var b = if (bb.remaining >= 2) bb else refresh(bb)
       b put '{'.toByte
-      if (underlying.length > 3) b put ' '.toByte
-      var i = 0
-      while (i < underlying.length-1) {
-        if (i > 0) {
-          if (b.remaining < 2) b = refresh(b)
+      if (myMap.size > 1) b put ' '.toByte
+      var first = true
+      val it = myMap.iterator
+      while (it.hasNext) {
+        val kv = it.next
+        if (!first) {
+          if (bb.remaining < 2) b = refresh(b)
           b put ','.toByte put ' '.toByte
         }
-        else {
-          if (!b.hasRemaining) b = refresh(b)
-          b put ' '.toByte
-        }
-        b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonBytes(b, refresh)
-        if (!b.hasRemaining) b = refresh(b)
-        b put ':'.toByte
-        underlying(i+1).asInstanceOf[Json].jsonBytes(b, refresh)
-        i += 2
+        b = Str(kv._1).jsonBytes(b, refresh)
+        if (!bb.hasRemaining) b = refresh(b)
+        b = kv._2.jsonBytes(b, refresh)
+        first = false
       }
-      if (underlying.length > 3) {
+      if (myMap.size > 1) {
         if (b.remaining < 2) b = refresh(b)
         b put ' '.toByte put '}'.toByte
       }
@@ -818,23 +871,55 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         b put '}'.toByte
       }
     }
-    override def jsonChars(bb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
+    override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
+      if (underlying ne null) {
+        var b = if (bb.remaining >= 2) bb else refresh(bb)
+        b put '{'.toByte
+        if (underlying.length > 3) b put ' '.toByte
+        var i = 0
+        while (i < underlying.length-1) {
+          if (i > 0) {
+            if (b.remaining < 2) b = refresh(b)
+            b put ','.toByte put ' '.toByte
+          }
+          else {
+            if (!b.hasRemaining) b = refresh(b)
+            b put ' '.toByte
+          }
+          b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonBytes(b, refresh)
+          if (!b.hasRemaining) b = refresh(b)
+          b put ':'.toByte
+          underlying(i+1).asInstanceOf[Json].jsonBytes(b, refresh)
+          i += 2
+        }
+        if (underlying.length > 3) {
+          if (b.remaining < 2) b = refresh(b)
+          b put ' '.toByte put '}'.toByte
+        }
+        else {
+          if (!b.hasRemaining) b = refresh(b)
+          b put '}'.toByte
+        }        
+      }
+      else jsonBytesFromMap(bb, refresh)
+    private def jsonCharsFromMap(bb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
       var b = if (bb.remaining >= 2) bb else refresh(bb)
       b put '{'
-      if (underlying.length > 3) b put ' '
-      var i = 0
-      while (i < underlying.length-1) {
-        if (i > 0) {
-          if (b.remaining < 2) b = refresh(b)
+      if (myMap.size > 1) b put ' '
+      var first = true
+      val it = myMap.iterator
+      while (it.hasNext) {
+        val kv = it.next
+        if (!first) {
+          if (bb.remaining < 2) b = refresh(b)
           b put ',' put ' '
         }
-        b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonChars(b, refresh)
-        if (!b.hasRemaining) b = refresh(b)
-        b put ':'
-        b = underlying(i+1).asInstanceOf[Json].jsonChars(b, refresh)
-        i += 2
+        b = Str(kv._1).jsonChars(b, refresh)
+        if (!bb.hasRemaining) b = refresh(b)
+        b = kv._2.jsonChars(b, refresh)
+        first = false
       }
-      if (underlying.length > 3) {
+      if (myMap.size > 1) {
         if (b.remaining < 2) b = refresh(b)
         b put ' ' put '}'
       }
@@ -843,19 +928,39 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         b put '}'
       }
     }
+    override def jsonChars(bb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer =
+      if (underlying ne null) {
+        var b = if (bb.remaining >= 2) bb else refresh(bb)
+        b put '{'
+        if (underlying.length > 3) b put ' '
+        var i = 0
+        while (i < underlying.length-1) {
+          if (i > 0) {
+            if (b.remaining < 2) b = refresh(b)
+            b put ',' put ' '
+          }
+          b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonChars(b, refresh)
+          if (!b.hasRemaining) b = refresh(b)
+          b put ':'
+          b = underlying(i+1).asInstanceOf[Json].jsonChars(b, refresh)
+          i += 2
+        }
+        if (underlying.length > 3) {
+          if (b.remaining < 2) b = refresh(b)
+          b put ' ' put '}'
+        }
+        else {
+          if (!b.hasRemaining) b = refresh(b)
+          b put '}'
+        }
+      }
+      else jsonCharsFromMap(bb, refresh)
   }
   object Obj extends FromJson[Obj] with JsonBuildTerminator[Obj] {
     val empty: Obj = new AtomicObj(Array())
     private[jsonal] val mapBuildingInProcess = new collection.mutable.AnyRefMap[String, Json]()
 
-    def apply(kvs: collection.Map[String, Json]) = {
-      val a = new Array[AnyRef](2*kvs.size)
-      var i = 0
-      kvs.foreach{ case (k,v) => a(i) = k; a(i+1) = v; i += 2 }
-      val ans = new AtomicObj(a)
-      ans.set(kvs)
-      ans
-    }
+    def apply(kvs: collection.Map[String, Json]) = new AtomicObj(null, kvs)
 
     def ~(done: Obj.type) = empty
     def ~(key: Str, nul: scala.Null) = (new Build[Obj]) ~ (key, nul)
@@ -881,7 +986,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         this
       }
       def ~(done: JsonBuildTerminator[T]): T =
-        new AtomicObj(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+        new AtomicObj(if (i==a.length) a else java.util.Arrays.copyOf(a, i), null)
       def ~(key: Str, js: Json): this.type = append(key, js)
       def ~(key: String, js: Json): this.type = append(key, js)
       def ~(key: Str, nul: scala.Null): this.type = append(key, Null)
