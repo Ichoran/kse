@@ -22,14 +22,17 @@
   * comes with default parsers to deserialize itself.
   *
   * It is NOT meant for repeated modification of a JSON AST; for that you want a lot of structural
-  * sharing and/or exposed mutable data structures, neither of which this AST provides.
+  * sharing and/or exposed mutable data structures, neither of which this AST provides.  You can get _part_
+  * of the way there by using `Obj` to wrap an immutable map, and unwrapping it (with `asMap`) and
+  * rebuilding when you want to change things.
   */
 
 package kse.jsonal
 
 import java.nio._
 
-class PrettyJson(val lines: collection.mutable.ArrayBuilder[String], val lastLine: java.lang.StringBuilder, indent: Int = 2, margin: Int = 80) {
+// TODO--this is buggy.  Fix it.
+class PrettyJson(val lines: collection.mutable.ArrayBuilder[String], val lastLine: java.lang.StringBuilder, indent: Int = 2, margin: Int = 70) {
   private[jsonal] val myLine = new java.lang.StringBuilder
   private var lastSpaces = 0
   private var myIndent = math.max(0, indent)
@@ -41,6 +44,11 @@ class PrettyJson(val lines: collection.mutable.ArrayBuilder[String], val lastLin
   def shallower: this.type = { myDepth = if (myDepth > 0) myDepth -1 else 0; this }
   def tooDeep = lastSpaces >= myMargin
   def append(s: String): this.type = { lastLine append s; this }
+  def pad(): this.type = {
+    if (indent-1 > mySpaces.length) mySpaces = Array.fill(indent)(' ')
+    lastLine.append(mySpaces, 0, math.max(0, indent-1))
+    this
+  }
   def advance(depth: Int): this.type = {
     myDepth = depth
     val nsp = math.min(myMargin, depth * myIndent)
@@ -54,7 +62,31 @@ class PrettyJson(val lines: collection.mutable.ArrayBuilder[String], val lastLin
     this
   }
   def advance(): this.type = advance(myDepth)
-  def result() = { if (lastLine.length > 0) { lines += lastLine.toString ; lastLine.setLength(0) }; lines.result() }
+  def advanceWithCarryover(n: Int, depth: Int): this.type = {
+    val iN = math.max(0, math.min(n, lastLine.length))
+    lines += lastLine.substring(0, iN)
+    val nsp = math.min(myMargin, depth * myIndent)
+    if (nsp > iN) {
+      var i = lastSpaces
+      while (i < iN) { lastLine.setCharAt(i, ' '); i += 1 }
+      if (mySpaces.length < nsp-iN) mySpaces = Array.fill(nsp-iN)(' ')
+      lastLine.insert(iN, mySpaces, 0, nsp-iN)
+    }
+    else {
+      if (nsp < iN) lastLine.delete(nsp, iN)
+      if (lastSpaces < nsp) {
+        var i = lastSpaces
+        while (i < iN) { lastLine.setCharAt(i, ' '); i += 1 }
+      }
+    }
+    myDepth = math.max(depth, 0)
+    lastSpaces = nsp
+    this
+  }
+  def result() = {
+    if (lastLine.length > 0) { lines += lastLine.toString ; lastLine.setLength(0) }
+    lines.result()
+  }
 }
 object PrettyJson {
   private[jsonal] val lotsOfSpaces: Array[Char] = Array.fill(1022)(' ')
@@ -137,6 +169,7 @@ sealed trait Json extends Jast with AsJson {
 
   def json: Json = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
+  override def jsonPretty(pretty: PrettyJson, depth: Int) { jsonString(pretty.lastLine) }
 }
 object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   private[jsonal] val not_a_normal_NaN = java.lang.Double.longBitsToDouble(0x7FF9000000000000L)
@@ -241,7 +274,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     protected def myName = "null"
     override def isNull = true
     def simple = true
-    override def jsonPretty(pretty: PrettyJson, depth: Int) { pretty append "null" }
     override def jsonString(sb: java.lang.StringBuilder) { sb append "null" }
     override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
       (if (bb.remaining < 4) refresh(bb) else bb) put myBytesSayNull
@@ -262,7 +294,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   sealed abstract class Bool extends Json { 
     protected def myName = "boolean"
     def simple = true
-    override def bool = Some(value)
     def value: Boolean
   }
   object Bool extends FromJson[Bool] { 
@@ -273,7 +304,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def unapply(js: Json): Option[Boolean] = js match { case b: Bool => Some(b.value); case _ => None }
     case object True extends Bool { 
       def value = true
-      override def jsonPretty(pretty: PrettyJson, depth: Int) { pretty append ""}
+      override val bool = Some(true)
       override def jsonString(sb: java.lang.StringBuilder) { sb append "true" }
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
         (if (bb.remaining < 4) refresh(bb) else bb) put myBytesSayTrue
@@ -282,6 +313,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
     case object False extends Bool {
       def value = false
+      override val bool = Some(false)
       override def jsonString(sb: java.lang.StringBuilder) { sb append "false" }
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
         (if (bb.remaining < 5) refresh(bb) else bb) put myBytesSayFalse
@@ -474,6 +506,16 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     final class All(values: Array[Json]) extends Arr {
       def size = values.length
       override def apply(i: Int) = if (i < 0 || i >= values.length) JastError("bad index "+i) else values(i)
+      override def jsonPretty(pretty: PrettyJson, depth: Int) {
+        // TODO--actually make this pretty.
+        if (size == 0) pretty append "[]"
+        else if (size == 1 && values(0).simple) {
+          pretty append "["
+          values(0).jsonString(pretty.lastLine)
+          pretty append "]"
+        }
+        else jsonString(pretty.lastLine)
+      }
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
         if (values.length > 0) {
@@ -615,6 +657,16 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (java.lang.Double.isNaN(di) || java.lang.Double.isInfinite(di)) Null
           else new Num(doubles(i), "")
         }
+      override def jsonPretty(pretty: PrettyJson, depth: Int) {
+        // TODO--actually make this pretty.
+        if (size == 0) pretty append "[]"
+        else if (size == 1) {
+          pretty append "["
+          Num(doubles(0)).jsonString(pretty.lastLine)
+          pretty append "]"
+        }
+        else jsonString(pretty.lastLine)
+      }
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
         var i = 0
@@ -897,6 +949,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       if (myMap.size > 1) sb append " }" else sb append '}'
     }
+      override def jsonPretty(pretty: PrettyJson, depth: Int) {
+        // TODO--actually make this pretty.
+        if (size == 0) pretty append "{}"
+        else jsonString(pretty.lastLine)
+      }
     override def jsonString(sb: java.lang.StringBuilder) {
       if (underlying ne null) {
         if (underlying.length > 3) sb append "{ " else sb append '{'
