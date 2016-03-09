@@ -262,10 +262,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= String) = (new Obj.Build[Json]) ~~ coll
 
   def parse(input: Json): Either[JastError, Json] = Right(input)
-  override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Js(input, i0, iN, ep)
-  override def parse(input: ByteBuffer) = JsonByteBufferParser.Js(input)
-  override def parse(input: CharBuffer) = JsonCharBufferParser.Js(input)
-  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Js(input, ep)
+  override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Json(input, i0, iN, ep)
+  override def parse(input: ByteBuffer) = JsonByteBufferParser.Json(input)
+  override def parse(input: CharBuffer) = JsonCharBufferParser.Json(input)
+  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Json(input, ep)
 
   sealed abstract class Null extends Json {}
   final object Null extends Null with FromJson[Null] {
@@ -565,6 +565,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     object All extends JsonBuildTerminator[All] {
       def apply(aj: Array[Json]) = new All(aj)
 
+      def builder = new Build[All]
+
+      val empty = new All(new Array(0))
+
       def ~(js: Json) = (new Build[All]) ~ js
       def ~(nul: scala.Null) = (new Build[All]) ~ Null
       def ~[A: Jsonize](a: A) = (new Build[All]) ~ a
@@ -740,6 +744,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         while (i < xs.length) { ys(i) = xs(i).toString.toDouble; i += 1}
         new Dbl(ys)
       }
+
+      def builder = new Build[Dbl]
 
       val empty = new Dbl(new Array[Double](0))
 
@@ -1084,7 +1090,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     val empty: Obj = new AtomicObj(Array())
     private[jsonal] val mapBuildingInProcess = new collection.mutable.AnyRefMap[String, Json]()
 
-    def apply(kvs: collection.Map[String, Json]) = new AtomicObj(null, kvs)
+    def apply(kvs: collection.Map[String, Json]): Obj = new AtomicObj(null, kvs)
     def apply(keys: Array[String], values: Array[Json]): Jast = 
       if (keys.length != values.length) JastError("cannot create object with unequal numbers of keys and values")
       else {
@@ -1098,6 +1104,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         }
         new AtomicObj(a)
       }
+
+    def fromFlatArray(kvs: Array[AnyRef]): Obj = new AtomicObj(kvs, null)
 
     def ~(done: Obj.type) = empty
     def ~(key: Str, nul: scala.Null) = (new Build[Obj]) ~ (key, nul)
@@ -1458,9 +1466,9 @@ object JsObj { def empty = new JsObj(new Array[String](0), new Array[JsVal](0), 
 */
 
 trait JsonGenericParser {
-  def Js(a: Any): Either[JastError, kse.jsonal.Json] = ???
-  def Js(a: Any, b: Any): Either[JastError, kse.jsonal.Json] = ???
-  def Js(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json] = ???
+  def Json(a: Any): Either[JastError, kse.jsonal.Json] = ???
+  def Json(a: Any, b: Any): Either[JastError, kse.jsonal.Json] = ???
+  def Json(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json] = ???
   def Null(a: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
   def Null(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
   def Null(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
@@ -1487,4 +1495,3 @@ object JsonByteBufferParser extends JsonGenericParser {}
 
 object JsonCharBufferParser extends JsonGenericParser {}
 
-object JsonStringParser extends JsonGenericParser {}
