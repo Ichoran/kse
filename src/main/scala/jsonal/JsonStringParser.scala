@@ -337,7 +337,7 @@ class JsonStringParser {
       { if (i < N) true else return JastError("end of input with unclosed object", index) } && 
       { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
     ) i += 1
-    if (c == '}') { idx = i; return Json.Obj.empty }
+    if (c == '}') { idx = i+1; return Json.Obj.empty }
     var kvs = new Array[AnyRef](6)
     var n = 0
     while (c != '}') {
