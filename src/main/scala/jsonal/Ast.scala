@@ -538,6 +538,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     final private val myCharsSayTrue = "true".toCharArray
     final private val myCharsSayFalse = "false".toCharArray
 
+    /** Creates a `Json.Bool` from a boolean */
+    def apply(b: Boolean): Bool = if (b) True else False
+
     /** Pattern-matcher for JSON boolean values */
     def unapply(js: Json): Option[Boolean] = js match { case b: Bool => Some(b.value); case _ => None }
 
