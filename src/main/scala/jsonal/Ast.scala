@@ -508,6 +508,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def toString = "null"
 
+    override def equals(a: Any) = a.asInstanceOf[AnyRef] eq this
+
     /** Returns a `JastError` if this is not a JSON null */
     def parse(input: Json): Either[JastError, Null] =
       if (this eq input) Right(this)
@@ -547,6 +549,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     case object True extends Bool { 
       def value = true
       override val bool = Some(true)
+      override def equals(a: Any) = a.asInstanceOf[AnyRef] eq this
       override def jsonString(sb: java.lang.StringBuilder) { sb append "true" }
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
         (if (bb.remaining < 4) refresh(bb) else bb) put myBytesSayTrue
@@ -557,6 +560,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     case object False extends Bool {
       def value = false
       override val bool = Some(false)
+      override def equals(a: Any) = a.asInstanceOf[AnyRef] eq this
       override def jsonString(sb: java.lang.StringBuilder) { sb append "false" }
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
         (if (bb.remaining < 5) refresh(bb) else bb) put myBytesSayFalse
@@ -587,6 +591,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     protected def myName = "string"
 
     def simple = true
+
+    override def hashCode = text.hashCode
+
+    override def equals(a: Any) = a match {
+      case s: Str => text == s.text
+      case _ => false
+    }
 
     override def jsonString(sb: java.lang.StringBuilder) {
       var i = 0
@@ -675,7 +686,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     * a number, but also the text representation if needed.  The internal encoding
     * also allows `Json.Num` to efficiently represent `Long`s.
     */
-  class Num private[jsonal] (content: Double, text: String) extends Json {
+  class Num private[jsonal] (private val content: Double, private val text: String) extends Json {
     protected def myName = "number"
     def simple = true
 
@@ -715,6 +726,29 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       if (text eq null) java.lang.Double.doubleToRawLongBits(content).toString
       else if (text.isEmpty) content.toString
       else text
+
+    override def hashCode = if (text eq null) java.lang.Double.doubleToRawLongBits(content).## else content.##
+
+    override def equals(a: Any) = a match {
+      case n: Num =>
+        if (text eq null) {
+          // Exactly when a number fits in Long but not Double is it packed
+          // So if we are packed, they must be too or we're surely different
+          if (n.text eq null) java.lang.Double.doubleToRawLongBits(content) == java.lang.Double.doubleToRawLongBits(n.content)
+          else false
+        }
+        else if (text.isEmpty) {
+          if (n.text eq null) false   // Because they are a Long that can't be represented exactly in a Double
+          else if (n.text.isEmpty) content == n.content   // Same representation
+          else Num.numericStringEquals(content.toString, n.text)  // Can't be sure, better check strings
+        }
+        else {
+          if (n.text eq null) false  // Because they are a Long and we're sure we are not
+          else if (n.text.isEmpty) Num.numericStringEquals(text, n.content.toString)  // Can't be sure, better check strings
+          else Num.numericStringEquals(text, n.text)   // Check whether numbers printed in strings are different
+        }
+      case _ => false
+    }
 
     override def jsonString(sb: java.lang.StringBuilder) { sb append this.toString }
 
@@ -771,10 +805,16 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
 
     /** Return the JSON number corresponding to this Long */
-    def apply(l: Long): Num = new Num(java.lang.Double.longBitsToDouble(l), null)
+    def apply(l: Long): Num = {
+      val d = l.toDouble
+      if (l == d) new Num(d, "")
+      else new Num(java.lang.Double.longBitsToDouble(l), null)
+    }
 
     /** Return the JSON number corresponding to this Double, or a JSON null if the Double is infinite or NaN */
-    def apply(d: Double): Json = if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) Null else new Num(d, "")
+    def apply(d: Double): Json =
+      if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) Null
+      else new Num(d, "")
 
     /** Return the JSON number corresponding to this BigDecimal */
     def apply(bd: BigDecimal): Num = new Num(bd.doubleValue, bd.toString)
@@ -783,6 +823,249 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       case n: Json.Num => Some(n.double)
       case _: Json.Null => Some(Double.NaN)
       case _ => None
+    }
+
+    /** Tests two non-empty strings for equality, assuming both are decimal representations of numbers.
+      *
+      * Note: if the two strings are NOT decimal representations of numbers, the results of this method are undefined.
+      * (It is likely but not guaranteed that the method will return `false` even if the two strings are identical.)
+      */
+    def numericStringEquals(a: String, b: String): Boolean = {
+      var i = 0  // Index for a
+      var j = 0  // Index for b
+      if (a.length < 1 || b.length < 1) return false
+      if (a.charAt(0) == '-') i += 1
+      if (b.charAt(0) == '-') j += 1
+      if (i >= a.length || j >= b.length) return false
+      var ca = a.charAt(i)  // Character at index of a
+      var cb = b.charAt(j)  // Character at index of b
+      if (i != j) {
+        // Different signs.  They'd better both be zero
+        return {
+          if (ca == '0' && cb == '0') {
+            while (i < a.length - 1 && (ca == '0' || ca == '.')) { i += 1; ca = a.charAt(i) }
+            while (j < b.length - 1 && (cb == '0' || cb == '.')) { j += 1; cb = b.charAt(j) }
+            (i == a.length - 1 || (ca | 0x20) == 'e') && (j == b.length - 1 || (cb | 0x20) == 'e')
+          }
+          else false
+        }
+      }
+      var pa = 0  // Decimal point position for a
+      var pb = 0  // Decimal point position for b
+      if (ca == '0') {
+        pa = -1
+        if (i < a.length - 1 && a.charAt(i+1) != '.') return false
+        else if (i < a.length - 2) {
+          i += 2
+          ca = a.charAt(i)
+          while (ca == '0' && i < a.length-1) { i += 1; ca = a.charAt(i); pa -= 1 }          
+        }
+      }
+      if (cb == '0') {
+        pb = -1
+        if (j < b.length - 1 && b.charAt(j+1) != '.') return false
+        else if (j < b.length - 2) {
+          j += 2
+          cb = b.charAt(j)
+          while (cb == '0' && j < b.length-1) { j += 1; cb = b.charAt(j); pb -= 1 }
+        }
+      }
+      println(f"$i $ca $pa $j $cb $pb")
+      var fa = pa < 0  // Found a's decimal point?
+      var fb = pb < 0  // Found b's decimal point?
+      while (ca == cb && (ca | 0x20) != 'e' && i < a.length-1 && j < b.length-1) {
+        i += 1
+        ca = a.charAt(i)
+        if (!fa) {
+          pa += 1
+          if (ca == '.') {
+            fa = true
+            if (i < a.length-1) {
+              i += 1
+              ca = a.charAt(i)
+            }
+          }
+        }
+        j += 1
+        cb = b.charAt(j)
+        if (!fb) {
+          pb += 1
+          if (cb == '.') {
+            fb = true
+            if (j < b.length-1) {
+              j += 1
+              cb = b.charAt(j)
+            }
+          }
+        }
+      }
+      if (ca != cb && (ca | 0x20) != 'e' && (cb | 0x20) != 'e') return false  // Digits simply disagree
+      // Capture any trailing zeros
+      if (!(i >= a.length -1 && j >= b.length - 1)) {
+        if (j >= b.length - 1 || (cb | 0x20) == 'e') {
+          if (j >= b.length - 1) {
+            if (!fb) pb += 1
+            // Advance a off the end, make sure it's all zeros
+            i += 1
+            ca = a.charAt(i)
+            if (!fa) {
+              pa += 1
+              if (ca == '.') {
+                fa = true
+                if (i < a.length - 1) {
+                  i += 1
+                  ca = a.charAt(i)
+                }
+              }
+            }
+          }
+          while (i < a.length -1 && ca == '0') {
+            i += 1
+            ca = a.charAt(i)
+            if (!fa) {
+              pa += 1
+              if (ca == '.') {
+                fa = true
+                if (i < a.length - 1) {
+                  i += 1
+                  ca = a.charAt(i)
+                }
+              }
+            }
+          }
+          if (ca >= '1' && ca <= '9') return false  // Extra digits on a
+        }
+        else if (i >= a.length - 1 || (ca | 0x20) == 'e') {
+          if (i >= a.length - 1) {
+            if (!fa) pa += 1
+            // Advance b off the end, make sure it's all zeros
+            j += 1
+            cb = b.charAt(j)
+            if (!fb) {
+              pb += 1
+              if (cb == '.') {
+                fb = true
+                if (j < b.length - 1) {
+                  j += 1
+                  cb = b.charAt(j)
+                }
+              }
+            }
+          }
+          while (j < b.length -1 && cb == '0') {
+            j += 1
+            cb = b.charAt(j)
+            if (!fb) {
+              pb += 1
+              if (cb == '.') {
+                fb = true
+                if (j < b.length - 1) {
+                  j += 1
+                  cb = b.charAt(j)
+                }
+              }
+            }
+          }
+          if (cb >= '1' && cb <= '9') return false  // Extra digits on b
+        }        
+      }
+      if (pa > 0) pa -= 1
+      if (pb > 0) pb -= 1
+      println(f"$i $ca $fa $pa $j $cb $fb $pb")
+      if ((ca | 0x20) == 'e' && (cb | 0x20) == 'e') {
+        if (i >= a.length - 1) return false
+        i += 1
+        ca = a.charAt(i)
+        val nega =
+          if (ca == '-' || ca == '+') {
+            val ans = ca == '-'
+            if (i >= a.length - 1) return false
+            i += 1
+            ca = a.charAt(i)
+            ans
+          }
+          else false
+        if (j >= b.length - 1) return false
+        j += 1
+        cb = b.charAt(j)
+        val negb =
+          if (cb == '-' || cb == '+') {
+            val ans = cb == '-'
+            if (j >= b.length - 1) return false
+            j += 1
+            cb = b.charAt(j)
+            ans
+          }
+          else false
+        if (a.length - i < 10 && b.length - j < 10) {
+          val ea = a.substring(i).toInt
+          val eb = b.substring(j).toInt
+          (if (negb) pb - eb else pb + eb) == (if (nega) pa - ea else pa + ea)
+        }
+        else if (a.length - i < 18 && b.length - j < 18) {
+          val ea = a.substring(i).toLong
+          val eb = b.substring(j).toLong
+          (if (negb) pb - eb else pb + eb) == (if (nega) pa - ea else pa + ea)
+        }
+        else {
+          val ea = BigInt(a.substring(i))
+          val eb = BigInt(b.substring(j))
+          (if (negb) pb - eb else pb + eb) == (if (nega) pa - ea else pa + ea)
+        }
+      }
+      else if ((ca | 0x20) == 'e') {
+        if (i >= a.length - 1) return false
+        i += 1
+        ca = a.charAt(i)
+        val nega =
+          if (ca == '-' || ca == '+') {
+            val ans = ca == '-'
+            if (i >= a.length - 1) return false
+            i += 1
+            ca = a.charAt(i)
+            ans
+          }
+          else false
+        if (a.length - i < 10) {
+          val ea = a.substring(i).toInt
+          pb == (if (nega) pa - ea else pa + ea)
+        }
+        else if (a.length - i < 18) {
+          val ea = a.substring(i).toLong
+          pb == (if (nega) pa - ea else pa + ea)
+        }
+        else {
+          val ea = BigInt(a.substring(i))
+          pb == (if (nega) pa - ea else pa + ea)
+        }
+      }
+      else if ((cb | 0x20) == 'e') {
+        if (j >= b.length - 1) return false
+        j += 1
+        cb = b.charAt(j)
+        val negb =
+          if (cb == '-' || cb == '+') {
+            val ans = cb == '-'
+            if (j >= b.length - 1) return false
+            j += 1
+            cb = b.charAt(j)
+            ans
+          }
+          else false
+        if (b.length - j < 10) {
+          val eb = b.substring(j).toInt
+          pa == (if (negb) pb - eb else pb + eb)
+        }
+        else if (b.length - j < 18) {
+          val eb = b.substring(j).toLong
+          pa == (if (negb) pb - eb else pb + eb)
+        }
+        else {
+          val eb = BigInt(b.substring(j))
+          pa == (if (negb) pb - eb else pb + eb)
+        }
+      }
+      else pa == pb
     }
 
     /** Returns `Left(JastError)` unless the input is a `Json.Num` */    
@@ -888,6 +1171,27 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     final class All(values: Array[Json]) extends Arr {
       def size = values.length
       override def apply(i: Int) = if (i < 0 || i >= values.length) JastError("bad index "+i) else values(i)
+      override def hashCode = scala.util.hashing.MurmurHash3.arrayHash(values)
+      override def equals(a: Any): Boolean = a match {
+        case all: All => values.length == all.values.length && {
+          var i = 0
+          while (i < values.length) { if (values(i) != all.values(i)) return false; i += 1 }
+          true
+        }
+        case dbl: Dbl => values.length == all.values.length && {
+          var i = 0
+          while (i < values.length) {
+            values(i) match {
+              case n: Num => if (!n.isDouble || n.double != dbl.doubles(i)) return false
+              case z: Null => if (!(java.lang.Double.isNaN(dbl.doubles(i)) || java.lang.Double.isInfinite(dbl.doubles(i)))) return false
+              case _ => return false
+            }
+            i += 1
+          }
+          true
+        }
+        case _ => false
+      }
       override def jsonPretty(pretty: PrettyJson, depth: Int) {
         // TODO--actually make this pretty.
         if (size == 0) pretty append "[]"
@@ -1095,6 +1399,28 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (java.lang.Double.isNaN(di) || java.lang.Double.isInfinite(di)) Null
           else new Num(doubles(i), "")
         }
+      override def hashCode = {
+        var h = scala.util.hashing.MurmurHash3.arraySeed
+        var i = 0
+        while (i < doubles.length) {
+          h = scala.util.hashing.MurmurHash3.mix(h, if (java.lang.Double.isNaN(h) || java.lang.Double.isInfinite(h)) Null.hashCode else doubles(i).##)
+          i += 1
+        }
+        scala.util.hashing.MurmurHash3.finalizeHash(h, doubles.length)
+      }
+      override def equals(a: Any): Boolean = a match {
+        case all: All => all == this
+        case dbl: Dbl => values.length == all.values.length && {
+          var i = 0
+          while (i < values.length) {
+            if (java.lang.Double.isNaN(dbl.doubles(i)) && java.lang.Double.isNaN(doubles(i))) java.lang.Double.doubleToRawLongBits(dbl.doubles(i)) == java.lang.Double.doubleToRawLongBits(doubles(i))
+            else doubles(i) == java.lang.Double.doubles(i)
+            i += 1
+          }
+          true
+        }
+        case _ => false
+      }
       override def jsonPretty(pretty: PrettyJson, depth: Int) {
         // TODO--actually make this pretty.
         if (size == 0) pretty append "[]"
@@ -1465,6 +1791,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         myMap.foreach{ case (k,v) => a(i) = k; a(i+1) = v; i += 2 }
         a
       }
+    override def hashCode = ???
     private def jsonStringFromMap(sb: java.lang.StringBuilder) {
       if (myMap.size > 1) sb append "{ " else sb append '{'
       var first = true
