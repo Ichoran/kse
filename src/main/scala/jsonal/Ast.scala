@@ -1096,6 +1096,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     /** The length of this array. */
     def size: Int
+
+    /** Visits each element in this array. */
+    def foreach[U](f: Json => U): Unit
+
+    /** Produces an iterator over this array. */
+    def iterator: Iterator[Json]
   }
 
   /** The companion object to `Json.Arr` provides ways to parse, construct, and build JSON
@@ -1168,9 +1174,19 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
 
     /** Represents a JSON array of not-only-numeric values */
-    final class All(values: Array[Json]) extends Arr {
+    final class All(val values: Array[Json]) extends Arr {
       def size = values.length
       override def apply(i: Int) = if (i < 0 || i >= values.length) JastError("bad index "+i) else values(i)
+      def foreach[U](f: Json => U) { var i = 0; while (i < values.length) { f(values(i)); i += 1 } }
+      def iterator: Iterator[Json] = new scala.collection.AbstractIterator[Json] {
+        private[this] var i = 0
+        def hasNext = i < values.length
+        def next = {
+          val ans = values(i)
+          i += 1
+          ans
+        }
+      }
       override def hashCode = scala.util.hashing.MurmurHash3.arrayHash(values)
       override def equals(a: Any): Boolean = a match {
         case all: All => values.length == all.values.length && {
@@ -1178,7 +1194,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           while (i < values.length) { if (values(i) != all.values(i)) return false; i += 1 }
           true
         }
-        case dbl: Dbl => values.length == all.values.length && {
+        case dbl: Dbl => values.length == dbl.doubles.length && {
           var i = 0
           while (i < values.length) {
             values(i) match {
@@ -1399,6 +1415,17 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (java.lang.Double.isNaN(di) || java.lang.Double.isInfinite(di)) Null
           else new Num(doubles(i), "")
         }
+      def foreach[U](f: Json => U) { var i = 0; while (i < doubles.length) { f(Num(doubles(i))); i += 1 } }
+      def foreach[A](f: Double => Unit)(implicit ev: A =:= Double) { var i = 0; while (i < doubles.length) { f(doubles(i)); i += 1 } }
+      def iterator: Iterator[Json] = new scala.collection.AbstractIterator[Json] {
+        private[this] var i = 0
+        def hasNext = i < doubles.length
+        def next = {
+          val ans = Num(doubles(i))
+          i += 1
+          ans
+        }
+      }
       override def hashCode = {
         var h = scala.util.hashing.MurmurHash3.arraySeed
         var i = 0
@@ -1410,11 +1437,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       override def equals(a: Any): Boolean = a match {
         case all: All => all == this
-        case dbl: Dbl => values.length == all.values.length && {
+        case dbl: Dbl => doubles.length == dbl.doubles.length && {
           var i = 0
-          while (i < values.length) {
-            if (java.lang.Double.isNaN(dbl.doubles(i)) && java.lang.Double.isNaN(doubles(i))) java.lang.Double.doubleToRawLongBits(dbl.doubles(i)) == java.lang.Double.doubleToRawLongBits(doubles(i))
-            else doubles(i) == java.lang.Double.doubles(i)
+          while (i < doubles.length) {
+            if (java.lang.Double.isNaN(dbl.doubles(i)) && java.lang.Double.isNaN(doubles(i)))
+              java.lang.Double.doubleToRawLongBits(dbl.doubles(i)) == java.lang.Double.doubleToRawLongBits(doubles(i))
+            else doubles(i) == dbl.doubles(i)
             i += 1
           }
           true
@@ -1683,6 +1711,22 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       * This array may be the same array that is used to back the `Json.Obj`, so modifying it is discouraged
       */
     def asFlatArray: Array[AnyRef]
+
+    /** Iterates through the keys and values of this JSON object.
+      *
+      * If this object was read from a file, the original order will be traversed.  If constructed from a map, the map order will be followed.
+      */
+    def iterator: Iterator[(String, Json)]
+
+    /** Checks whether the contents of this JSON object is the same as in the given map. */
+    def equalsMap(m: collection.Map[String, Json]): Boolean
+
+    /** Checks whether the contents of this JSON object is the same as in the given array.
+      *
+      * If `orderMatters` is set, the two must appear in the same order, and this JSON object must
+      * be backed by an array, not a map.  If duplicate keys exist, `orderMatters` must be set.
+      */
+    def equalsArray(a: Array[AnyRef], orderMatters: Boolean): Boolean
   }
   private[jsonal] final class AtomicObj(val underlying: Array[AnyRef], myMap: collection.Map[String, Json] = null)
   extends java.util.concurrent.atomic.AtomicReference[collection.mutable.AnyRefMap[String, Json]](null) with Obj {
@@ -1725,8 +1769,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       val ans = getOrNull(key)
       if (ans eq null) JastError("no key: " + key) else ans
     }
-    def hasDuplicateKeys: Boolean = size > 1 && (myMap eq null) && {
-      if (size < 6) {
+    def hasDuplicateKeys: Boolean = (myMap eq null) && underlying.length >= 4 && {
+      if (underlying.length < 12) {
         var i = 2
         while (i < underlying.length -1) {
           val key = underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }
@@ -1791,7 +1835,103 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         myMap.foreach{ case (k,v) => a(i) = k; a(i+1) = v; i += 2 }
         a
       }
-    override def hashCode = ???
+    def iterator: Iterator[(String, Json)] = 
+      if (myMap ne null) myMap.iterator
+      else new collection.AbstractIterator[(String, Json)] {
+        private[this] var i = 0
+        def hasNext = (i < underlying.length - 1)
+        def next = {
+          val key = underlying(i).asInstanceOf[String]
+          val value = underlying(i+1).asInstanceOf[Json]
+          i += 2
+          (key, value)
+        }
+      }
+    override def hashCode =
+      if (hasDuplicateKeys) {
+        var h = 938456718
+        var i = 0
+        while (i < underlying.length-1) {
+          h = scala.util.hashing.MurmurHash3.mix(h, underlying(i).hashCode)
+          h = scala.util.hashing.MurmurHash3.mix(h, underlying(i+1).hashCode)
+          i += 2
+        }
+        scala.util.hashing.MurmurHash3.finalizeHash(h, underlying.length >>> 1)
+      }
+      else if (myMap ne null) {
+        var h = 192375189
+        var i = myMap.iterator
+        while (i.hasNext) {
+          val (k,v) = i.next
+          h ^= scala.util.hashing.MurmurHash3.mix(k.hashCode, v.hashCode)
+        }
+        scala.util.hashing.MurmurHash3.finalizeHash(h, myMap.size)
+      }
+      else {
+        var h = 192375189
+        var i = 0
+        while (i < underlying.length - 1) {
+          h ^= scala.util.hashing.MurmurHash3.mix(underlying(i).hashCode, underlying(i+1).hashCode)
+          i += 2
+        }
+        scala.util.hashing.MurmurHash3.finalizeHash(h, underlying.length >>> 1)
+      }
+    def equalsMap(m: collection.Map[String, Json]): Boolean =
+      if (myMap ne null) m == myMap
+      else if (hasDuplicateKeys) false
+      else if (underlying.length < 12) {
+        var i = 0
+        while (i < underlying.length - 1) {
+          val o = m.get(underlying(i).asInstanceOf[String])
+          if (!o.isDefined) return false
+          else if (o.get != underlying(i+1)) return false
+          i += 2
+        }
+        true
+      }
+      else get() == myMap
+    def equalsArray(a: Array[AnyRef], orderMatters: Boolean): Boolean =
+      if (myMap ne null) {
+        if (orderMatters) false
+        else if ((a.length >>> 1) != myMap.size) false
+        else {
+          var i = 0
+          while (i < a.length - 1) {
+            val o = myMap.get(a(i).asInstanceOf[String])
+            if (!o.isDefined) return false
+            else if (o.get != a(i+1)) return false
+            i += 2
+          }
+          true
+        }
+      }
+      else if ((a.length >>> 1) != (underlying.length >>> 1)) false
+      else {
+        var i = 0
+        if (orderMatters) {
+          while (i < a.length - 1) {
+            if (a(i) != underlying(i)) return false
+            if (a(i+1) != underlying(i+1)) return false
+            i += 2
+          }
+        }
+        else {
+          while (i < a.length - 1) {
+            val o = getOrNull(a(i).asInstanceOf[String])
+            if (o eq null) return false
+            else if (o != a(i+1)) return false
+            i += 2
+          }
+        }
+        true
+      }
+    override def equals(a: Any): Boolean = a match {
+      case o: Obj =>
+        if (size != o.size) return false
+        if (myMap ne null) o.equalsMap(myMap)
+        else o.equalsArray(underlying, hasDuplicateKeys)
+      case _ => false
+    }
     private def jsonStringFromMap(sb: java.lang.StringBuilder) {
       if (myMap.size > 1) sb append "{ " else sb append '{'
       var first = true
