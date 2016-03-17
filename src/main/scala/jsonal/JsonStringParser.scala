@@ -60,27 +60,27 @@ class JsonStringParser {
   }
 
   private[jsonal] def parseNull(input: String, index: Int, end: Int): Jast = {
-    if (index+3 <= end && input.charAt(index) == 'u' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 'l') {
+    if (index < end-2 && input.charAt(index) == 'u' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 'l') {
       idx = index+3
       Json.Null
     }
-    else JastError("Expected 'null' but found '"+input.substring(index-1, index+3), index-1)
+    else JastError("Expected 'null' but found "+input.substring(index-1, math.min(end, index+3)), index-1)
   }
 
   private[jsonal] def parseTrue(input: String, index: Int, end: Int): Jast = {
-    if (index+3 <= end && input.charAt(index) == 'r' && input.charAt(index+1) == 'u' && input.charAt(index+2) == 'e') {
+    if (index < end-2 && input.charAt(index) == 'r' && input.charAt(index+1) == 'u' && input.charAt(index+2) == 'e') {
       idx = index+3
       Json.Bool.True
     }
-    else JastError("Expected 'true' but found "+input.substring(index-1, index+3), index-1)
+    else JastError("Expected 'true' but found "+input.substring(index-1, math.min(end, index+3)), index-1)
   }
 
   private[jsonal] def parseFalse(input: String, index: Int, end: Int): Jast = {
-    if (index+4 <= end && input.charAt(index) == 'a' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 's' && input.charAt(index+3) == 'e') {
+    if (index < end-3 && input.charAt(index) == 'a' && input.charAt(index+1) == 'l' && input.charAt(index+2) == 's' && input.charAt(index+3) == 'e') {
       idx = index+4
       Json.Bool.False
     }
-    else JastError("Expected 'false' but found "+input.substring(index-1, index+4), index-1)
+    else JastError("Expected 'false' but found "+input.substring(index-1, math.min(end, index+4)), index-1)
   }
 
   private[jsonal] def parseBool(input: String, index: Int, end: Int): Jast =

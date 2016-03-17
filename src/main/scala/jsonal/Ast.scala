@@ -483,8 +483,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   override def parse(input: CharBuffer) = JsonCharBufferParser.Json(input)
   override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Json(input, ep)
 
-  /*
-  val relaxed = new FromJson[Json] {
+  private final class JsonFromJson extends FromJson[Json] {
     def parse(input: Json): Either[JastError, Json] = Json.parse(input)
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
@@ -496,7 +495,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Json.parse(input, ep)
   }
-  */
+
+  /** Uses non-strict parsing of numbers (targeting Double for speed) */
+  val relaxed: FromJson[Json] = new JsonFromJson
 
   /** Represents a JSON null.  Only a single instance actually exists. */
   sealed abstract class Null extends Json {}
@@ -746,10 +747,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def equals(a: Any) = a match {
       case n: Num =>
         if (text eq null) {
-          // Exactly when a number fits in Long but not Double is it packed
+          // When a number fits in Long but not Double is it packed
           // So if we are packed, they must be too or we're surely different
           if (n.text eq null) java.lang.Double.doubleToRawLongBits(content) == java.lang.Double.doubleToRawLongBits(n.content)
-          else false
+          else if (n.text.isEmpty) false
+          else Num.numericStringEquals(java.lang.Double.doubleToRawLongBits(content).toString, n.text)
         }
         else if (text.isEmpty) {
           if (n.text eq null) false   // Because they are a Long that can't be represented exactly in a Double
@@ -757,9 +759,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           else Num.numericStringEquals(content.toString, n.text)  // Can't be sure, better check strings
         }
         else {
-          if (n.text eq null) false  // Because they are a Long and we're sure we are not
-          else if (n.text.isEmpty) Num.numericStringEquals(text, n.content.toString)  // Can't be sure, better check strings
-          else Num.numericStringEquals(text, n.text)   // Check whether numbers printed in strings are different
+          if (n.text eq null)
+            Num.numericStringEquals(java.lang.Double.doubleToRawLongBits(n.content).toString, text) // Can't be sure, better check strings
+          else if (n.text.isEmpty)
+            Num.numericStringEquals(text, n.content.toString)                                       // Can't be sure, better check strings
+          else
+            Num.numericStringEquals(text, n.text)                                                   // Check whether numbers printed in strings are different
         }
       case _ => false
     }
@@ -821,7 +826,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Return the JSON number corresponding to this Long */
     def apply(l: Long): Num = {
       val d = l.toDouble
-      if (l == d) new Num(d, "")
+      if (l == d.toLong) new Num(d, "")
       else new Num(java.lang.Double.longBitsToDouble(l), null)
     }
 
@@ -1100,8 +1105,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
       JsonInputStreamParser.Num(input, ep)
 
-    /*
-    val relaxed = new FromJson[Num] {
+    /** Uses non-strict numeric parsing, storing all numbers in `Double` for speed */
+    private final class NumFromJson extends FromJson[Num] {
       override def parse(input: Json): Either[JastError, Num] = Num.parse(input)
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
         JsonStringParser.Num(input, i0, iN, ep, relaxed = true)
@@ -1109,7 +1114,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       override def parse(input: CharBuffer) = Num.parse(input)
       override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Num.parse(input, ep)
     }
-    */
+
+    val relaxed: FromJson[Num] = new NumFromJson
   }
 
 
@@ -1695,8 +1701,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
       JsonInputStreamParser.Arr(input, ep)
 
-    /*
-    val relaxed = new FromJson[Arr] {
+    private final class ArrFromJson extends FromJson[Arr] {
       override def parse(input: Json): Either[JastError, Arr] = Arr.parse(input)
 
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
@@ -1708,7 +1713,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
       override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Arr.parse(input, ep)
     }
-    */
+
+    val relaxed: FromJson[Arr] = new ArrFromJson
   }
 
 
@@ -2207,13 +2213,14 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     class Build[T >: Obj] {
       private[this] var i = 0
       private[this] var a: Array[AnyRef] = new Array[AnyRef](6)
-      private[this] def append(key: AnyRef, js: Json): this.type = {
+      private[this] def append(key: String, js: Json): this.type = {
         if (i >= a.length-1) a = java.util.Arrays.copyOf(a, ((a.length << 1) | a.length) & 0x7FFFFFFE)
         a(i) = key
         a(i+1) = js
         i += 2
         this
       }
+      private[this] def append(key: Str, js: Json): this.type = append(key.text, js)
 
       /** Finish building this JSON object and return it.  Note that the terminator is typically the same
         * object used to begin building, e.g. `Json ~ ("fish", Json(2.7)) ~ Json`
@@ -2286,8 +2293,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
       JsonInputStreamParser.Obj(input, ep)
 
-    /*
-    val relaxed = new FromJson[Obj] {
+    private final class RelaxedObjFromJson extends FromJson[Obj] {
       override def parse(input: Json): Either[JastError, Obj] = Obj.parse(input)
 
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
@@ -2299,7 +2305,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
       override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Obj.parse(input, ep)      
     }
-    */
+
+    val relaxed: FromJson[Obj] = new RelaxedObjFromJson
   }
 }
 
