@@ -483,6 +483,20 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   override def parse(input: CharBuffer) = JsonCharBufferParser.Json(input)
   override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Json(input, ep)
 
+  /*
+  val relaxed = new FromJson[Json] {
+    def parse(input: Json): Either[JastError, Json] = Json.parse(input)
+
+    override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
+      JsonStringParser.Json(input, i0, iN, ep, relaxed = true)
+
+    override def parse(input: ByteBuffer) = Json.parse(input)
+
+    override def parse(input: CharBuffer) = Json.parse(input)
+
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Json.parse(input, ep)
+  }
+  */
 
   /** Represents a JSON null.  Only a single instance actually exists. */
   sealed abstract class Null extends Json {}
@@ -817,7 +831,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       else new Num(d, "")
 
     /** Return the JSON number corresponding to this BigDecimal */
-    def apply(bd: BigDecimal): Num = new Num(bd.doubleValue, bd.toString)
+    def apply(bd: BigDecimal): Num = {
+      val d = bd.doubleValue
+      if (d == bd) new Num(d, "")
+      else new Num(d, bd.toString)
+    }
 
     def unapply(js: Json): Option[Double] = js match {
       case n: Json.Num => Some(n.double)
@@ -870,7 +888,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           while (cb == '0' && j < b.length-1) { j += 1; cb = b.charAt(j); pb -= 1 }
         }
       }
-      println(f"$i $ca $pa $j $cb $pb")
       var fa = pa < 0  // Found a's decimal point?
       var fb = pb < 0  // Found b's decimal point?
       while (ca == cb && (ca | 0x20) != 'e' && i < a.length-1 && j < b.length-1) {
@@ -971,7 +988,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       if (pa > 0) pa -= 1
       if (pb > 0) pb -= 1
-      println(f"$i $ca $fa $pa $j $cb $fb $pb")
       if ((ca | 0x20) == 'e' && (cb | 0x20) == 'e') {
         if (i >= a.length - 1) return false
         i += 1
@@ -1082,7 +1098,18 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def parse(input: CharBuffer) = JsonCharBufferParser.Num(input)
 
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Num(input, ep)    
+      JsonInputStreamParser.Num(input, ep)
+
+    /*
+    val relaxed = new FromJson[Num] {
+      override def parse(input: Json): Either[JastError, Num] = Num.parse(input)
+      override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
+        JsonStringParser.Num(input, i0, iN, ep, relaxed = true)
+      override def parse(input: ByteBuffer) = Num.parse(input)
+      override def parse(input: CharBuffer) = Num.parse(input)
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Num.parse(input, ep)
+    }
+    */
   }
 
 
@@ -1666,7 +1693,22 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def parse(input: CharBuffer) = JsonCharBufferParser.Arr(input)
 
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Arr(input, ep)    
+      JsonInputStreamParser.Arr(input, ep)
+
+    /*
+    val relaxed = new FromJson[Arr] {
+      override def parse(input: Json): Either[JastError, Arr] = Arr.parse(input)
+
+      override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
+        JsonStringParser.Arr(input, i0, iN, ep, relaxed = true)
+
+      override def parse(input: ByteBuffer) = Arr.parse(input)
+
+      override def parse(input: CharBuffer) = Arr.parse(input)
+
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Arr.parse(input, ep)
+    }
+    */
   }
 
 
@@ -1889,7 +1931,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         }
         true
       }
-      else get() == myMap
+      else get() == m
     def equalsArray(a: Array[AnyRef], orderMatters: Boolean): Boolean =
       if (myMap ne null) {
         if (orderMatters) false
@@ -2087,6 +2129,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** The empty JSON object. */
     val empty: Obj = new AtomicObj(Array())
 
+    /** Creates a new builder for JSON objects. */
+    def build: Build[Obj] = new Build[Obj]
+
     /** Creates a new JSON object from a map of String keys to JSON values. */
     def apply(kvs: collection.Map[String, Json]): Obj = new AtomicObj(null, kvs)
 
@@ -2239,7 +2284,22 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def parse(input: CharBuffer) = JsonCharBufferParser.Obj(input)
 
     override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Obj(input, ep)    
+      JsonInputStreamParser.Obj(input, ep)
+
+    /*
+    val relaxed = new FromJson[Obj] {
+      override def parse(input: Json): Either[JastError, Obj] = Obj.parse(input)
+
+      override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
+        JsonStringParser.Obj(input, i0, iN, ep, relaxed = true)
+
+      override def parse(input: ByteBuffer) = Obj.parse(input)
+
+      override def parse(input: CharBuffer) = Obj.parse(input)
+
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Obj.parse(input, ep)      
+    }
+    */
   }
 }
 
