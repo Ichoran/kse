@@ -4,7 +4,7 @@
 package kse.jsonal
 
 class JsonStringParser {
-  import JsonStringParser.{smallPowersOfTen, smallPowersOfTenAsLong}
+  import JsonStringParser.smallPowersOfTen
 
   private[this] var strictNumbers = true
   private[this] var idx = 0
@@ -196,7 +196,7 @@ class JsonStringParser {
     if (c > '0' && c <= '9') {
       dbdp = i  // Hack to count the number of digits
       digits = c - '0'
-      val M = math.min(i+19, end)
+      val M = math.min(i+19, end)  // A Long could have up to 19 digits and still fit (-9 223 372 036 854 775 808)
       i += 1
       while (i < M && { c = input.charAt(i); c >= '0' && c <= '9' }) { i += 1; digits = digits*10 + (c - '0') }
       if (i == M) while (i < end && { c = input.charAt(i); c >= '0' && c <= '9'}) i += 1
@@ -212,49 +212,49 @@ class JsonStringParser {
     else { cache = JastError("number should start with a numeric digit", i); return Double.NaN }
     if (c != '.' && (c|0x20) != 'e') {
       // Number is all done.  Might be a Long.  Save it if so!
+      idx = i
       if (dbdp < 20 && (digits >= 0) || (negative && digits==Long.MinValue)) {
         // Yes, it's a Long!  Save it.
         if (negative) digits = -digits   // No-op for Long.MinValue, so we're okay
         val dbl = digits.toDouble
-        if (toCache) cache = new Json.Num(java.lang.longBitsToDouble(digits), null)
+        if (toCache) cache = new Json.Num(java.lang.Double.longBitsToDouble(digits), null)
         else if (strictNumbers && dbl.toLong != digits) cache = JsonStringParser.wouldNotFitInDouble
-        idx = i
         return dbl
       }
       else {
         val text = input.substring(index, i)
         val dbl = text.toDouble
         if (toCache) cache = new Json.Num(dbl, text)
-        else if (strictNumbers && !Num.numericStringEquals(dbl.toString, text)) cache = JsonStringParser.wouldNotFitInDouble
+        else if (strictNumbers && !Json.Num.numericStringEquals(dbl.toString, text))
+          cache = JsonStringParser.wouldNotFitInDouble
         return dbl
       }
     }
     // Number is not done.  Keep parsing it.
     if (c == '.') {
-      val dp = i
       i += 1
-      val M = math.min(if (dbdp > 19) i else i + (19 - dbdp), N)
+      val dp = i
+      val M = math.min(if (dbdp > 19) i else i + (19 - dbdp), end)
       while (i < M && { c = input.charAt(i); c >= '0' && c <= '9' }) { i += 1; digits = digits*10 + (c - '0') }
-      if (i >= M) while (i < N && { c = input.charAt(i); c >= '0' && c <= '9' }) i += 1
-      dadp = (i - dp) - 1
+      if (i >= M) while (i < end && { c = input.charAt(i); c >= '0' && c <= '9' }) i += 1
+      dadp = i - dp
       if (dadp == 0) { cache = JastError("need digits after . in number", i); return Double.NaN }
     }
-    val ei = i
     val ex =
-      if (i >= N || (c | 0x20) != 'e') 0
+      if (i >= end || (c | 0x20) != 'e') 0
       else {
         i += 1
-        if (i >= N) { cache = JastError("need digits after e in number", i); return Double.NaN }
+        if (i >= end) { cache = JastError("need digits after e in number", i); return Double.NaN }
         c = input.charAt(i)
         val negex = c match {
           case '-' =>
             i += 1
-            if (i >= N) { cache = JastError("need digits after - in number exponent", i); return Double.NaN }
+            if (i >= end) { cache = JastError("need digits after - in number exponent", i); return Double.NaN }
             c = input.charAt(i)
             true
           case '+' =>
             i += 1
-            if (i >= N) { cache = JastError("need digits after + in number exponent", i); return Double.NaN }
+            if (i >= end) { cache = JastError("need digits after + in number exponent", i); return Double.NaN }
             c = input.charAt(i)
             false
           case _ => false
@@ -262,9 +262,9 @@ class JsonStringParser {
         var x = (c - '0')
         if (x < 0 || x >= 10) { cache = JastError("exponent in number must be numeric digits", i); return Double.NaN }
         i += 1
-        while (i < N && x < 999 && { c = input.charAt(i); c >= '0' && c <= '9' }) { x = x*10 + (c - '0'); i += 1 }
+        while (i < end && x < 999 && { c = input.charAt(i); c >= '0' && c <= '9' }) { x = x*10 + (c - '0'); i += 1 }
         if (x >= 999) {
-          while (i < N && { c = input.charAt(i); c >= '0' && c <= '9' }) i += 1
+          while (i < end && { c = input.charAt(i); c >= '0' && c <= '9' }) i += 1
           val str = input.substring(index, i)
           val dbl = str.toDouble
           if (toCache)
@@ -279,74 +279,25 @@ class JsonStringParser {
         }
         if (negex) -x else x
       }
-    if (dadp + dbdp <= 15 && dbdp + ex <= 17 && dadp - ex <= 17) {
-      idx = i
-      val shift = ex - dadp
+    val shift = ex - dadp
+    idx = i
+    if (
+      dadp + dadp < 19 &&
+      java.lang.Long.numberOfLeadingZeros(digits) + java.lang.Long.numberOfTrailingZeros(digits) >= 11 &&
+      shift >= -22 &&
+      shift <= 22
+    ) {
+      // We can store the digits in a Double and IEEE demands that * and / are exact (and 1e22 is exact)
+      // Thus, we can get the exact result with a single multiplication or division!
       val dbl =
         if (shift == 0) digits.toDouble
         else if (shift > 0) digits * smallPowersOfTen(shift)
         else digits / smallPowersOfTen(-shift)
       val sdbl = if (negative) -dbl else dbl
-      if (toCache) cache = new Json.Num(sdbl, "")  // String is from index to i, but doesn't add anything
+      if (toCache) cache = new Json.Num(sdbl, "")
       sdbl
     }
     else {
-      if (ei == i || (dbdp + ex > 0 && !strictNumbers)) {
-        // Not assuredly fractional, so could possibly be a Long.
-        // Try to parse it directly, since it's way better if we can.
-        var j = ei - 1
-        // Strip trailing zeros.
-        val dadp0 = dadp
-        while (j > i && {
-          val c = input.charAt(j)
-          (c == '0' || (if (c=='.') { dadp += 1; true} else false))
-        }) { dadp -= 1; j -= 1 }
-        if (ex >= dadp) {
-          // It is a whole number!  Keep going!
-          // If we had any zeros on the end of our stored digits, get rid of them
-          val k = j + 1
-          if (dadp < dadp0 && dadp+dbdp < 15) digits = digits / smallPowersOfTenAsLong(15 - (dadp+dbdp))
-          var n = math.min(15, dadp + dbdp)
-          // Strip leading zeros
-          j = index + (if (negative) 1 else 0)
-          if (dbdp == 1 && input.charAt(j) == '0') {
-            j = index + 1
-            while (j < ei && {
-              val c = input.charAt(j)
-              (c == '0' || (if (c=='.') { dbdp -= 1; true} else false))
-            }) { dbdp -= 1; n -= 1; j += 1 }
-          }
-          if (dbdp + dadp < 20 && dbdp + ex < 20) {
-            // Can probably fit in a Long!  Keep going!
-            // Accumulate digits up to 19 in `digits`.  First one is in j.
-            if (n > 0) j += n + (if (dbdp > 0 && n > dbdp) 1 else 0) else n = 0
-            while (n < 19 && j < k) {
-              val c = input.charAt(j) - '0'
-              if (c >= 0 && c <= 9) {
-                digits = digits*10 + c
-                n += 1
-              }
-              j += 1
-            }
-            if (ex > dadp) digits = digits * smallPowersOfTenAsLong(ex - dadp)
-            if (digits > 0 || (negative && digits == Long.MinValue)) {
-              // It fit!  (If not, overflow can't make it positive again, so the test is definitive.)
-              idx = i
-              if (negative) digits = -digits
-              val dbl = digits.toDouble
-              if (toCache)
-                cache =
-                  if (dbl.toLong == digits || ei != i) new Json.Num(dbl, "")
-                  else new Json.Num(java.lang.Double.longBitsToDouble(digits), null)
-              else if (strictNumbers && dbl.toLong != digits)
-                cache = JsonStringParser.wouldNotFitInDouble
-              return dbl
-            }
-          }
-        }
-      }
-      // If we got here, that whole Long parsing thing was a dud.  It's definitely not a Long.
-      idx = i
       val str = input.substring(index, i)
       val dbl = str.toDouble
       if (toCache)
@@ -486,8 +437,7 @@ class JsonStringParser {
 }
 
 object JsonStringParser{
-  private[jsonal] val smallPowersOfTen = Array.tabulate(30)(i => s"1e$i".toDouble)
-  private[jsonal] val smallPowersOfTenAsLong = Iterator.iterate(1L)(x => 10*x).take(19).toArray
+  private[jsonal] val smallPowersOfTen = Array.tabulate(23)(i => s"1e$i".toDouble)
 
   private val myRightNull: Either[JastError, kse.jsonal.Json.Null] = Right(kse.jsonal.Json.Null)
   private val myRightTrue: Either[JastError, kse.jsonal.Json.Bool] = Right(kse.jsonal.Json.Bool.True)

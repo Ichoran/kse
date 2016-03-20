@@ -706,7 +706,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def simple = true
 
     /** Returns `true` if this number is represented by a finite `Double` value */
-    def isDouble: Boolean = (text ne null) && !java.lang.Double.isNaN(content) && !java.lang.Double.isInfinite(content)
+    def isDouble: Boolean = !java.lang.Double.isNaN(content) && !java.lang.Double.isInfinite(content)
 
     /** Returns `true` if this number has stored textual representation */
     def explicitTextForm: Boolean = (text ne null) && !text.isEmpty
@@ -745,9 +745,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def hashCode = if (text eq null) java.lang.Double.doubleToRawLongBits(content).## else content.##
 
     override def equals(a: Any) = a match {
-      case n: Num =>
+      case n: Num => 
         if (isDouble) n.isDouble && double == n.double
-        else !n.isDouble && Num.numericStringEquals(text, n.text)
+        else if (n.isDouble) false
+        else Num.numericStringEquals(this.toString, n.toString)
       case _ => false
     }
 
@@ -820,10 +821,14 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Return the JSON number corresponding to this BigDecimal */
     def apply(bd: BigDecimal): Num = {
       val d = bd.doubleValue
-      if (d == bd) apply(d)
+      if (d == bd) {
+        val l = d.toLong
+        if (l == d && l == bd) new Num(java.lang.Double.longBitsToDouble(l), null)
+        else new Num(d, "")
+      }
       else if (d > (1L << 53)) {
         val l = bd.longValue
-        if (l == bd) apply(l)
+        if (l == bd) new Num(java.lang.Double.longBitsToDouble(l), null)
         else new Num(d, bd.toString)
       }
       else new Num(d, bd.toString)
@@ -1212,7 +1217,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           var i = 0
           while (i < values.length) {
             values(i) match {
-              case n: Num => if (!n.isDouble || n.double != dbl.doubles(i)) return false
+              case n: Num => n.double == dbl.doubles(i)
               case z: Null => if (!(java.lang.Double.isNaN(dbl.doubles(i)) || java.lang.Double.isInfinite(dbl.doubles(i)))) return false
               case _ => return false
             }
@@ -1424,11 +1429,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       def size = doubles.length
       override def apply(i: Int) =
         if (i < 0 || i >= doubles.length) JastError("bad index "+i)
-        else {
-          val di = doubles(i)
-          if (java.lang.Double.isNaN(di) || java.lang.Double.isInfinite(di)) Null
-          else new Num(doubles(i), "")
-        }
+        else Num(doubles(i))
       def foreach[U](f: Json => U) { var i = 0; while (i < doubles.length) { f(Num(doubles(i))); i += 1 } }
       def foreach[A](f: Double => Unit)(implicit ev: A =:= Double) { var i = 0; while (i < doubles.length) { f(doubles(i)); i += 1 } }
       def iterator: Iterator[Json] = new scala.collection.AbstractIterator[Json] {
@@ -1479,8 +1480,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         while (i < doubles.length) {
           if (i > 0) sb append ", "
           val d = doubles(i)
+          val l = d.toLong
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) sb append "null"
-          else sb append d.toString
+          else if (d == l) sb append l.toString
+          else sb.append(d.toString)
           i += 1
         }
         sb append ']'
@@ -1495,8 +1498,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
             b put '['.toByte put ' '.toByte
           }
           val d = doubles(i)
+          val l = d.toLong
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) b = Null.jsonBytes(b, refresh)
-          else b = loadByteBuffer(d.toString.getBytes, b, refresh)
+          else b = loadByteBuffer((if (d == l) l.toString else d.toString).getBytes, b, refresh)
           i += 1
         }
         if (!b.hasRemaining) b = refresh(b)
@@ -1512,8 +1516,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
             c put '[' put ' '
           }
           val d = doubles(i)
+          val l  = d.toLong
           if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) c = Null.jsonChars(c, refresh)
-          else c = loadCharBuffer(d.toString.toCharArray, c, refresh)
+          else c = loadCharBuffer((if (d == l) l.toString else d.toString).toCharArray, c, refresh)
           i += 1
         }
         if (!c.hasRemaining) c = refresh(c)
@@ -1657,8 +1662,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         def toAll[U >: All](that: All.Build[U]): All.Build[U] = {
           var j = 0
           while (j < i) {
-            if (java.lang.Double.isNaN(a(j)) && java.lang.Double.isInfinite(a(j))) that ~ Null
-            else that ~ (new Num(a(j), ""))
+            that ~ Num(a(j))
             j += 1
           }
           that
