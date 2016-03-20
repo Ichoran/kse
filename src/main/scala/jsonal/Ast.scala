@@ -708,6 +708,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Returns `true` if this number is represented by a finite `Double` value */
     def isDouble: Boolean = (text ne null) && !java.lang.Double.isNaN(content) && !java.lang.Double.isInfinite(content)
 
+    /** Returns `true` if this number has stored textual representation */
+    def explicitTextForm: Boolean = (text ne null) && !text.isEmpty
+
     /** The `Double` value corresponding to this JSON number */
     override def double = if (text eq null) java.lang.Double.doubleToRawLongBits(content).toDouble else content
 
@@ -723,10 +726,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Returns a `Long` if this JSON number is exactly represented by a `Long`, or a fallback value if not */
     def longOr(fallback: Long): Long =
       if (text eq null) java.lang.Double.doubleToRawLongBits(content)
-      else if (text.isEmpty) {
-        val l = content.toLong
-        if (l == content) l else fallback
-      }
       else fallback
 
     /** Returns a BigDecimal value that corresponds to this JSON number.
@@ -734,7 +733,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       * Note: this operation is not cached, so performance may suffer if it is called repeatedly.
       */
     def big: BigDecimal =
-      if (text eq null) BigDecimal(long)
+      if (text eq null) BigDecimal(java.lang.Double.doubleToRawLongBits(content))
       else if (text.isEmpty) BigDecimal(content)
       else BigDecimal(text)
 
@@ -747,26 +746,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def equals(a: Any) = a match {
       case n: Num =>
-        if (text eq null) {
-          // When a number fits in Long but not Double is it packed
-          // So if we are packed, they must be too or we're surely different
-          if (n.text eq null) java.lang.Double.doubleToRawLongBits(content) == java.lang.Double.doubleToRawLongBits(n.content)
-          else if (n.text.isEmpty) false
-          else Num.numericStringEquals(java.lang.Double.doubleToRawLongBits(content).toString, n.text)
-        }
-        else if (text.isEmpty) {
-          if (n.text eq null) false   // Because they are a Long that can't be represented exactly in a Double
-          else if (n.text.isEmpty) content == n.content   // Same representation
-          else Num.numericStringEquals(content.toString, n.text)  // Can't be sure, better check strings
-        }
-        else {
-          if (n.text eq null)
-            Num.numericStringEquals(java.lang.Double.doubleToRawLongBits(n.content).toString, text) // Can't be sure, better check strings
-          else if (n.text.isEmpty)
-            Num.numericStringEquals(text, n.content.toString)                                       // Can't be sure, better check strings
-          else
-            Num.numericStringEquals(text, n.text)                                                   // Check whether numbers printed in strings are different
-        }
+        if (isDouble) n.isDouble && double == n.double
+        else !n.isDouble && Num.numericStringEquals(text, n.text)
       case _ => false
     }
 
@@ -825,28 +806,27 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
 
     /** Return the JSON number corresponding to this Long */
-    def apply(l: Long): Num = {
-      val d = l.toDouble
-      if (l == d.toLong) new Num(d, "")
-      else new Num(java.lang.Double.longBitsToDouble(l), null)
-    }
+    def apply(l: Long): Num = new Num(java.lang.Double.longBitsToDouble(l), null)
 
     /** Return the JSON number corresponding to this Double, or a JSON null if the Double is infinite or NaN */
     def apply(d: Double): Json =
       if (java.lang.Double.isNaN(d) || java.lang.Double.isInfinite(d)) Null
-      else new Num(d, "")
+      else {
+        val l = d.toLong
+        if (l == d) new Num(java.lang.Double.longBitsToDouble(l), null)
+        else new Num(d, "")
+      }
 
     /** Return the JSON number corresponding to this BigDecimal */
     def apply(bd: BigDecimal): Num = {
       val d = bd.doubleValue
-      if (d == bd) new Num(d, "")
+      if (d == bd) apply(d)
+      else if (d > (1L << 53)) {
+        val l = bd.longValue
+        if (l == bd) apply(l)
+        else new Num(d, bd.toString)
+      }
       else new Num(d, bd.toString)
-    }
-
-    def unapply(js: Json): Option[Double] = js match {
-      case n: Json.Num => Some(n.double)
-      case _: Json.Null => Some(Double.NaN)
-      case _ => None
     }
 
     /** Tests two non-empty strings for equality, assuming both are decimal representations of numbers.

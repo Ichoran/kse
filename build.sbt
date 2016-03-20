@@ -31,7 +31,8 @@ pomExtra := (
 ///////////////////////////
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.11.7"
+  scalaVersion := "2.11.7",
+  scalacOptions += "-feature"
 )
 
 lazy val scalaReflect = Def.setting { "org.scala-lang" % "scala-reflect" % scalaVersion.value }

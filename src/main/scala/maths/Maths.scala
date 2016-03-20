@@ -3,6 +3,8 @@
 
 package kse
 
+import scala.language.implicitConversions
+
 package maths {
   /** Useful constants.  Computed using Mathematica 8.0 or Wolfram Alpha. */
   object NumericConstants {

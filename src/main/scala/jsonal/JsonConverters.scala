@@ -3,6 +3,8 @@
 
 package kse.jsonal
 
+import scala.language.higherKinds
+
 trait PriorityThreeJsonConverters {
   implicit def implicitJsonizationPassesThroughOption[A](implicit jser: Jsonize[A]) = 
     new Jsonize[Option[A]] { def jsonize(o: Option[A]) = o match { case None => Json.Null; case Some(a) => jser.jsonize(a) }}
