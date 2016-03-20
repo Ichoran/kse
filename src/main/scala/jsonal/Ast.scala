@@ -712,7 +712,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def double = if (text eq null) java.lang.Double.doubleToRawLongBits(content).toDouble else content
 
     /** Returns `true` if this number is represented exactly by a `Long` value */
-    def isLong: Boolean = (text eq null) || (content.toLong == content)
+    def isLong: Boolean = (text eq null) || (text.isEmpty && content.toLong == content)
 
     /** Returns a `Long` value corresponding to this JSON number.
       * Values too large end up as `Long.MaxValue`, those to small as `Long.MinValue`, and those
@@ -723,10 +723,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Returns a `Long` if this JSON number is exactly represented by a `Long`, or a fallback value if not */
     def longOr(fallback: Long): Long =
       if (text eq null) java.lang.Double.doubleToRawLongBits(content)
-      else {
+      else if (text.isEmpty) {
         val l = content.toLong
         if (l == content) l else fallback
       }
+      else fallback
 
     /** Returns a BigDecimal value that corresponds to this JSON number.
       *

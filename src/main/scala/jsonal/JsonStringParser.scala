@@ -4,7 +4,7 @@
 package kse.jsonal
 
 class JsonStringParser {
-  import JsonStringParser.smallPowersOfTen
+  import JsonStringParser.{smallPowersOfTen, smallPowersOfTenAsLong}
 
   private[this] var strictNumbers = true
   private[this] var idx = 0
@@ -216,6 +216,7 @@ class JsonStringParser {
       dadp = (i - dp) - 1
       if (dadp == 0) { cache = JastError("need digits after . in number", i); return Double.NaN }
     }
+    val ei = i
     val ex =
       if (i >= N || (c | 0x20) != 'e') 0
       else {
@@ -238,8 +239,8 @@ class JsonStringParser {
         var x = (c - '0')
         if (x < 0 || x >= 10) { cache = JastError("exponent in number must be numeric digits", i); return Double.NaN }
         i += 1
-        while (i < N && x < 99 && { c = input.charAt(i); c >= '0' && c <= '9' }) { x = x*10 + (c - '0'); i += 1 }
-        if (x > 99) {
+        while (i < N && x < 999 && { c = input.charAt(i); c >= '0' && c <= '9' }) { x = x*10 + (c - '0'); i += 1 }
+        if (x >= 999) {
           while (i < N && { c = input.charAt(i); c >= '0' && c <= '9' }) i += 1
           val str = input.substring(index, i)
           val dbl = str.toDouble
@@ -255,8 +256,8 @@ class JsonStringParser {
         }
         if (negex) -x else x
       }
-    idx = i
     if (dadp + dbdp <= 15 && dbdp + ex <= 17 && dadp - ex <= 17) {
+      idx = i
       val shift = ex - dadp
       val dbl =
         if (shift == 0) digits.toDouble
@@ -267,6 +268,59 @@ class JsonStringParser {
       sdbl
     }
     else {
+      if (dbdp + ex > 0) {
+        // Not assuredly fractional, so could possibly be a Long.
+        // Try to parse it directly, since it's way better if we can.
+        var j = ei - 1
+        // Strip trailing zeros.
+        val dadp0 = dadp
+        while (j > idx && {
+          val c = input.charAt(j)
+          (c == '0' || (if (c=='.') { dadp += 1; true} else false))
+        }) { dadp -= 1; j -= 1 }
+        if (dadp+ex >= 0) {
+          // It is a whole number!  Keep going!
+          // If we had any zeros on the end of our stored digits, get rid of them
+          val k = j + 1
+          if (dadp < dadp0 && dadp+dbdp < 15) digits = digits / smallPowersOfTenAsLong(15 - (dadp+dbdp))
+          var n = math.min(15, dadp + dbdp)
+          // Strip leading zeros
+          j = index + (if (negative) 1 else 0)
+          if (dbdp == 1 && input.charAt(j) == '0') {
+            j = index + 1
+            while (j < ei && {
+              val c = input.charAt(j)
+              (c == '0' || (if (c=='.') { dbdp -= 1; true} else false))
+            }) { dbdp -= 1; n -= 1; j += 1 }
+          }
+          if (dbdp + dadp < 20 && dbdp + ex < 20) {
+            // Can probably fit in a Long!  Keep going!
+            // Accumulate digits up to 19 in `digits`.  First one is in j.
+            if (n > 0) j += n else n = 0
+            while (n < 19 && j < k) {
+              val c = input.charAt(j) - '0'
+              if (c >= 0 && c <= 9) {
+                digits = digits*10 + c
+                n += 1
+              }
+              j += 1
+            }
+            if (digits > 0 || (negative && digits == Long.MinValue)) {
+              // It fit!  (If not, overflow can't make it positive again.)
+              val dbl = digits.toDouble
+              if (toCache)
+                cache =
+                  if (dbl.toLong == digits) new Json.Num(dbl, "")
+                  else new Json.Num(java.lang.Double.longBitsToDouble(digits), null)
+              else if (strictNumbers && dbl.toLong != digits)
+                cache = JsonStringParser.wouldNotFitInDouble
+              return dbl
+            }
+          }
+        }
+      }
+      // If we got here, that whole Long parsing thing was a dud.  It's definitely not a Long.
+      idx = i
       val str = input.substring(index, i)
       val dbl = str.toDouble
       if (toCache)
@@ -407,6 +461,7 @@ class JsonStringParser {
 
 object JsonStringParser{
   private[jsonal] val smallPowersOfTen = Array.tabulate(30)(i => s"1e$i".toDouble)
+  private[jsonal] val smallPowersOfTenAsLong = Iterator.iterate(1L)(x => 10*x).take(19).toArray
 
   private val myRightNull: Either[JastError, kse.jsonal.Json.Null] = Right(kse.jsonal.Json.Null)
   private val myRightTrue: Either[JastError, kse.jsonal.Json.Bool] = Right(kse.jsonal.Json.Bool.True)
