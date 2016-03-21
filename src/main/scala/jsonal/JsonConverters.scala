@@ -39,10 +39,32 @@ object JsonConverters extends PriorityTwoJsonConverters {
   implicit def jsonMapIsImplicitlyJsonized[J <: Json] =
     new Jsonize[collection.Map[String, J]] { def jsonize(mj: collection.Map[String, J]) = Json ~~ mj ~~ Json }
 
-  val booleanFromJson: FromJson[Boolean] = new FromJson[Boolean] {
+  implicit val booleanFromJson: FromJson[Boolean] = new FromJson[Boolean] {
     def parse(js: Json): Either[JastError, Boolean] = js.bool match {
-      case None => Left(JastError("Not boolean"))
+      case None => Left(JastError("Not a boolean"))
       case Some(b) => Right(b)
+    }
+  }
+
+  implicit val doubleFromJson: FromJson[Double] = new FromJson[Double] {
+    def parse(js: Json): Either[JastError, Double] = js match {
+      case Json.Null => Right(Double.NaN)
+      case n: Json.Num => Right(n.double)
+      case _ => Left(JastError("Not a double"))
+    }
+  }
+
+  implicit val stringFromJson: FromJson[String] = new FromJson[String] {
+    def parse(js: Json): Either[JastError, String] = js match {
+      case Json.Str(text) => Right(text)
+      case _ => Left(JastError("Not a string"))
+    }
+  }
+
+  implicit def arrayFromJson[A](implicit fj: FromJson[A], tag: reflect.ClassTag[A]) = new FromJson[Array[A]] {
+    def parse(js: Json): Either[JastError, Array[A]] = js match {
+      case ja: Json.Arr => fj.parseArray(ja)
+      case _ => Left(JastError("Not an array"))
     }
   }
 }

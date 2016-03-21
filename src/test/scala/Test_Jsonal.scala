@@ -180,7 +180,11 @@ object Test_Jsonal extends Test_Kse {
     Json ~ ("fish", 2.0) ~ Json =?= Json.Obj ~ ("fish", 2.0) ~ Json.Obj &&
     Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}").right.get &&
     Json ~ ("fish", Array("wish", "dish")) ~ Json =?= Json ~ ("fish", Json ~ "wish" ~ "dish" ~ Json) ~ Json &&
-    Json ~ ("fish", Map("wish" -> "dish")) ~ Json =?= Json ~ ("fish", Json ~ ("wish", "dish") ~ Json) ~ Json
+    Json ~ ("fish", Map("wish" -> "dish")) ~ Json =?= Json ~ ("fish", Json ~ ("wish", "dish") ~ Json) ~ Json &&
+    Json(false).parseTo[Boolean] =?= Right(false) &&
+    Json(2.127515).parseTo[Double] =?= Right(2.127515) &&
+    Json("fish").parseTo[String] =?= Right("fish") &&
+    (Json ~ "cod" ~ "herring" ~ Json).parseTo[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring"))
   }
 
   def main(args: Array[String]) { typicalMain(args) }
