@@ -244,7 +244,7 @@ sealed trait Jast {
   def apply(key: String): Jast
 
   /** Parse into a class given an implicit (or explicit) converter */
-  def parseTo[A](implicit fj: FromJson[A]): Either[JastError, A]
+  def to[A](implicit fj: FromJson[A]): Either[JastError, A]
 
   /** Lift-style alias for array lookup. */
   @inline final def \(i: Int): Jast = this apply i
@@ -285,7 +285,7 @@ final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.
   def string = None
   def apply(i: Int) = this
   def apply(key: String) = this
-  def parseTo[A](implicit fj: FromJson[A]): Either[JastError, A] = Left(this)
+  def to[A](implicit fj: FromJson[A]): Either[JastError, A] = Left(this)
 }
 
 /** This marker trait indicates that a JSON item being built should use type `T` as a stop token. */
@@ -309,7 +309,7 @@ sealed trait Json extends Jast with AsJson {
   def string: Option[String] = None
   def apply(i: Int): Jast = JastError("Indexing into "+myName)
   def apply(key: String): Jast = JastError("Map looking on "+myName)
-  def parseTo[A](implicit fj: FromJson[A]): Either[JastError, A] = fj parse this
+  def to[A](implicit fj: FromJson[A]): Either[JastError, A] = fj parse this
 
   def json: Json = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }

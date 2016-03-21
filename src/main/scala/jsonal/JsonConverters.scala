@@ -5,6 +5,8 @@ package kse.jsonal
 
 import scala.language.higherKinds
 
+import scala.util.control.NonFatal
+
 trait PriorityThreeJsonConverters {
   implicit def implicitJsonizationPassesThroughOption[A](implicit jser: Jsonize[A]) = 
     new Jsonize[Option[A]] { def jsonize(o: Option[A]) = o match { case None => Json.Null; case Some(a) => jser.jsonize(a) }}
@@ -29,6 +31,9 @@ object JsonConverters extends PriorityTwoJsonConverters {
   implicit val booleanIsImplicitlyJsonized = new Jsonize[Boolean] { def jsonize(b: Boolean) = Json.Bool(b) }
   implicit val doubleIsImplicitlyJsonized = new Jsonize[Double] { def jsonize(d: Double) = Json.Num(d) }
   implicit val stringIsImplicitlyJsonized = new Jsonize[String] { def jsonize(s: String) = Json.Str(s) }
+  implicit val instantIsImplicitlyJsonized = new Jsonize[java.time.Instant] { 
+    def jsonize(i: java.time.Instant) = Json.Str(i.toString)
+  }
   private val genericAsJsonIsJsonized: Jsonize[AsJson] = new Jsonize[AsJson] { def jsonize(aj: AsJson) = aj.json }
   implicit def asJsonIsImplicitlyJsonized[A <: AsJson] = genericAsJsonIsJsonized.asInstanceOf[Jsonize[A]]
   private val genericJsonOptionIsJsonized: Jsonize[Option[Json]] =
@@ -65,6 +70,19 @@ object JsonConverters extends PriorityTwoJsonConverters {
     def parse(js: Json): Either[JastError, Array[A]] = js match {
       case ja: Json.Arr => fj.parseArray(ja)
       case _ => Left(JastError("Not an array"))
+    }
+  }
+
+  private val patternForInstant = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$""".r.pattern
+
+  implicit val instantFromJson: FromJson[java.time.Instant] = new FromJson[java.time.Instant] {
+    def parse(js: Json): Either[JastError, java.time.Instant] = js match {
+      case Json.Str(text) =>
+        if (patternForInstant.matcher(text).matches)
+          try { return Right(java.time.Instant.parse(text)) }
+          catch { case t if NonFatal(t) => }
+        Left(JastError("Not properly formatted as an Instant"))
+      case _ => Left(JastError("Not an Instant because not a string"))
     }
   }
 }

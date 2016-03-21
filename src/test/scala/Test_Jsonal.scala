@@ -181,10 +181,12 @@ object Test_Jsonal extends Test_Kse {
     Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}").right.get &&
     Json ~ ("fish", Array("wish", "dish")) ~ Json =?= Json ~ ("fish", Json ~ "wish" ~ "dish" ~ Json) ~ Json &&
     Json ~ ("fish", Map("wish" -> "dish")) ~ Json =?= Json ~ ("fish", Json ~ ("wish", "dish") ~ Json) ~ Json &&
-    Json(false).parseTo[Boolean] =?= Right(false) &&
-    Json(2.127515).parseTo[Double] =?= Right(2.127515) &&
-    Json("fish").parseTo[String] =?= Right("fish") &&
-    (Json ~ "cod" ~ "herring" ~ Json).parseTo[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring"))
+    Json(false).to[Boolean] =?= Right(false) &&
+    Json(2.127515).to[Double] =?= Right(2.127515) &&
+    Json("fish").to[String] =?= Right("fish") &&
+    (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
+    { val now = java.time.Instant.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
+    { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].right.map(_.headOption) =?= Right(Option(now)) }
   }
 
   def main(args: Array[String]) { typicalMain(args) }
