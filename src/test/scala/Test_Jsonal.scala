@@ -185,6 +185,7 @@ object Test_Jsonal extends Test_Kse {
     Json(2.127515).to[Double] =?= Right(2.127515) &&
     Json("fish").to[String] =?= Right("fish") &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
+    (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
     { val now = java.time.Instant.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
     { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].right.map(_.headOption) =?= Right(Option(now)) }
   }

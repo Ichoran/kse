@@ -73,6 +73,13 @@ object JsonConverters extends PriorityTwoJsonConverters {
     }
   }
 
+  implicit def collectionFromJson[A, Coll[_]](implicit fj: FromJson[A], cbf: collection.generic.CanBuildFrom[Nothing, A, Coll[A]]) = new FromJson[Coll[A]] {
+    def parse(js: Json): Either[JastError, Coll[A]] = js match {
+      case ja: Json.Arr => fj.parseTo[Coll](ja)
+      case _ => Left(JastError("Not a JSON array"))
+    }
+  }
+
   private val patternForInstant = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$""".r.pattern
 
   implicit val instantFromJson: FromJson[java.time.Instant] = new FromJson[java.time.Instant] {
