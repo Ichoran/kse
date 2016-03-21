@@ -181,6 +181,24 @@ trait FromJson[A] {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
+
+  /** Recover an array of these objects from their JSON representation */
+  def parseArray(input: Json.Arr)(implicit tag: reflect.ClassTag[A]): Either[JastError, Array[A]] = {
+    var a = new Array[A](input.size)
+    var i = 0
+    while (i < input.size) {
+      val ji = input(i) match {
+        case jx: Json => jx
+        case je: JastError => return Left(je)
+      }
+      parse(ji) match {
+        case Left(e) => return Left(e)
+        case Right(x) => a(i) = x
+      }
+      i += 1
+    }
+    Right(a)
+  }
 }
 object FromJson {
   /** A utility class that holds the last index of a input used for JSON parsing */

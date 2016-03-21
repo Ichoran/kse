@@ -38,4 +38,11 @@ object JsonConverters extends PriorityTwoJsonConverters {
     new Jsonize[Array[J]] { def jsonize(aj: Array[J]) = Json ~~ aj ~~ Json }
   implicit def jsonMapIsImplicitlyJsonized[J <: Json] =
     new Jsonize[collection.Map[String, J]] { def jsonize(mj: collection.Map[String, J]) = Json ~~ mj ~~ Json }
+
+  val booleanFromJson: FromJson[Boolean] = new FromJson[Boolean] {
+    def parse(js: Json): Either[JastError, Boolean] = js.bool match {
+      case None => Left(JastError("Not boolean"))
+      case Some(b) => Right(b)
+    }
+  }
 }
