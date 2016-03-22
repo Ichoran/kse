@@ -41,6 +41,7 @@ import java.nio._
   * Because accessor methods are provided on `Jast`, and errors in access produce `JastError`, safe destructuring is easy:
   *
   * {{{
+  * import kse.jsonal._
   * val maybeJson = Jast.parse("""{"red":[true, {"dish":27.5}], "blue":"fish"}""")
   * val redDish = maybeJson("red")(1)("dish")    // JSON representation of 27.5
   * val wrong   = maybeJson("blue")(3)("fish")   // JastError("Indexing into string")
@@ -1184,6 +1185,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
             a = java.util.Arrays.copyOf(a, m)
           }
         }
+
+        /** Finish building this arrray and return it.  See also `~` with a `JsonBuildTerminator`. */
+        def result(): All =
+          new All(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+
         /** Complete building this array and return the array.
           *
           * Note that the terminal item is usually the name of the same object used to
@@ -1460,6 +1466,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
             a = java.util.Arrays.copyOf(a, m)
           }
         }
+
+        /** Finish building this array and return it.  See also `~` with a `JsonBuildTerminator`. */
+        def result(): Dbl =
+          new Dbl(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
 
         /** Finish building this array and return it.  Note that the terminator is typically the same object used to begin
           * building, e.g. `Json.Arr ~ 2.7 ~ Json.Arr`
@@ -1973,7 +1983,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     val empty: Obj = new AtomicObj(Array())
 
     /** Creates a new builder for JSON objects. */
-    def build: Build[Obj] = new Build[Obj]
+    def builder: Build[Obj] = new Build[Obj]
 
     /** Creates a new JSON object from a map of String keys to JSON values. */
     def apply(kvs: collection.Map[String, Json]): Obj = new AtomicObj(null, kvs)
@@ -2058,6 +2068,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         this
       }
       private[this] def append(key: Str, js: Json): this.type = append(key.text, js)
+
+      /** Finish building this JSON object and return it.  See also `~` with a `JsonBuildTerminator`. */
+      def result(): Obj =
+        new AtomicObj(if (i==a.length) a else java.util.Arrays.copyOf(a,i), null)
 
       /** Finish building this JSON object and return it.  Note that the terminator is typically the same
         * object used to begin building, e.g. `Json ~ ("fish", Json(2.7)) ~ Json`
@@ -2178,5 +2192,3 @@ object JsonInputStreamParser extends JsonGenericParser {}
 /** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
 object JsonByteBufferParser extends JsonGenericParser {}
 
-/** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
-object JsonCharBufferParser extends JsonGenericParser {}

@@ -323,9 +323,17 @@ class JsonStringParser {
     var buffer = new Array[Double](6)
     var n = 0
     while (c != ']') {
+      cache = null
       val ans = 
         if (c == '-') parseNum(input, i, end, true, false)
         else if (c >= '0' && c <= '9') parseNum(input, i, end, false, false)
+        else if (!strictNumbers && c == 'n') {
+          if (i < end-2 && input.charAt(i+1)=='u' && input.charAt(i+2)=='l' && input.charAt(i+3)=='l') {
+            idx = i+4
+            Double.NaN
+          }
+          else return false
+        }
         else return false
       i = idx
       if (strictNumbers && (cache eq JsonStringParser.wouldNotFitInDouble)) return false
@@ -416,6 +424,10 @@ class JsonStringParser {
       ) i += 1
       if (c != ':') return JastError("object key not followed with ':'", i)
       i += 1
+      while (
+        { if (i < N) true else return JastError("end of input after object key -- no value", index) } && 
+        { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      ) i += 1
       parseVal(input, i, end) match {
         case js: Json => kvs(n) = js
         case je: JastError => return JastError("error reading value "+(n/2+1)+" (key " + kvs(n-1) + ") in object", i, je)
@@ -516,7 +528,7 @@ object JsonStringParser{
     if (i >= iM) return Left(JastError("Expected JSON object but at end of input"))
     if (input.charAt(i) != '"') return Left(JastError("Expected JSON object but found character "+input.charAt(i), i))
     val jsp = (new JsonStringParser).relaxedNumbers(relaxed)
-    jsp.parseStr(input, math.max(0, i0), math.min(iN, input.length)) match {
+    jsp.parseObj(input, math.max(0, i0), math.min(iN, input.length)) match {
       case jo: kse.jsonal.Json.Obj => if (ep ne null) jsp.setEndpoint(ep); Right(jo)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON object or an error?"))
