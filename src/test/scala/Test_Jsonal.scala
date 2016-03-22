@@ -171,7 +171,29 @@ object Test_Jsonal extends Test_Kse {
             ans
           }
         case Left(e) => println(j); println(e); false 
-      })
+      }) &&
+      (Json.parse(java.nio.ByteBuffer.wrap(j.getBytes("UTF-8"))) match {
+        case Right(mm) =>
+          if (i != mm) {
+            i =?= mm
+            subtest(i, mm)
+            false
+          }
+          else true
+        case Left(e) => println(j); println("ByteBuffer"); println(e); false
+      }) &&
+      (Json.relaxed.parse(java.nio.ByteBuffer.wrap(j.getBytes("UTF-8"))) match {
+        case Right(mm) =>
+          k2.right.exists{ kk2 =>
+            val ans = kk2 == mm
+            if (!ans) {
+              println("relaxed ByteBuffer")
+              mm =?= kk2
+            }
+            ans
+          }
+        case Left(e) => println(j); println("ByteBuffer"); println(e); false
+      })      
     }
   }
 

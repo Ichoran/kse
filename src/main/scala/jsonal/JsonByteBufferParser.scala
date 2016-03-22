@@ -6,13 +6,14 @@ package kse.jsonal
 import java.nio._
 
 
-// WARNING - this code is largely COPIED from JsonStringParser.
-// YOU MUST MAINTAIN THIS BY HAND.  IT IS THE CRAZY, I KNOW.
+// WARNING - this code is almost entirely COPIED from JsonByteBufferParser,
+// which is itself copied from JsonStringParser.
+// YOU MUST MAINTAIN THIS BY HAND.  AAAAAAAHHHHHHH!!!!!
 // This is done both to maximize performance and because there
 // are a lot of fiddly little details that need to be altered.
-class JsonCharBufferParser {
-  import JsonCharBufferParser.smallPowersOfTen
-  import JsonCharBufferParser.StringsFromCharBufferSlices
+class JsonByteBufferParser {
+  import JsonByteBufferParser.smallPowersOfTen
+  import JsonByteBufferParser.StringsFromByteBufferSlices
 
   private[this] var strictNumbers = true
   private[this] var cache: Jast = null
@@ -26,25 +27,27 @@ class JsonCharBufferParser {
   /** Set whether parsing of numbers is strict (default) or relaxed */
   def relaxedNumbers(relax: Boolean): this.type = { strictNumbers = !relax; this }
 
-  def parse(input: CharBuffer): Jast = parseVal(input)
+  def parse(input: ByteBuffer): Jast = parseVal(input)
 
   /////////////
   // Important invariants within methods:
   //    c holds the current character
   //    If a unique character is already parsed, the method that parses
-  //      the rest of it gets a CharBuffer pointing past that character 
+  //      the rest of it gets a ByteBuffer pointing past that character
+  //    Note that (c & 0xFFFFFFE0) == 0 && ((1 << c) & 0x1000026) != 0
+  //      is a magic incantation to test whether (c+8) is whitespace (c: Int)
   /////////////
 
-  private[jsonal] def parseVal(input: CharBuffer): Jast = {
-    var c: Char = 0
+  private[jsonal] def parseVal(input: ByteBuffer): Jast = {
+    var c: Int = 0
     while (
       { if (input.hasRemaining) true else return JastError("end of input, no value found", input.position) } && 
-      { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      { c = input.get - 8; (c & 0xFFFFFFE0) == 0 && ((1 << c) & 0x1000026) != 0}
     ) {}
-    parseValStartingWith(input, c)
+    parseValStartingWith(input, c+8)
   }
 
-  private[jsonal] def parseValStartingWith(input: CharBuffer, c: Char): Jast = {
+  private[jsonal] def parseValStartingWith(input: ByteBuffer, c: Int): Jast = {
     if (c == '"') parseStr(input)
     else if (c == '[') parseArr(input)
     else if (c == '{') parseObj(input)
@@ -63,7 +66,7 @@ class JsonCharBufferParser {
     }
   }
 
-  private[jsonal] def parseNull(input: CharBuffer): Jast = {
+  private[jsonal] def parseNull(input: ByteBuffer): Jast = {
     val zero = input.position-1
     if (input.remaining > 2 && input.get == 'u' && input.get == 'l' && input.get == 'l') Json.Null
     else {
@@ -72,7 +75,7 @@ class JsonCharBufferParser {
     }
   }
 
-  private[jsonal] def parseTrue(input: CharBuffer): Jast = {
+  private[jsonal] def parseTrue(input: ByteBuffer): Jast = {
     val zero = input.position-1
     if (input.remaining > 2 && input.get == 'r' && input.get == 'u' && input.get == 'e') Json.Bool.True
     else {
@@ -81,7 +84,7 @@ class JsonCharBufferParser {
     }
   }
 
-  private[jsonal] def parseFalse(input: CharBuffer): Jast = {
+  private[jsonal] def parseFalse(input: ByteBuffer): Jast = {
     val zero = input.position-1
     if (input.remaining > 3 && input.get == 'a' && input.get == 'l' && input.get == 's' && input.get == 'e') Json.Bool.False
     else {
@@ -90,7 +93,7 @@ class JsonCharBufferParser {
     }
   }
 
-  private[jsonal] def parseBool(input: CharBuffer): Jast =
+  private[jsonal] def parseBool(input: ByteBuffer): Jast =
     if (input.hasRemaining) input.get match {
       case 't' => parseTrue(input)
       case 'f' => parseFalse(input)
@@ -98,22 +101,22 @@ class JsonCharBufferParser {
     }
     else JastError("Expected boolean but found end of input", input.position)
 
-  private[jsonal] def parseStr(input: CharBuffer): Jast = {
+  private[jsonal] def parseStr(input: ByteBuffer): Jast = {
     val first = input.position
     val c = scanSimpleStr(input)
     if (c == '"') new Json.Str(input.subStr(first, input.position-1))
-    else if (c < 0) JastError("No closing quotes on string", first-1)
-    else parseComplexStr(input, first)
+    else if (c == -129) JastError("No closing quotes on string", first-1)
+    else parseComplexStr(input, first, c)
   }
   
-  private def scanSimpleStr(input: CharBuffer): Int = {
+  private def scanSimpleStr(input: ByteBuffer): Int = {
     var c: Int = -1
-    while ({if (!input.hasRemaining) return -1 else true} && { c = input.get; c != '"' && c != '\\' }) {}
+    while ({if (!input.hasRemaining) return -129 else true} && { c = input.get; c != '"' && c != '\\' && c >= 0}) {}
     c
   }
 
-  private def hexifyChar(c: Char): Int = {
-    val x = (c - '0') & 0xFFFF
+  private def hexifyByte(c: Byte): Int = {
+    val x = (c - '0') & 0xFF
     if (x < 10) x
     else {
       val y = x | 0x20
@@ -122,31 +125,58 @@ class JsonCharBufferParser {
     }
   }
 
-  private def parseComplexStr(input: CharBuffer, first: Int): Jast = {
+  private def parseComplexStr(input: ByteBuffer, first: Int, initial: Int): Jast = {
     val sb = new java.lang.StringBuilder
-    var c: Char = '\\'
+    var c = initial
     var p = input.position
     if (p-first > 1) input.subSB(sb, first, p-1)
 
-    while(input.hasRemaining) {
-      sb append (input.get match {
-        case 'n' => '\n'
-        case 'r' => '\r'
-        case 't' => '\t'
-        case 'u' =>
-          if (input.remaining < 4) return JastError("string ends mid-unicode-escape", input.position)
-          val h = (hexifyChar(input.get) << 12) | 
-                  (hexifyChar(input.get) << 8) | 
-                  (hexifyChar(input.get) << 4) | 
-                  hexifyChar(input.get)
-          if (h < 0) return JastError("non-hex value in unicode escape", input.position-4)
-          h.toChar
-        case 'f' => '\f'
-        case 'b' => '\b'
-        case x => 
-          if (x == '"' || x == '/' || x == '\\') x
-          else return JastError("invalid quoted character '" + x + "'", input.position-1)
-      })
+    while (input.hasRemaining) {
+      val c2 = input.get
+      if (c == '\\') {
+        sb append ((c2 match {
+          case 'n' => '\n'
+          case 'r' => '\r'
+          case 't' => '\t'
+          case 'u' =>
+            if (input.remaining < 4) return JastError("string ends mid-unicode-escape", first-1)
+            val h = (hexifyByte(input.get) << 12) | 
+                    (hexifyByte(input.get) << 8) | 
+                    (hexifyByte(input.get) << 4) | 
+                    hexifyByte(input.get)
+            if (h < 0) return JastError("non-hex value in unicode escape", input.position-4)
+            h.toChar
+          case 'f' => '\f'
+          case 'b' => '\b'
+          case x => 
+            if (x == '"' || x == '/' || x == '\\') x.toChar
+            else return JastError("invalid quoted character '" + x + "'", input.position-1)
+        }): Char)
+      }
+      else if ((c & 0xE0) == 0xC0) {
+        if ((c2 & 0xC0) != 0x80) return JastError("Improper UTF-8 encoding", input.position-1)
+        c = ((c&0x1F) << 6) | (c2&0x3F)
+        if (c < 0x80) return JastError("Overlong UTF-8 encoding", input.position-2)
+        sb append c.toChar
+      }
+      else if ((c & 0xF0) == 0xE0) {
+        if (!input.hasRemaining) return JastError("string ends in the middle of UTF-8 multi-byte character", first-1)
+        val c3 = input.get
+        if ((c2 & 0xC0) + (c3 & 0xC0) != 0x100) return JastError("Improper UTF-8 encoding", input.position-2)
+        c = ((c&0xF) << 12) | ((c2&0x3F) << 6) | (c3&0x3F)
+        if (c < 0x800) return JastError("Overlong UTF-8 encoding", input.position-3)
+        sb append c.toChar
+      }
+      else if ((c & 0xF8) == 0xF0) {
+        if (input.remaining < 2) return JastError("string ends in the middle of UTF-8 multi-byte character", first-1)
+        val c3 = input.get
+        val c4 = input.get
+        if ((c2 & 0xC0) + (c3 & 0xC0) + (c4 & 0xC0) != 0x180) return JastError("Improper UTF-8 encoding", input.position-3)
+        c = ((c & 0x7) << 18) | ((c2&0x3F) << 12) | ((c3&0x3F) << 6) | (c4&0x3F)
+        if (c < 0x10000 || c > 0x10FFFF) return JastError("Overlong or out of bounds UTF-8 encoding", input.position-4)
+        sb appendCodePoint c
+      }
+      else return JastError("Improper UTF-8 encoding", input.position-2)
       if (!input.hasRemaining) return JastError("No closing quotes on string", first-1)
       p = input.position
       c = input.get
@@ -165,7 +195,7 @@ class JsonCharBufferParser {
   }
 
 
-  private[jsonal] def parseNum(input: CharBuffer, initial: Char, toCache: Boolean = true): Double = {
+  private[jsonal] def parseNum(input: ByteBuffer, initial: Int, toCache: Boolean = true): Double = {
     val zero = input.position-1
     cache = null
     var dadp = 0  // How many of our digits are after the decimal point?
@@ -197,7 +227,7 @@ class JsonCharBufferParser {
         if (initial == '-') digits = -digits   // No-op for Long.MinValue, so we're okay
         val dbl = digits.toDouble
         if (toCache) cache = new Json.Num(java.lang.Double.longBitsToDouble(digits), null)
-        else if (strictNumbers && dbl.toLong != digits) cache = JsonCharBufferParser.wouldNotFitInDouble
+        else if (strictNumbers && dbl.toLong != digits) cache = JsonByteBufferParser.wouldNotFitInDouble
         return dbl
       }
       else {
@@ -205,7 +235,7 @@ class JsonCharBufferParser {
         val dbl = text.toDouble
         if (toCache) cache = new Json.Num(dbl, text)
         else if (strictNumbers && !Json.Num.numericStringEquals(dbl.toString, text))
-          cache = JsonCharBufferParser.wouldNotFitInDouble
+          cache = JsonByteBufferParser.wouldNotFitInDouble
         return dbl
       }
     }
@@ -258,7 +288,7 @@ class JsonCharBufferParser {
               else if (java.lang.Double.isNaN(dbl) || java.lang.Double.isInfinite(dbl)) Json.Null
               else new Json.Num(dbl, "")
           else if (strictNumbers && !Json.Num.numericStringEquals(str, dbl.toString))
-            cache = JsonCharBufferParser.wouldNotFitInDouble
+            cache = JsonByteBufferParser.wouldNotFitInDouble
           return dbl
         }
         if (negex) -x else x
@@ -290,18 +320,18 @@ class JsonCharBufferParser {
           else if (java.lang.Double.isNaN(dbl) || java.lang.Double.isInfinite(dbl)) Json.Null
           else new Json.Num(dbl, "")
       else if (strictNumbers && !Json.Num.numericStringEquals(str, dbl.toString))
-        cache = JsonCharBufferParser.wouldNotFitInDouble
+        cache = JsonByteBufferParser.wouldNotFitInDouble
       dbl
     }
   }
 
-  private[jsonal] def parseJastNum(input: CharBuffer, initial: Char): Jast = {
+  private[jsonal] def parseJastNum(input: ByteBuffer, initial: Int): Jast = {
     parseNum(input, initial, true)
     cache
   }
 
 
-  private def parseArrD(input: CharBuffer, initial: Char): Boolean = {
+  private def parseArrD(input: ByteBuffer, initial: Int): Boolean = {
     var c = initial
     var buffer = new Array[Double](6)
     var n = 0
@@ -313,19 +343,19 @@ class JsonCharBufferParser {
         else if (input.remaining < 3) return false
         else if (input.get != 'u' || input.get != 'l' || input.get != 'l') return false
         else Double.NaN
-      if (strictNumbers && (cache eq JsonCharBufferParser.wouldNotFitInDouble)) return false
+      if (strictNumbers && (cache eq JsonStringParser.wouldNotFitInDouble)) return false
       if (ans.isNaN && (cache ne null) && cache.isInstanceOf[JastError]) return false
       if (n >= buffer.length) buffer = java.util.Arrays.copyOf(buffer, 0x7FFFFFFE & ((buffer.length << 1) | 0x2))
       buffer(n) = ans      
       n += 1
       while (
         { if (input.hasRemaining) true else return false } && 
-        { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+        { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
       ) {}
       if (c == ',') {
         while (
           { if (input.hasRemaining) true else return false } && 
-          { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+          { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
         ) {}
         if (c == ']') return false
       }
@@ -334,12 +364,12 @@ class JsonCharBufferParser {
     true
   }
 
-  private[jsonal] def parseArr(input: CharBuffer): Jast = {
+  private[jsonal] def parseArr(input: ByteBuffer): Jast = {
     val zero = input.position-1
-    var c = '['
+    var c: Int = '['
     while (
       { if (input.hasRemaining) true else return JastError("end of input with unclosed array", zero) } && 
-      { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
     ) {}
     if (c == ']') return Json.Arr.All.empty
     val start = input.position
@@ -367,30 +397,30 @@ class JsonCharBufferParser {
       }
       while (
         { if (input.hasRemaining) true else { input.position(zero); return JastError("end of input with unclosed array", zero) } } && 
-        { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+        { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
       ) {}
       if (c == ',') {
         while (
           { if (input.hasRemaining) true else { input.position(zero); return JastError("end of input with unclosed array", zero) } } && 
-          { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+          { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
         ) {}
       }
       else if (c != ']') {
         val oopsi = input.position-1
         input.position(zero);
-        return JastError("unexpected character '" + c + "' in array after index "+n, oopsi)
+        return JastError("unexpected character '" + c.toChar + "' in array after index "+n, oopsi)
       }
     }
     contents ~ Json.Arr.All
   }
 
 
-  private[jsonal] def parseObj(input: CharBuffer): Jast = {
+  private[jsonal] def parseObj(input: ByteBuffer): Jast = {
     val zero = input.position - 1
-    var c = '{'
+    var c: Int = '{'
     while (
       { if (input.hasRemaining) true else { input.position(zero); return JastError("end of input with unclosed object", zero) } } && 
-      { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+      { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
     ) {}
     if (c == '}') return Json.Obj.empty
     var kvs = new Array[AnyRef](6)
@@ -414,7 +444,7 @@ class JsonCharBufferParser {
       n += 1
       while (
         { if (input.hasRemaining) true else { input.position(zero); return JastError("end of input after object key", zero) } } && 
-        { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+        { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
       ) {}
       if (c != ':') { 
         val p = input.position - 1
@@ -423,7 +453,7 @@ class JsonCharBufferParser {
       }
       while (
         { if (input.hasRemaining) true else { input.position(zero); return JastError("end of input after object key", zero) } } && 
-        { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+        { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
       ) {}
       parseValStartingWith(input, c) match {
         case js: Json => kvs(n) = js
@@ -434,16 +464,16 @@ class JsonCharBufferParser {
       }
       while (
         input.hasRemaining && 
-        { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+        { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
       ) {}
       if (c != '}' && c != ',') {
         val p = input.position-1
         input.position(zero)
-        return JastError("unexpected character '" + c + "' in object after entry " + (n/2+1) + "(key " + kvs(n-1) + ")", p)
+        return JastError("unexpected character '" + c.toChar + "' in object after entry " + (n/2+1) + "(key " + kvs(n-1) + ")", p)
       }
       if (c == ',') while (
         input.hasRemaining && 
-        { c = input.get; c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
+        { c = input.get; val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
       ) {}
       n += 1
     }
@@ -452,28 +482,36 @@ class JsonCharBufferParser {
 }
 
 
-object JsonCharBufferParser{
+object JsonByteBufferParser{
   private[jsonal] val smallPowersOfTen = Array.tabulate(23)(i => s"1e$i".toDouble)
 
-  private[jsonal] implicit class StringsFromCharBufferSlices(private val underlying: CharBuffer) extends AnyVal {
+  private[jsonal] implicit class StringsFromByteBufferSlices(private val underlying: ByteBuffer) extends AnyVal {
     def subStr(start: Int, end: Int): String =
-      if (underlying.hasArray) new String(underlying.array, start + underlying.arrayOffset, end - start)
+      if (underlying.hasArray) new String(underlying.array, start + underlying.arrayOffset, end - start, "UTF-8")
       else {
         val p = underlying.position
         underlying.position(0)
-        val ans = underlying.subSequence(start, end).toString
+        val a = new Array[Byte](end-start)
+        underlying.get(a)
         underlying.position(p)
-        ans
+        new String(a, "UTF-8")
       }
     def subSB(sb: java.lang.StringBuilder, start: Int, end: Int) {
-      if (underlying.hasArray) sb.append(underlying.array, start + underlying.arrayOffset, end - start)
+      val ca = new Array[Char](end-start)
+      if (underlying.hasArray) {
+        val a = underlying.array
+        var i = start + underlying.arrayOffset
+        var j = 0
+        while (j < ca.length) { ca(j) = a(i).toChar; i += 1; j += 1 }
+      }
       else {
         val p = underlying.position
         underlying.position(start)
-        var n = end-start
-        while (n > 0) { sb append underlying.get; n -= 1 }
+        var j = 0
+        while (j < ca.length) { ca(j) = underlying.get.toChar; j += 1 }
         underlying.position(p)
       }
+      sb append ca
     }
   }
 
@@ -483,12 +521,12 @@ object JsonCharBufferParser{
 
   private[jsonal] val wouldNotFitInDouble: JastError = JastError("Text number would not fit in a Double")
 
-  def Json(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json] =
-    (new JsonCharBufferParser).relaxedNumbers(relaxed).parseVal(input) match {
+  def Json(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json] =
+    (new JsonByteBufferParser).relaxedNumbers(relaxed).parseVal(input) match {
       case js: kse.jsonal.Json => Right(js)
       case je: JastError => Left(je)
     }
-  def Null(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Null] = {
+  def Null(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Null] = {
     if (input.remaining < 4) return Left(JastError("Expected JSON null but not enough input", input.position))
     val zero = input.position
     if (input.get != 'n' || input.get != 'u' || input.get != 'l' || input.get != 'l') {
@@ -497,63 +535,63 @@ object JsonCharBufferParser{
     }
     else Right(kse.jsonal.Json.Null)
   }
-  def Bool(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Bool] = {
-    (new JsonCharBufferParser).relaxedNumbers(relaxed).parseBool(input) match {
+  def Bool(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Bool] = {
+    (new JsonByteBufferParser).relaxedNumbers(relaxed).parseBool(input) match {
       case jb: kse.jsonal.Json.Bool =>
         if (jb.value) myRightTrue else myRightFalse
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON boolean or an error?"))
     }
   }
-  def Str(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Str] = {
+  def Str(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Str] = {
     if (input.remaining < 2) return Left(JastError("Expected JSON string but at end of input"))
     if (input.get != '"') {
       input.position(input.position-1)
       return Left(JastError("Expected JSON string but did not find '\"'", input.position))
     }
-    val jcbp = (new JsonCharBufferParser).relaxedNumbers(relaxed)
+    val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseStr(input) match {
       case js: kse.jsonal.Json.Str => Right(js)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
     }
   }
-  def Num(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Num] = {
+  def Num(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Num] = {
     if (!input.hasRemaining) return Left(JastError("Expected JSON number but at end of input"))
     val c = input.get
     if (c != '-' && (c < '0' || c > '9')) {
       input.position(input.position-1)
       return Left(JastError("Expected JSON number but found character "+c, input.position))
     }
-    val jcbp = (new JsonCharBufferParser).relaxedNumbers(relaxed)
+    val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseJastNum(input, c) match {
       case jn: kse.jsonal.Json.Num => Right(jn)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON number or an error?"))
     }
   }
-  def Arr(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Arr] = {
+  def Arr(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Arr] = {
     if (!input.hasRemaining) return Left(JastError("Expected JSON array but at end of input"))
     val c = input.get
     if (c != '[') {
       input.position(input.position-1)
       return Left(JastError("Expected JSON array but found character "+c, input.position))
     }
-    val jcbp = (new JsonCharBufferParser).relaxedNumbers(relaxed)
+    val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseArr(input) match {
       case ja: kse.jsonal.Json.Arr => Right(ja)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON array or an error?"))
     }
   }
-  def Obj(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Obj] = {
+  def Obj(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Obj] = {
     if (!input.hasRemaining) return Left(JastError("Expected JSON object but at end of input"))
     val c = input.get
     if (c != '"') {
       input.position(input.position-1)
       return Left(JastError("Expected JSON object but found character "+c, input.position))
     }
-    val jcbp = (new JsonCharBufferParser).relaxedNumbers(relaxed)
+    val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseObj(input) match {
       case jo: kse.jsonal.Json.Obj => Right(jo)
       case je: JastError => Left(je)
@@ -561,3 +599,4 @@ object JsonCharBufferParser{
     }
   }
 }
+

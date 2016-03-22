@@ -2188,7 +2188,3 @@ trait JsonGenericParser {
 
 /** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
 object JsonInputStreamParser extends JsonGenericParser {}
-
-/** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
-object JsonByteBufferParser extends JsonGenericParser {}
-

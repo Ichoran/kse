@@ -104,10 +104,15 @@ class JsonStringParser {
     if (c == '"') i+1 else -i-1
   }
 
-  private def hexifyChar(c: Char): Int = hexifyLowerChar(c | 0x20)
-
-  private def hexifyLowerChar(c: Int): Int =
-    if (c >= '0' && c <= '9') c - '0' else if (c >= 'a' && c <= 'f') c - 87 else -1
+  private def hexifyChar(c: Char): Int = {
+    val x = (c - '0') & 0xFFFF
+    if (x < 10) x
+    else {
+      val y = x | 0x20
+      if (y >= 49 && y <= 54) y - 39
+      else -1
+    }
+  }
 
   private def parseComplexStr(input: String, index: Int, end: Int, cleanUntil: Int): Jast = {
     val N = end
