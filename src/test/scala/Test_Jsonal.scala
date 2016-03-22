@@ -49,7 +49,7 @@ object Test_Jsonal extends Test_Kse {
     n.--
     r.nextInt(3) match {
       case 0 => Json.Obj( Array.fill(r.nextInt(20)){ (mkStr(r, n.++).text, mkVal(r, d, n))}.toMap )
-      case 1 => ((Json.Obj.build /: (0 to r.nextInt(20))){ (o, _) => o ~ (mkStr(r, n.++).text, mkVal(r, d, n)) }) ~ Json.Obj
+      case 1 => ((Json.Obj.builder /: (0 to r.nextInt(20))){ (o, _) => o ~ (mkStr(r, n.++).text, mkVal(r, d, n)) }).result
       case _ => Json.Obj ~~ Seq.fill(r.nextInt(10)){ (Array("fish", "dish", "wish").apply(r.nextInt(3)), mkVal(r, d, n)) } ~~ Json.Obj
     }
   }
@@ -149,7 +149,29 @@ object Test_Jsonal extends Test_Kse {
           }
           ans
         }
-      }
+      } &&
+      (Json.parse(java.nio.CharBuffer.wrap(j.toCharArray)) match {
+        case Right(ll) =>
+          if (i != ll) {
+            i =?= ll
+            subtest(i, ll)
+            false
+          }
+          else true
+        case Left(e) => println(j); println(e); false
+      }) &&
+      (Json.relaxed.parse(java.nio.CharBuffer.wrap(j.toCharArray)) match { 
+        case Right(ll) =>
+          k2.right.exists{ kk2 =>
+            val ans = kk2 == ll
+            if (!ans) {
+              println("relaxed CharBuffer")
+              ll =?= kk2
+            }
+            ans
+          }
+        case Left(e) => println(j); println(e); false 
+      })
     }
   }
 
