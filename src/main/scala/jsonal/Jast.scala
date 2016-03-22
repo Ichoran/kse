@@ -460,6 +460,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     def simple = true
 
+    override def string = Some(text)
+
     override def hashCode = text.hashCode
 
     override def equals(a: Any) = a match {
