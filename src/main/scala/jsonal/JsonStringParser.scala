@@ -4,7 +4,7 @@
 package kse.jsonal
 
 class JsonStringParser {
-  import JsonStringParser.smallPowersOfTen
+  import JsonGenericParser._
 
   private[this] var strictNumbers = true
   private[this] var idx = 0
@@ -223,7 +223,7 @@ class JsonStringParser {
         if (negative) digits = -digits   // No-op for Long.MinValue, so we're okay
         val dbl = digits.toDouble
         if (toCache) cache = new Json.Num(java.lang.Double.longBitsToDouble(digits), null)
-        else if (strictNumbers && dbl.toLong != digits) cache = JsonStringParser.wouldNotFitInDouble
+        else if (strictNumbers && dbl.toLong != digits) cache = wouldNotFitInDouble
         return dbl
       }
       else {
@@ -231,7 +231,7 @@ class JsonStringParser {
         val dbl = text.toDouble
         if (toCache) cache = new Json.Num(dbl, text)
         else if (strictNumbers && !Json.Num.numericStringEquals(dbl.toString, text))
-          cache = JsonStringParser.wouldNotFitInDouble
+          cache = wouldNotFitInDouble
         return dbl
       }
     }
@@ -278,7 +278,7 @@ class JsonStringParser {
               else if (java.lang.Double.isNaN(dbl) || java.lang.Double.isInfinite(dbl)) Json.Null
               else new Json.Num(dbl, "")
           else if (strictNumbers && !Json.Num.numericStringEquals(str, dbl.toString))
-            cache = JsonStringParser.wouldNotFitInDouble
+            cache = wouldNotFitInDouble
           idx = i
           return dbl
         }
@@ -311,7 +311,7 @@ class JsonStringParser {
           else if (java.lang.Double.isNaN(dbl) || java.lang.Double.isInfinite(dbl)) Json.Null
           else new Json.Num(dbl, "")
       else if (strictNumbers && !Json.Num.numericStringEquals(str, dbl.toString))
-        cache = JsonStringParser.wouldNotFitInDouble
+        cache = wouldNotFitInDouble
       dbl
     }
   }
@@ -341,7 +341,7 @@ class JsonStringParser {
         }
         else return false
       i = idx
-      if (strictNumbers && (cache eq JsonStringParser.wouldNotFitInDouble)) return false
+      if (strictNumbers && (cache eq wouldNotFitInDouble)) return false
       if (ans.isNaN && (cache ne null) && cache.isInstanceOf[JastError]) return false
       if (n >= buffer.length) buffer = java.util.Arrays.copyOf(buffer, 0x7FFFFFFE & ((buffer.length << 1) | 0x2))
       buffer(n) = ans
@@ -454,13 +454,7 @@ class JsonStringParser {
 }
 
 object JsonStringParser{
-  private[jsonal] val smallPowersOfTen = Array.tabulate(23)(i => s"1e$i".toDouble)
-
-  private val myRightNull: Either[JastError, kse.jsonal.Json.Null] = Right(kse.jsonal.Json.Null)
-  private val myRightTrue: Either[JastError, kse.jsonal.Json.Bool] = Right(kse.jsonal.Json.Bool.True)
-  private val myRightFalse: Either[JastError, kse.jsonal.Json.Bool] = Right(kse.jsonal.Json.Bool.False)
-
-  private[jsonal] val wouldNotFitInDouble: JastError = JastError("Text number would not fit in a Double")
+  import JsonGenericParser._
 
   def Json(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json] =
     (new JsonStringParser).relaxedNumbers(relaxed).parseVal(input, math.max(0, i0), math.min(iN, input.length)) match {

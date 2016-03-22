@@ -11,7 +11,7 @@ import java.nio._
 // This is done both to maximize performance and because there
 // are a lot of fiddly little details that need to be altered.
 class JsonCharBufferParser {
-  import JsonCharBufferParser.smallPowersOfTen
+  import JsonGenericParser._
   import JsonCharBufferParser.StringsFromCharBufferSlices
 
   private[this] var strictNumbers = true
@@ -197,7 +197,7 @@ class JsonCharBufferParser {
         if (initial == '-') digits = -digits   // No-op for Long.MinValue, so we're okay
         val dbl = digits.toDouble
         if (toCache) cache = new Json.Num(java.lang.Double.longBitsToDouble(digits), null)
-        else if (strictNumbers && dbl.toLong != digits) cache = JsonCharBufferParser.wouldNotFitInDouble
+        else if (strictNumbers && dbl.toLong != digits) cache = wouldNotFitInDouble
         return dbl
       }
       else {
@@ -205,7 +205,7 @@ class JsonCharBufferParser {
         val dbl = text.toDouble
         if (toCache) cache = new Json.Num(dbl, text)
         else if (strictNumbers && !Json.Num.numericStringEquals(dbl.toString, text))
-          cache = JsonCharBufferParser.wouldNotFitInDouble
+          cache = wouldNotFitInDouble
         return dbl
       }
     }
@@ -258,7 +258,7 @@ class JsonCharBufferParser {
               else if (java.lang.Double.isNaN(dbl) || java.lang.Double.isInfinite(dbl)) Json.Null
               else new Json.Num(dbl, "")
           else if (strictNumbers && !Json.Num.numericStringEquals(str, dbl.toString))
-            cache = JsonCharBufferParser.wouldNotFitInDouble
+            cache = wouldNotFitInDouble
           return dbl
         }
         if (negex) -x else x
@@ -290,7 +290,7 @@ class JsonCharBufferParser {
           else if (java.lang.Double.isNaN(dbl) || java.lang.Double.isInfinite(dbl)) Json.Null
           else new Json.Num(dbl, "")
       else if (strictNumbers && !Json.Num.numericStringEquals(str, dbl.toString))
-        cache = JsonCharBufferParser.wouldNotFitInDouble
+        cache = wouldNotFitInDouble
       dbl
     }
   }
@@ -313,7 +313,7 @@ class JsonCharBufferParser {
         else if (input.remaining < 3) return false
         else if (input.get != 'u' || input.get != 'l' || input.get != 'l') return false
         else Double.NaN
-      if (strictNumbers && (cache eq JsonCharBufferParser.wouldNotFitInDouble)) return false
+      if (strictNumbers && (cache eq wouldNotFitInDouble)) return false
       if (ans.isNaN && (cache ne null) && cache.isInstanceOf[JastError]) return false
       if (n >= buffer.length) buffer = java.util.Arrays.copyOf(buffer, 0x7FFFFFFE & ((buffer.length << 1) | 0x2))
       buffer(n) = ans      
@@ -453,7 +453,7 @@ class JsonCharBufferParser {
 
 
 object JsonCharBufferParser{
-  private[jsonal] val smallPowersOfTen = Array.tabulate(23)(i => s"1e$i".toDouble)
+  import JsonGenericParser._
 
   private[jsonal] implicit class StringsFromCharBufferSlices(private val underlying: CharBuffer) extends AnyVal {
     def subStr(start: Int, end: Int): String =
@@ -477,12 +477,6 @@ object JsonCharBufferParser{
     }
   }
 
-  private val myRightNull: Either[JastError, kse.jsonal.Json.Null] = Right(kse.jsonal.Json.Null)
-  private val myRightTrue: Either[JastError, kse.jsonal.Json.Bool] = Right(kse.jsonal.Json.Bool.True)
-  private val myRightFalse: Either[JastError, kse.jsonal.Json.Bool] = Right(kse.jsonal.Json.Bool.False)
-
-  private[jsonal] val wouldNotFitInDouble: JastError = JastError("Text number would not fit in a Double")
-
   def Json(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json] =
     (new JsonCharBufferParser).relaxedNumbers(relaxed).parseVal(input) match {
       case js: kse.jsonal.Json => Right(js)
@@ -495,7 +489,7 @@ object JsonCharBufferParser{
       input.position(zero)
       Left(JastError("Expected JSON null but did not find literal text 'null'", zero))
     }
-    else Right(kse.jsonal.Json.Null)
+    else myRightNull
   }
   def Bool(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Bool] = {
     (new JsonCharBufferParser).relaxedNumbers(relaxed).parseBool(input) match {

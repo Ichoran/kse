@@ -2162,7 +2162,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 }
 
 /** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
-trait JsonGenericParser {
+trait JsonFakingParser {
   def Json(a: Any): Either[JastError, kse.jsonal.Json] = ???
   def Json(a: Any, b: Any): Either[JastError, kse.jsonal.Json] = ???
   def Json(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json] = ???
@@ -2187,4 +2187,4 @@ trait JsonGenericParser {
 }
 
 /** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
-object JsonInputStreamParser extends JsonGenericParser {}
+object JsonInputStreamParser extends JsonFakingParser {}
