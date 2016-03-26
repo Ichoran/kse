@@ -11,7 +11,7 @@ import java.nio._
 // YOU MUST MAINTAIN THIS BY HAND.  AAAAAAAHHHHHHH!!!!!
 // This is done both to maximize performance and because there
 // are a lot of fiddly little details that need to be altered.
-class JsonByteBufferParser {
+final class JsonByteBufferParser {
   import JsonGenericParser._
   import JsonByteBufferParser.StringsFromByteBufferSlices
 
@@ -247,7 +247,7 @@ class JsonByteBufferParser {
       if (dadp == 0) { cache = JastError("need digits after . in number", input.position-1); input.position(zero); return Double.NaN }
     }
     val ex =
-      if (!input.hasRemaining || (c | 0x20) != 'e') 0
+      if ((c | 0x20) != 'e') 0
       else {
         if (!input.hasRemaining) { cache = JastError("need digits after e in number", zero); input.position(zero); return Double.NaN }
         c = input.get

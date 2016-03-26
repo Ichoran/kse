@@ -3,7 +3,7 @@
 
 package kse.jsonal
 
-class JsonStringParser {
+final class JsonStringParser {
   import JsonGenericParser._
 
   private[this] var strictNumbers = true
@@ -246,7 +246,7 @@ class JsonStringParser {
       if (dadp == 0) { cache = JastError("need digits after . in number", i); return Double.NaN }
     }
     val ex =
-      if (i >= end || (c | 0x20) != 'e') 0
+      if ((c | 0x20) != 'e') 0
       else {
         i += 1
         if (i >= end) { cache = JastError("need digits after e in number", i); return Double.NaN }
