@@ -66,8 +66,11 @@ final class JsonRecyclingParser extends RecyclingBuffer {
   def pack(): this.type = {
     if (i0 > 0) {
       o += i0
-      System.arraycopy(a, 0, a, i0, iN-i0)
-      iN -= i0
+      if (iN > i0) {
+        System.arraycopy(a, 0, a, i0, iN-i0)
+        iN -= i0
+      }
+      else iN = 0
       i0 = 0
     }
     this
@@ -736,6 +739,38 @@ object JsonRecyclingParser {
         rb.exhausted = true
         rb.source = this
         true
+      }
+      else false
+    }
+  }
+
+  def recycleByteArray(ab: Array[Byte]): RecyclingBuffer => Boolean = new Function1[RecyclingBuffer, Boolean]{
+    def apply(rb: RecyclingBuffer): Boolean = {
+      if (!rb.exhausted) {
+        rb.buffer = ab
+        rb.start = 0
+        rb.end = ab.length
+        rb.offset = 0L
+        rb.exhausted = true
+        rb.source = this
+        true
+      }
+      else false
+    }
+  }
+
+  def recycleStringInSmallChunks(s: String): RecyclingBuffer => Boolean = new Function1[RecyclingBuffer, Boolean]{
+    private[this] val buffer = s.getBytes("UTF-8")
+    private[this] var i = 0
+    def apply(rb: RecyclingBuffer): Boolean = {
+      if (i < buffer.length) {
+        rb.pack()
+        if (rb.buffer.length - 64 < rb.end) rb.expand()
+        val n = math.min(64, buffer.length - i)
+        System.arraycopy(buffer, i, rb.buffer, rb.end, n)
+        rb.end += n
+        i += n
+        i < buffer.length
       }
       else false
     }
