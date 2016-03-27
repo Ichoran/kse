@@ -43,7 +43,7 @@ final class JsonRecyclingParser extends RecyclingBuffer {
   private[this] var o: Long = 0L
   private[this] var src: RecyclingBuffer => Boolean = (_ => false)
   private[this] var done: Boolean = true
-  private[this] var cache: Jast = null
+  var cache: Jast = null
   private[this] var ca: Array[Char] = new Array[Char](24)
   private[this] var strictNumbers = true
 
@@ -148,7 +148,7 @@ final class JsonRecyclingParser extends RecyclingBuffer {
     else if (c == 'n') parseNull()
     else if (c == 't') parseTrue()
     else if (c == 'f') parseFalse()
-    else JastError("invalid character: '" + c + "'", o+i0)
+    else JastError("invalid character: '" + c.toChar + "'", o+i0)
   }
 
   private[jsonal] def parseNull(): Jast = {
@@ -465,14 +465,172 @@ final class JsonRecyclingParser extends RecyclingBuffer {
   }
 
 
-  private[jsonal] def parseArrD(initial: Int): Jast = ???
+  private[this] def FAIL(zero: Long, msg: String, why: Jast): JastError = {
+    val p = i0
+    i0 = if (zero < o) -1 else (zero - o).toInt
+    JastError(msg, o + p, why)
+  }
 
-  private[jsonal] def parseArr(): Jast = ???
+  private[this] def FAIL(zero: Long, msg: String): JastError = {
+    val p = i0
+    i0 = if (zero < o) -1 else (zero - o).toInt
+    JastError(msg, o + p)    
+  }
 
-  private[jsonal] def parseObj(): Jast = ???
 
+  private[jsonal] def parseArr(tryDoubleParse: Boolean = true): Jast = {
+    if (!atLeast(2)) return JastError("End of input with unclosed array", o + i0)
+    val zero = o + i0
+    i0 += 1
+    var c = gB(a, i0 + oBytes.toLong)
+    while ({val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 } && ((iN - i0) > 1 || atLeast(2))) {
+      i0 += 1
+      c = gB(a, i0+oBytes.toLong)
+    }
+    if (c == ']') { i0 += 1; return Json.Arr.All.empty }
+    var doubleParse = tryDoubleParse && ((c >= '0' && c <= '9') || (c == 'n'))
+    var contents = if (doubleParse) null else Json.Arr.All.builder
+    var doubles = if (doubleParse) new Array[Double](6) else null
+    var moreTokens = true
+    var n = 0;
+    while (moreTokens) {
+      if (
+        doubleParse &&
+        ( (c >= '0' && c <= '9') ||
+          c == '-' ||
+          (c == 'n' && !strictNumbers && atLeast(4) && gI(a, i0 + oBytes.toLong) == nullInInt)
+        )
+      ) {
+        val mark = i0
+        val dbl = if (c == 'n') { i0 += 4; Double.NaN } else parseNum(c, false)
+        if (
+          (strictNumbers && (cache eq wouldNotFitInDouble)) ||
+          (java.lang.Double.isNaN(dbl) && (cache ne null) && cache.isInstanceOf[JastError])
+        ) {
+          i0 = mark
+          contents = Json.Arr.All.builder
+          var k = 0
+          while (k < n) { contents ~ Json.Num(doubles(k)); k += 1 }
+          doubles = null
+          doubleParse = false
+        }
+        else {
+          if (n >= doubles.length) doubles = java.util.Arrays.copyOf(doubles, 0x7FFFFFFE & ((doubles.length << 1) | 0x2))
+          doubles(n) = dbl
+          n += 1
+        }
+        // Figure out whether to put it in buffer
+      }
+      else if (doubleParse) {
+        contents = Json.Arr.All.builder
+        var k = 0
+        while (k < n) { contents ~ Json.Num(doubles(k)); k += 1 }
+        doubles = null
+        doubleParse = false
+      }
+      if (!doubleParse) {
+        parseValStartingWith(c) match {
+          case js: Json => contents ~ js
+          case je: JastError => return FAIL(zero, "error in array element "+n, je)
+        }
+      }
+      if (!atLeast(1)) return FAIL(zero, "Input exhausted with unclosed array")
+      c = gB(a, i0 + oBytes.toLong)
+      var isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      while (isSpace && (iN - i0 > 1 || atLeast(2))) {
+        i0 += 1
+        c = gB(a, i0 + oBytes.toLong)
+        isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      }
+      if (c == ']') { i0 += 1; moreTokens = false }
+      else if (c == ',') {
+        if (!atLeast(3)) return FAIL(zero, "Input exhausted with unclosed array")
+        i0 += 1
+        c = gB(a, i0 + oBytes.toLong)
+        isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+        while (isSpace && (iN - i0 > 1 || atLeast(2))) {
+          i0 += 1
+          c = gB(a, i0 + oBytes.toLong)
+          isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+        }
+      }
+      else return FAIL(zero, "Expected array close or comma, but found '"+c.toChar+"'")
+    }
+    if (doubleParse) new Json.Arr.Dbl(if (n == doubles.length) doubles else java.util.Arrays.copyOf(doubles, n))
+    else contents.result
+  }
 
+  private[jsonal] def parseObj(): Jast = {
+    if (!atLeast(2)) return JastError("End of input with unclosed object", o + i0)
+    val zero = o + i0
+    i0 += 1
+    var c = gB(a, i0 + oBytes.toLong)
+    while ({val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 } && ((iN - i0) > 1 || atLeast(2))) {
+      i0 += 1
+      c = gB(a, i0+oBytes.toLong)
+    }
+    if (c == '}') { i0 += 1; return Json.Obj.empty }
+    val contents = Json.Obj.builder
+    var n = 0
+    while (c == '"') {
+      n += 1
+      val k = parseStr() match {
+        case js: Json.Str => js.text
+        case je: JastError => return FAIL(zero, "error in key for object entry " + n, je)
+        case _ => return FAIL(zero, "Internal error--tried to parse string and got something else?")
+      }
+      if (!atLeast(1)) return FAIL(zero, "Input exhausted with unclosed object")
+      c = gB(a, i0 + oBytes.toLong)
+      var isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      while (isSpace && (iN - i0 > 1 || atLeast(2))) {
+        i0 += 1
+        c = gB(a, i0 + oBytes.toLong)
+        isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      }
+      if (c != ':') return FAIL(zero, f"Did not find ':' after key #$n, '$k'.")
+      i0 += 1
+      if (!atLeast(1)) return FAIL(zero, f"Input exhausted with unclosed object after key #$n, '$k'")
+      c = gB(a, i0 + oBytes.toLong)
+      isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      while (isSpace && (iN - i0 > 1 || atLeast(2))) {
+        i0 += 1
+        c = gB(a, i0 + oBytes.toLong)
+        isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      }
+      val v = parseValStartingWith(c) match {
+        case js: Json => js
+        case je: JastError => return FAIL(zero, f"error in object value for key #$n, '$k'", je)
+      }
+      contents ~ (k, v)
+      if (!atLeast(1)) return FAIL(zero, f"Input exhausted with unclosed object after key #$n, '$k', and its value")
+      c = gB(a, i0 + oBytes.toLong)
+      isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      while (isSpace && (iN - i0 > 1 || atLeast(2))) {
+        i0 += 1
+        c = gB(a, i0 + oBytes.toLong)
+        isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+      }
+      if (c == ',') {
+        i0 += 1
+        if (!atLeast(2)) return FAIL(zero, f"Input exhausted with unclosed object after key #$n, '$k', and its value")
+        c = gB(a, i0 + oBytes.toLong)
+        isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+        while (isSpace && (iN - i0 > 1 || atLeast(2))) {
+          i0 += 1
+          c = gB(a, i0 + oBytes.toLong)
+          isSpace = { val x = c-8; (x & 0xFFFFFFE0) == 0 && ((1 << x) & 0x1000026) != 0 }
+        }
+        if (c == '}') return FAIL(zero, f"Found comma after key #$n, '$k' and its value, but no additional entry")
+      }
+    }
+    if (c != '}') return FAIL(zero, "Expected object close or key string start but found '"+c.toChar+"'")
+    else {
+      i0 += 1
+      contents.result
+    }
+  }
 }
+
 object JsonRecyclingParser {
   import JsonGenericParser._
 
@@ -530,31 +688,25 @@ object JsonRecyclingParser {
   def Num(input: RecyclingBuffer => Boolean, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Num] = {
     val jrp = (new JsonRecyclingParser).refresh(input).recycle()
     if (jrp.available < 1) return Left(JastError("Expected JSON number but not enough input", jrp.start))
-    if (jrp.buffer(jrp.start) match { case c if (c >= '0' && c <= '9') || c == '.' => true; case _ => false})
-      Left(JastError("Expected JSON number but did not find digit or '-'", jrp.start))
+    val c = jrp.buffer(jrp.start)
+    if (!((c >= '0' && c <= '9') || c == '.')) return Left(JastError("Expected JSON number but did not find digit or '-'", jrp.start))
     jrp.start += 1
-    jrp.parseJastNum() match {
+    jrp.parseJastNum(c) match {
       case jn: kse.jsonal.Json.Num => Right(jn)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
     }
   }
-  def Arr(input: RecyclingBuffer => Boolean, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Arr] = {
-    ???
-    /*
-    if (!input.hasRemaining) return Left(JastError("Expected JSON array but at end of input"))
-    val c = input.get
-    if (c != '[') {
-      input.position(input.position-1)
-      return Left(JastError("Expected JSON array but found character "+c, input.position))
-    }
-    val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
-    jcbp.parseArr(input) match {
+  def Arr(input: RecyclingBuffer => Boolean, relaxed: Boolean = false, nonNumeric: Boolean = false): Either[JastError, kse.jsonal.Json.Arr] = {
+    val jrp = (new JsonRecyclingParser).refresh(input).recycle()
+    if (jrp.available < 2) return Left(JastError("Expected JSON array but not enough input", jrp.start))
+    val c = jrp.buffer(jrp.start)
+    if (c != '[') return Left(JastError("Expected JSON array but did not find '['", jrp.start))
+    jrp.parseArr(!nonNumeric) match {
       case ja: kse.jsonal.Json.Arr => Right(ja)
       case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON array or an error?"))
+      case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
     }
-    */
   }
   def Obj(input: RecyclingBuffer => Boolean, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Obj] = {
     ???
