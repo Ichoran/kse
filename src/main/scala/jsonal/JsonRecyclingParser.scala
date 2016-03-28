@@ -697,7 +697,7 @@ object JsonRecyclingParser {
     jrp.parseJastNum(c) match {
       case jn: kse.jsonal.Json.Num => Right(jn)
       case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
+      case _ => Left(JastError("Internal error: parse did not produce JSON number or an error?"))
     }
   }
   def Arr(input: RecyclingBuffer => Boolean, relaxed: Boolean = false, nonNumeric: Boolean = false): Either[JastError, kse.jsonal.Json.Arr] = {
@@ -708,25 +708,19 @@ object JsonRecyclingParser {
     jrp.parseArr(!nonNumeric) match {
       case ja: kse.jsonal.Json.Arr => Right(ja)
       case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
+      case _ => Left(JastError("Internal error: parse did not produce JSON array or an error?"))
     }
   }
   def Obj(input: RecyclingBuffer => Boolean, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Obj] = {
-    ???
-    /*
-    if (!input.hasRemaining) return Left(JastError("Expected JSON object but at end of input"))
-    val c = input.get
-    if (c != '"') {
-      input.position(input.position-1)
-      return Left(JastError("Expected JSON object but found character "+c, input.position))
-    }
-    val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
-    jcbp.parseObj(input) match {
+    val jrp = (new JsonRecyclingParser).refresh(input).recycle()
+    if (jrp.available < 2) return Left(JastError("Expected JSON object but not enough input", jrp.start))
+    val c = jrp.buffer(jrp.start)
+    if (c != '{') return Left(JastError("Expected JSON object but did not find '{'", jrp.start))
+    jrp.parseObj() match {
       case jo: kse.jsonal.Json.Obj => Right(jo)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON object or an error?"))
     }
-    */
   }
 
   def recycleString(s: String): RecyclingBuffer => Boolean = new Function1[RecyclingBuffer, Boolean]{
