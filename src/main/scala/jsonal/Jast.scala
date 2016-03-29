@@ -33,6 +33,8 @@ package kse.jsonal
 
 import java.nio._
 
+import scala.util.control.NonFatal
+
 
 /** Jast is a Json Abstract Syntax Tree.
   *
@@ -93,17 +95,37 @@ object Jast {
     */
   def parse(input: String): Jast = parse(input, 0, input.length, null)
 
-  /** Parse from a `ByteBuffer` into a JSON AST.  TODO: actually implement this! */
+  /** Parse from a `ByteBuffer` into a JSON AST. */
   def parse(input: ByteBuffer): Jast = JsonByteBufferParser.Json(input) match { case Left(e) => e; case Right(j) => j }
 
-  /** Parse from a `CharBuffer` into a JSON AST.  TODO: actually implement this! */
+  /** Parse from a `CharBuffer` into a JSON AST. */
   def parse(input: CharBuffer): Jast = JsonCharBufferParser.Json(input) match { case Left(e) => e; case Right(j) => j }
 
-  /** Parse from an `InputStream` into a JSON AST, keeping track of the last parsed index.  TODO: actually implement this! */
-  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Jast = JsonInputStreamParser.Json(input, ep) match { case Left(e) => e; case Right(j) => j }
+  /** Parse from an `InputStream` into a JSON AST, keeping track of the last parsed index. */
+  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Jast = {
+    val jrp = (new JsonRecyclingParser).refresh(JsonRecyclingParser recycleInputStream input).recycle()
+    val ans = jrp.parseVal()
+    if ((ep ne null) && ans.isInstanceOf[Json]) ep.index = jrp.offset + jrp.start
+    ans
+  }
 
-  /** Parse from an `InputStream` into a JSON AST.  TODO: actually implement this! */
+  /** Parse from an `InputStream` into a JSON AST. */
   def parse(input: java.io.InputStream): Jast = parse(input, null)
+
+  /** Parse from a `File` into a JSON AST. */
+  def parse(filename: java.io.File): Jast = {
+    if (!filename.exists) JastError("File does not exist: "+filename.getPath)
+    else {
+      try {
+        val fis = new java.io.FileInputStream(filename)
+        try { parse(fis) }
+        finally { fis.close }
+      }
+      catch { 
+        case t if NonFatal(t) => JastError("File read error: "+t.getClass.getName+" "+t.getMessage) 
+      }
+    }
+  }
 }
 
 /** Representation of an error that occured during JSON parsing or access. */
@@ -334,7 +356,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Json(input, i0, iN, ep)
   override def parse(input: ByteBuffer) = JsonByteBufferParser.Json(input)
   override def parse(input: CharBuffer) = JsonCharBufferParser.Json(input)
-  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = JsonInputStreamParser.Json(input, ep)
+  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] = ???
 
   private final class JsonFromJson extends FromJson[Json] {
     def parse(input: Json): Either[JastError, Json] = Json.parse(input)
@@ -346,7 +368,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = Json.parse(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Json.parse(input, ep)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] = Json.parse(input, ep)
   }
 
   /** Uses non-strict parsing of numbers (targeting Double for speed) */
@@ -390,8 +412,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Null(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Null(input, ep)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
   }
 
 
@@ -449,8 +470,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Bool(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = 
-      JsonInputStreamParser.Bool(input, ep)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
   }
 
 
@@ -541,8 +561,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Str(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Str(input, ep)    
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
   }
 
 
@@ -943,8 +962,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Num(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Num(input, ep)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
 
     /** Uses non-strict numeric parsing, storing all numbers in `Double` for speed */
     private final class NumFromJson extends FromJson[Num] {
@@ -953,7 +971,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         JsonStringParser.Num(input, i0, iN, ep, relaxed = true)
       override def parse(input: ByteBuffer) = Num.parse(input)
       override def parse(input: CharBuffer) = Num.parse(input)
-      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Num.parse(input, ep)
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
     }
 
     val relaxed: FromJson[Num] = new NumFromJson
@@ -1547,8 +1565,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Arr(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Arr(input, ep)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
 
     private final class ArrFromJson extends FromJson[Arr] {
       override def parse(input: Json): Either[JastError, Arr] = Arr.parse(input)
@@ -1560,7 +1577,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
       override def parse(input: CharBuffer) = Arr.parse(input)
 
-      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Arr.parse(input, ep)
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
     }
 
     val relaxed: FromJson[Arr] = new ArrFromJson
@@ -2143,8 +2160,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Obj(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
-      JsonInputStreamParser.Obj(input, ep)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
 
     private final class RelaxedObjFromJson extends FromJson[Obj] {
       override def parse(input: Json): Either[JastError, Obj] = Obj.parse(input)
@@ -2156,37 +2172,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
       override def parse(input: CharBuffer) = Obj.parse(input)
 
-      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = Obj.parse(input, ep)      
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???  
     }
 
     val relaxed: FromJson[Obj] = new RelaxedObjFromJson
   }
 }
-
-/** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
-trait JsonFakingParser {
-  def Json(a: Any): Either[JastError, kse.jsonal.Json] = ???
-  def Json(a: Any, b: Any): Either[JastError, kse.jsonal.Json] = ???
-  def Json(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json] = ???
-  def Null(a: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
-  def Null(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
-  def Null(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Null.type] = ???
-  def Bool(a: Any): Either[JastError, kse.jsonal.Json.Bool] = ???
-  def Bool(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Bool] = ???
-  def Bool(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Bool] = ???
-  def Str(a: Any): Either[JastError, kse.jsonal.Json.Str] = ???
-  def Str(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Str] = ???
-  def Str(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Str] = ???
-  def Num(a: Any): Either[JastError, kse.jsonal.Json.Num] = ???
-  def Num(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Num] = ???
-  def Num(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Num] = ???
-  def Arr(a: Any): Either[JastError, kse.jsonal.Json.Arr] = ???
-  def Arr(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Arr] = ???
-  def Arr(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Arr] = ???
-  def Obj(a: Any): Either[JastError, kse.jsonal.Json.Obj] = ???
-  def Obj(a: Any, b: Any): Either[JastError, kse.jsonal.Json.Obj] = ???
-  def Obj(a: Any, b: Any, c: Any, d: Any): Either[JastError, kse.jsonal.Json.Obj] = ???
-}
-
-/** THIS IS A PLACEHOLDER FOR A REAL IMPLEMENTATION -- TODO: THE REAL IMPLEMENTATION! */
-object JsonInputStreamParser extends JsonFakingParser {}

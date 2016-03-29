@@ -67,7 +67,7 @@ final class JsonRecyclingParser extends RecyclingBuffer {
     if (i0 > 0) {
       o += i0
       if (iN > i0) {
-        System.arraycopy(a, 0, a, i0, iN-i0)
+        System.arraycopy(a, i0, a, 0, iN-i0)
         iN -= i0
       }
       else iN = 0
@@ -77,10 +77,10 @@ final class JsonRecyclingParser extends RecyclingBuffer {
   }
   def expand(): this.type = {
     val b = new Array[Byte]((a.length | (a.length << (if (a.length < 65536) 2 else 1))) & 0x7FFFFFF0)
-    JsonRecyclingParser.unsafe.copyMemory(a, i0.toLong, b, 0L, (iN-i0).toLong)
+    JsonRecyclingParser.unsafe.copyMemory(a, i0 + oBytes.toLong, b, oBytes.toLong, (iN-i0).toLong)
     a = b
     iN -= i0
-    offset += i0
+    o += i0
     i0 = 0
     this
   }
@@ -126,16 +126,8 @@ final class JsonRecyclingParser extends RecyclingBuffer {
   def parse(source: RecyclingBuffer => Boolean): Jast = refresh(source).parseVal()
 
   private[jsonal] def parseVal(): Jast = {
-    var c: Int = 0
-    do {
-      if (!atLeast(1)) return JastError("end of input, no value found", o+i0)
-      c = gB(a, (oBytes + i0).toLong) - 8
-      while (i0+1 < iN && { if ((c & 0xFFFFFFE0) == 0 && ((1 << c) & 0x1000026) != 0) true else return parseValStartingWith(c+8) }) {
-        i0 += 1
-        c = gB(a, (oBytes + i0).toLong) - 8
-      }
-    } while (i0+1 < iN || !done);
-    JastError("end of input, no value found", o+i0)
+    if (!atLeast(1)) JastError("end of input, no value found", o+i0)
+    else parseValStartingWith(gB(a, i0 + oBytes.toLong))
   }
 
   private[jsonal] def parseValStartingWith(c: Int): Jast = {
@@ -155,19 +147,19 @@ final class JsonRecyclingParser extends RecyclingBuffer {
   }
 
   private[jsonal] def parseNull(): Jast = {
-    if (!atLeast(3)) JastError("end of input, 'null' expected", o+i0)
+    if (!atLeast(4)) JastError("end of input, 'null' expected", o+i0)
     else if (gI(a, oBytes + i0.toLong) == nullInInt) { i0 += 4; Json.Null }
     else JastError("'null' expected but not found", o+i0)
   }
 
   private[jsonal] def parseTrue(): Jast = {
-    if (!atLeast(3)) JastError("end of input, 'true' expected", o+i0)
+    if (!atLeast(4)) JastError("end of input, 'true' expected", o+i0)
     else if (gI(a, oBytes + i0.toLong) == trueInInt) { i0 += 4; Json.Bool.True }
     else JastError("'true' expected but not found " + gI(a, oBytes+i0-1L).toHexString, o+i0)    
   }
 
   private[jsonal] def parseFalse(): Jast = {
-    if (!atLeast(4)) JastError("end of input, 'false' expected", o+i0)
+    if (!atLeast(5)) JastError("end of input, 'false' expected", o+i0)
     else if (gI(a, oBytes + i0 + 1L) == alseInInt) { i0 += 5; Json.Bool.False }
     else JastError("'false' expected but not found", o+i0) 
   }
@@ -175,7 +167,7 @@ final class JsonRecyclingParser extends RecyclingBuffer {
   private[jsonal] def parseBool(): Jast = {
     if (!atLeast(4)) JastError("end of input (not room for boolean constant)", o+i0)
     else if (gI(a, oBytes+i0.toLong) == trueInInt) { i0 += 4; Json.Bool.True }
-    else if (available >= 5 && gB(a, oBytes+i0.toLong) == 'f' && gI(a, oBytes+i0.toLong+1) == alseInInt) { i0 += 5; Json.Bool.False}
+    else if (gB(a, oBytes+i0.toLong) == 'f' && atLeast(5) && gI(a, oBytes+i0.toLong+1) == alseInInt) { i0 += 5; Json.Bool.False}
     else JastError("'true' or 'false' expected but not found.", o+i0)
   }
 
@@ -764,9 +756,26 @@ object JsonRecyclingParser {
         System.arraycopy(buffer, i, rb.buffer, rb.end, n)
         rb.end += n
         i += n
-        i < buffer.length
+        i >= buffer.length
       }
-      else false
+      else true
+    }
+  }
+
+  def recycleInputStream(is: java.io.InputStream): RecyclingBuffer => Boolean = new Function1[RecyclingBuffer, Boolean]{
+    private[this] var closed = false
+    def apply(rb: RecyclingBuffer): Boolean = {
+      if (closed) return true
+      rb.pack()
+      if (rb.buffer.length - 8192 < rb.end) rb.expand()
+      val n = is.read(rb.buffer, rb.end, math.min(8194, rb.buffer.length - rb.end))
+      if (n < 0) {
+        closed = true
+        try { is.close } catch { case e if scala.util.control.NonFatal(e) => }
+        return true
+      }
+      rb.end += n
+      false
     }
   }
 }
