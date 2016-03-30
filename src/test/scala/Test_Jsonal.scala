@@ -153,12 +153,13 @@ object Test_Jsonal extends Test_Kse {
       (Json.parse(java.nio.CharBuffer.wrap(j.toCharArray)) match {
         case Right(ll) =>
           if (i != ll) {
+            println("CharBuffer")
             i =?= ll
             subtest(i, ll)
             false
           }
           else true
-        case Left(e) => println(j); println(e); false
+        case Left(e) => println(j); println("CharBuffer"); println(e); false
       }) &&
       (Json.relaxed.parse(java.nio.CharBuffer.wrap(j.toCharArray)) match { 
         case Right(ll) =>
@@ -170,11 +171,12 @@ object Test_Jsonal extends Test_Kse {
             }
             ans
           }
-        case Left(e) => println(j); println(e); false 
+        case Left(e) => println(j); println("relaxed CharBuffer"); println(e); false 
       }) &&
       (Json.parse(java.nio.ByteBuffer.wrap(j.getBytes("UTF-8"))) match {
         case Right(mm) =>
           if (i != mm) {
+            println("ByteBuffer")
             i =?= mm
             subtest(i, mm)
             false
@@ -192,8 +194,31 @@ object Test_Jsonal extends Test_Kse {
             }
             ans
           }
-        case Left(e) => println(j); println("ByteBuffer"); println(e); false
-      })      
+        case Left(e) => println(j); println("relaxed ByteBuffer"); println(e); false
+      }) &&
+      (Jast.parse(new java.io.ByteArrayInputStream(j.getBytes("UTF-8"))) match {
+        case nn: Json =>
+          if (i != nn) {
+            println("InputStream")
+            i =?= nn
+            subtest(i, nn)
+            false
+          }
+          else true
+        case e: JastError => println(j); println("InputStream"); println(e); false
+      }) &&
+      (Jast.parse(new java.io.ByteArrayInputStream(j.getBytes("UTF-8"))) match {
+        case nn: Json =>
+          k2.right.exists{ kk2 =>
+            val ans = kk2 == nn
+            if (!ans) {
+              println("relaxed InputStream")
+              nn =?= kk2
+            }
+            ans
+          }
+        case e: JastError => println(j); println("relaxed InputStream"); println(e); false
+      })
     }
   }
 

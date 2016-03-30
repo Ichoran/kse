@@ -85,47 +85,9 @@ sealed trait Jast {
   @inline final def \(key: String): Jast = this apply key
 }
 /** High-level routines for converting strings and other serial formats into JSON ASTs. */
-object Jast {
-  /** Parse a portion of a string into a JSON AST, keeping track of the last parsed index. */
-  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Jast = JsonStringParser.Json(input, i0, iN, ep) match { case Left(e) => e; case Right(j) => j }
-
-  /** Parse a string into a JSON AST.
-    *
-    * Note: if the JSON ends before the String does, that is not considered an error.
-    */
-  def parse(input: String): Jast = parse(input, 0, input.length, null)
-
-  /** Parse from a `ByteBuffer` into a JSON AST. */
-  def parse(input: ByteBuffer): Jast = JsonByteBufferParser.Json(input) match { case Left(e) => e; case Right(j) => j }
-
-  /** Parse from a `CharBuffer` into a JSON AST. */
-  def parse(input: CharBuffer): Jast = JsonCharBufferParser.Json(input) match { case Left(e) => e; case Right(j) => j }
-
-  /** Parse from an `InputStream` into a JSON AST, keeping track of the last parsed index. */
-  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Jast = {
-    val jrp = (new JsonRecyclingParser).refresh(JsonRecyclingParser recycleInputStream input).recycle()
-    val ans = jrp.parseVal()
-    if ((ep ne null) && ans.isInstanceOf[Json]) ep.index = jrp.offset + jrp.start
-    ans
-  }
-
-  /** Parse from an `InputStream` into a JSON AST. */
-  def parse(input: java.io.InputStream): Jast = parse(input, null)
-
-  /** Parse from a `File` into a JSON AST. */
-  def parse(filename: java.io.File): Jast = {
-    if (!filename.exists) JastError("File does not exist: "+filename.getPath)
-    else {
-      try {
-        val fis = new java.io.FileInputStream(filename)
-        try { parse(fis) }
-        finally { fis.close }
-      }
-      catch { 
-        case t if NonFatal(t) => JastError("File read error: "+t.getClass.getName+" "+t.getMessage) 
-      }
-    }
-  }
+object Jast extends ParseToJast(false) {
+  /** Parsing routines that take a relaxed approach to parsing numbers (everything goes into Double, even if inexact) */
+  val relaxed: ParseToJast = new ParseToJast(true)
 }
 
 /** Representation of an error that occured during JSON parsing or access. */

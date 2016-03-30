@@ -32,11 +32,18 @@ trait RecyclingBuffer {
   def available() = end - start
 }
 
+/** Recycles an internal byte array to parse inputs of arbitrary size. */
 final class JsonRecyclingParser extends RecyclingBuffer {
   import JsonRecyclingParser.unsafe.{getByte => gB, getInt => gI, putChar => pC}
   import JsonRecyclingParser.{oBytes, oChars, nullInInt, trueInInt, alseInInt}
   import JsonGenericParser._
 
+  // Very important!  i0 should always point at the current character unless that
+  // has already been incorporated into the output.  If it gets ahead on
+  // non-incorporated input, recycling can drop input without any way to recover it!
+  //
+  // If you save an i0 input, you must ALWAYS save it as x = o+i0 (and retrieve as x-o)
+  // if there is any chance that more input will be loaded.  Recycling may change the offset!
   private[this] var i0: Int = 0
   private[this] var iN: Int = 0
   private[this] var a: Array[Byte] = new Array[Byte](48)
@@ -225,10 +232,13 @@ final class JsonRecyclingParser extends RecyclingBuffer {
                         (hexifyByte(gB(a, {i+=1; i})) << 8) |
                         (hexifyByte(gB(a, {i+=1; i})) << 4) |
                         hexifyByte(gB(a, {i+=1; i}))
-                if (h < 0) return JastError("bad character in unicode escape", o+i0)
+                if (h < 0) return JastError("bad character in unicode escape", o+i-oBytes)
                 h.toChar
               case 'r' => '\r'
+              case 'f' => '\f'
               case 'b' => '\b'
+              case '/' => '/'
+              case x => return JastError("bad character in JSON string escape: "+(x&0xFF).toChar, o+i-oBytes)
             }
           )
           j += 2
@@ -496,13 +506,13 @@ final class JsonRecyclingParser extends RecyclingBuffer {
           (c == 'n' && !strictNumbers && atLeast(4) && gI(a, i0 + oBytes.toLong) == nullInInt)
         )
       ) {
-        val mark = i0
+        val mark = o + i0
         val dbl = if (c == 'n') { i0 += 4; Double.NaN } else parseNum(c, false)
         if (
           (strictNumbers && (cache eq wouldNotFitInDouble)) ||
           (java.lang.Double.isNaN(dbl) && (cache ne null) && cache.isInstanceOf[JastError])
         ) {
-          i0 = mark
+          i0 = (mark - o).toInt
           contents = Json.Arr.All.builder
           var k = 0
           while (k < n) { contents ~ Json.Num(doubles(k)); k += 1 }
