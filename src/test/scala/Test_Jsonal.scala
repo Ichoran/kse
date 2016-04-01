@@ -3,6 +3,8 @@
 
 package kse.tests
 
+import java.nio._
+
 import scala.util._
 
 import kse.jsonal._
@@ -124,7 +126,7 @@ object Test_Jsonal extends Test_Kse {
     }
   }
 
-  def test_random_round_trip_String: Boolean = {
+  def test_random_round_trip: Boolean = {
     val r = new scala.util.Random
     (0 to 1024).forall{ n =>
       val i = mkVal(r, 6, N(1024))
@@ -222,6 +224,28 @@ object Test_Jsonal extends Test_Kse {
     }
   }
 
+  def test_specifics_Direct: Boolean = {
+    import JsonConverters._
+
+    Json.Num(Double.NaN) =?= Json.Null &&
+    Json.Num(Double.PositiveInfinity) =?= Json.Null &&
+    Json.Num(Double.NegativeInfinity) =?= Json.Null &&
+    Json ~ ("fish", Array("wish", "dish")) ~ Json =?= Json ~ ("fish", Json ~ "wish" ~ "dish" ~ Json) ~ Json &&
+    Json ~ ("fish", Map("wish" -> "dish")) ~ Json =?= Json ~ ("fish", Json ~ ("wish", "dish") ~ Json) ~ Json &&
+    Json(false).to[Boolean] =?= Right(false) &&
+    Json(2.127515).to[Double] =?= Right(2.127515) &&
+    Json("fish").to[String] =?= Right("fish") &&
+    Json.Arr.All(Array(Json(3.0), Json.Null)) =?= Json.Arr.Dbl(Array(3.0, Double.NaN)) &&
+    Json ~ "fish" ~ 2.7 ~ Json =?= Json.Arr ~ "fish" ~ 2.7 ~ Json.Arr &&
+    Json ~ "fish" ~ 2.7 ~ Json =?= Json.Arr.All ~ "fish" ~ 2.7 ~ Json.Arr.All &&
+    Json ~ ("fish", 2.7) ~ Json =?= Json.Obj(Map("fish" -> Json(2.7))) &&
+    Json ~ ("fish", 2.0) ~ Json =?= Json.Obj ~ ("fish", 2.0) ~ Json.Obj &&
+    (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
+    (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
+    { val now = java.time.Instant.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
+    { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].right.map(_.headOption) =?= Right(Option(now)) }
+  }
+
   def test_specifics_String: Boolean = {
     import JsonConverters._
 
@@ -232,31 +256,79 @@ object Test_Jsonal extends Test_Kse {
     Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(Json.parse).collect{
       case Right(js) => js
     } =?= Seq[Json]() &&
-    Json.Num(Double.NaN) =?= Json.Null &&
-    Json.Num(Double.PositiveInfinity) =?= Json.Null &&
-    Json.Num(Double.NegativeInfinity) =?= Json.Null &&
     Json.Num(18014398509481985L) =?= Json.parse("18014398509481985").right.get &&
     Json.Num(1.9125881e13) =?= Json.parse("19.125881e12").right.get &&
     Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234").right.get &&
     Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234").right.get &&
     Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]").right.get &&
-    Json.Arr.All(Array(Json(3.0), Json.Null)) =?= Json.Arr.Dbl(Array(3.0, Double.NaN)) &&
-    Json ~ "fish" ~ 2.7 ~ Json =?= Json.Arr ~ "fish" ~ 2.7 ~ Json.Arr &&
-    Json ~ "fish" ~ 2.7 ~ Json =?= Json.Arr.All ~ "fish" ~ 2.7 ~ Json.Arr.All &&
-    Json ~ ("fish", 2.7) ~ Json =?= Json.Obj(Map("fish" -> Json(2.7))) &&
     Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}").right.get &&
     Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}").right.get &&
-    Json ~ ("fish", 2.0) ~ Json =?= Json.Obj ~ ("fish", 2.0) ~ Json.Obj &&
-    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}").right.get &&
-    Json ~ ("fish", Array("wish", "dish")) ~ Json =?= Json ~ ("fish", Json ~ "wish" ~ "dish" ~ Json) ~ Json &&
-    Json ~ ("fish", Map("wish" -> "dish")) ~ Json =?= Json ~ ("fish", Json ~ ("wish", "dish") ~ Json) ~ Json &&
-    Json(false).to[Boolean] =?= Right(false) &&
-    Json(2.127515).to[Double] =?= Right(2.127515) &&
-    Json("fish").to[String] =?= Right("fish") &&
-    (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
-    (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
-    { val now = java.time.Instant.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
-    { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].right.map(_.headOption) =?= Right(Option(now)) }
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}").right.get
+  }
+
+  def test_specifics_CharBuffer: Boolean = {
+    import JsonConverters._
+    implicit class StringToCharBuffer(private val string: String) { def cb: CharBuffer = CharBuffer.wrap(string.toCharArray) }
+
+    Json.Null =?= Json.parse("null".cb).right.get &&
+    Json.Bool.True =?= Json.parse("true".cb).right.get &&
+    Json.Bool.False =?= Json.parse("false".cb).right.get &&
+    Json.Str("fish") =?= Json.parse("\"fish\"".cb).right.get &&
+    Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(_.cb).map(Json.parse).collect{
+      case Right(js) => js
+    } =?= Seq[Json]() &&
+    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".cb).right.get &&
+    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".cb).right.get &&
+    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".cb).right.get &&
+    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".cb).right.get &&
+    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".cb).right.get &&
+    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".cb).right.get &&
+    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".cb).right.get &&
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".cb).right.get
+  }
+
+  def test_specifics_ByteBuffer: Boolean = {
+    import JsonConverters._
+    implicit class StringToCharBuffer(private val string: String) { def bb: ByteBuffer = ByteBuffer.wrap(string.getBytes) }
+
+    Json.Null =?= Json.parse("null".bb).right.get &&
+    Json.Bool.True =?= Json.parse("true".bb).right.get &&
+    Json.Bool.False =?= Json.parse("false".bb).right.get &&
+    Json.Str("fish") =?= Json.parse("\"fish\"".bb).right.get &&
+    Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(_.bb).map(Json.parse).collect{
+      case Right(js) => js
+    } =?= Seq[Json]() &&
+    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".bb).right.get &&
+    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".bb).right.get &&
+    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".bb).right.get &&
+    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".bb).right.get &&
+    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".bb).right.get &&
+    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".bb).right.get &&
+    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".bb).right.get &&
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".bb).right.get
+  }
+
+  def test_specifics_InputStream: Boolean = {
+    import JsonConverters._
+    implicit class StringToInputStream(private val string: String) {
+      def is: java.io.InputStream = new java.io.ByteArrayInputStream(string.getBytes)
+    }
+
+    Json.Null =?= Json.parse("null".is).right.get &&
+    Json.Bool.True =?= Json.parse("true".is).right.get &&
+    Json.Bool.False =?= Json.parse("false".is).right.get &&
+    Json.Str("fish") =?= Json.parse("\"fish\"".is).right.get &&
+    Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(_.is).map(Json.parse).collect{
+      case Right(js) => js
+    } =?= Seq[Json]() &&
+    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".is).right.get &&
+    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".is).right.get &&
+    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".is).right.get &&
+    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".is).right.get &&
+    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".is).right.get &&
+    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".is).right.get &&
+    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".is).right.get &&
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".is).right.get
   }
 
   def main(args: Array[String]) { typicalMain(args) }

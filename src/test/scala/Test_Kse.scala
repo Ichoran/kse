@@ -51,9 +51,16 @@ trait Test_Kse { self =>
     }
   }
 
+  protected def tidyClassName(c: Class[_]): String = {
+    var n = c.getName.split('.').last
+    if (n.endsWith("$")) n = n.substring(0, n.length-1)
+    if (n.startsWith("Test_")) n = n.substring(5)
+    n
+  }
+
   def typicalMain(args: Array[String]) {
     run match {
-      case Yes(n) => println(s"No failures, $n tests passed!")
+      case Yes(n) => println(s"No failures in ${tidyClassName(getClass)}, $n tests passed!")
       case No(v) => 
         v foreach { u =>
           u.foreach(println)

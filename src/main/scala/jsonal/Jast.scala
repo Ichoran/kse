@@ -318,7 +318,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Json(input, i0, iN, ep)
   override def parse(input: ByteBuffer) = JsonByteBufferParser.Json(input)
   override def parse(input: CharBuffer) = JsonCharBufferParser.Json(input)
-  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] = ???
+  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] =
+    JsonRecyclingParser.Json(JsonRecyclingParser recycleInputStream input, ep)
 
   private final class JsonFromJson extends FromJson[Json] {
     def parse(input: Json): Either[JastError, Json] = Json.parse(input)
@@ -330,7 +331,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = Json.parse(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] = Json.parse(input, ep)
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] =
+      JsonRecyclingParser.Json(JsonRecyclingParser recycleInputStream input, ep, relaxed = true)
   }
 
   /** Uses non-strict parsing of numbers (targeting Double for speed) */
@@ -374,7 +376,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Null(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = 
+      JsonRecyclingParser.Null(JsonRecyclingParser recycleInputStream input, ep)
   }
 
 
@@ -432,7 +435,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Bool(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+      JsonRecyclingParser.Bool(JsonRecyclingParser recycleInputStream input, ep)
   }
 
 
@@ -523,7 +527,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Str(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+      JsonRecyclingParser.Str(JsonRecyclingParser recycleInputStream input, ep)
   }
 
 
@@ -924,16 +929,18 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Num(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+      JsonRecyclingParser.Num(JsonRecyclingParser recycleInputStream input, ep)
 
     /** Uses non-strict numeric parsing, storing all numbers in `Double` for speed */
     private final class NumFromJson extends FromJson[Num] {
       override def parse(input: Json): Either[JastError, Num] = Num.parse(input)
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
         JsonStringParser.Num(input, i0, iN, ep, relaxed = true)
-      override def parse(input: ByteBuffer) = Num.parse(input)
-      override def parse(input: CharBuffer) = Num.parse(input)
-      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+      override def parse(input: ByteBuffer) = JsonByteBufferParser.Num(input, relaxed = true)
+      override def parse(input: CharBuffer) = JsonCharBufferParser.Num(input, relaxed = true)
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+        JsonRecyclingParser.Num(JsonRecyclingParser recycleInputStream input, ep, relaxed = true)
     }
 
     val relaxed: FromJson[Num] = new NumFromJson
@@ -1527,7 +1534,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Arr(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+      JsonRecyclingParser.Arr(JsonRecyclingParser recycleInputStream input, ep)
 
     private final class ArrFromJson extends FromJson[Arr] {
       override def parse(input: Json): Either[JastError, Arr] = Arr.parse(input)
@@ -1535,11 +1543,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
         JsonStringParser.Arr(input, i0, iN, ep, relaxed = true)
 
-      override def parse(input: ByteBuffer) = Arr.parse(input)
+      override def parse(input: ByteBuffer) = JsonByteBufferParser.Arr(input, relaxed = true)
 
-      override def parse(input: CharBuffer) = Arr.parse(input)
+      override def parse(input: CharBuffer) = JsonCharBufferParser.Arr(input, relaxed = true)
 
-      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+        JsonRecyclingParser.Arr(JsonRecyclingParser recycleInputStream input, ep, relaxed = true)
     }
 
     val relaxed: FromJson[Arr] = new ArrFromJson
@@ -2122,7 +2131,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = JsonCharBufferParser.Obj(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+      JsonRecyclingParser.Obj(JsonRecyclingParser recycleInputStream input, ep)
 
     private final class RelaxedObjFromJson extends FromJson[Obj] {
       override def parse(input: Json): Either[JastError, Obj] = Obj.parse(input)
@@ -2130,11 +2140,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
         JsonStringParser.Obj(input, i0, iN, ep, relaxed = true)
 
-      override def parse(input: ByteBuffer) = Obj.parse(input)
+      override def parse(input: ByteBuffer) = JsonByteBufferParser.Obj(input, relaxed = true)
 
-      override def parse(input: CharBuffer) = Obj.parse(input)
+      override def parse(input: CharBuffer) = JsonCharBufferParser.Obj(input, relaxed = true)
 
-      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) = ???  
+      override def parse(input: java.io.InputStream, ep: FromJson.Endpoint) =
+        JsonRecyclingParser.Obj(JsonRecyclingParser recycleInputStream input, ep, relaxed = true) 
     }
 
     val relaxed: FromJson[Obj] = new RelaxedObjFromJson

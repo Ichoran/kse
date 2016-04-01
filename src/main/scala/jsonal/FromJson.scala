@@ -35,11 +35,14 @@ trait FromJson[A] {
     case Right(js) => parse(js)
   }
 
-  /** Deserialize the object from a InputStream containing its JSON representation, keeping track of the end of parsing. */
+  /** Deserialize the object from an InputStream containing its JSON representation, keeping track of the end of parsing. */
   def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, A] = Json.parse(input, ep) match {
     case Left(je)  => Left(je)
     case Right(js) => parse(js)
   }
+
+  /** Deserialize the object from an InputStream containing its JSON representation. */
+  def parse(input: java.io.InputStream): Either[JastError, A] = parse(input, ep = null)
 
   /** Recover an array of these objects from their JSON representation */
   def parseArray(input: Json.Arr)(implicit tag: reflect.ClassTag[A]): Either[JastError, Array[A]] = {
@@ -118,7 +121,7 @@ class ParseToJast private[jsonal] (protected val isRelaxed: Boolean) {
   /** Parses an input stream to a JSON AST. */
   def parse(input: java.io.InputStream): Jast = parse(input, null)
 
-  /** Parses the contents of a file to a JSON AST.
+  /** Parses the contents of a file to a JSON AST.  The file will be closed.
     *
     * Note: if the file contains additional information beyond the end of the JSON object, it will be ignored.
     */
