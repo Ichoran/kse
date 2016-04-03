@@ -33,6 +33,16 @@ trait JsonVisitor {
   /** This method is called after a `Json.Arr.Dbl`, `Json.Arr.All`, or `Json.Obj` are
     * visited for the first time.  If it returns `true`, the children are visited using
     * the appropriate methods.  If `false`, no children will be visited.
+    *
+    * Note--this method will be called exactly once for each JSON collection, and it will
+    * be called immediately after the corresponding `visit` method.
+    *
+    * Example: If you wanted to enter only objects of size 3, you might define
+    * {{{
+    * private[this] var inNext = false
+    * def goIn = { val go = inNext; inNext = false; go }
+    * def visit(o: Json.Obj): this.type = { if (o.size == 3) inNext = true; this }
+    * }}}
     */
   def goIn: Boolean
 
@@ -80,7 +90,7 @@ trait JsonVisitor {
     * cache the key information if it is to inform what happens when the corresponding
     * value is visited.
     */
-  def nextKey(key: String): this.type
+  def nextKey(index: Int, key: String): this.type
 
   /** If and only if all the entries of a `Json.Obj` were visited, this method
     * will be called to indicate that the JSON object has been completed.
@@ -112,8 +122,10 @@ trait JsonVisitor {
   }
 
   private def traverseInto(obj: Json.Obj) {
+    var i = 0
     obj.foreach{ (k,v) =>
-      nextKey(k)
+      nextKey(i,k)
+      i += 1
       traverseInto(v)
     }
   }
@@ -157,7 +169,7 @@ abstract class AbstractJsonVisitor extends JsonVisitor {
   def nextIndex(index: Int): this.type = this
   def outOfAllArr: this.type = this
   def visit(obj: Json.Obj): this.type = this
-  def nextKey(key: String): this.type = this
+  def nextKey(index: Int, key: String): this.type = this
   def outOfObj: this.type = this
   def finish: this.type = this
 }
