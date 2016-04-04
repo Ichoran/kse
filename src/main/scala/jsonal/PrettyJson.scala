@@ -13,14 +13,34 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
     if (indentWithTabs) PrettyJson.aLotOfTabs
     else                PrettyJson.aLotOfSpaces
 
+  private[this] def ensureSpaces(n: Int) {
+    var m = spaces.length
+    while (n > m) m = math.min(Int.MaxValue, m.toLong * 2).toInt
+    if (m > spaces.length) {
+      val a = new Array[Char](m)
+      java.util.Arrays.fill(a, spaces(0))
+      spaces = a
+    }
+  }
+
   private[this] var myMargin = if (rightMargin < 1) Int.MaxValue else rightMargin
 
   private[this] var myIndent = if (indentation < 1) 1 else if (indentation > myMargin) myMargin else indentation
+
+  private[this] var myOne = { ensureSpaces(myIndent); new String(spaces, 0, myIndent) }
 
   /////////////////////////////////////////////////////////////////
   // This section handles accumulating the pretty representation //
   /////////////////////////////////////////////////////////////////
   private[this] var lastIndent = 0
+  private[this] var nextIndent = 0
+  private[this] var wrapAt = new Array[Long](6)
+  var wrapN = 0
+
+  private[this] def ensureWrapSpace {
+    if (wrapN >= wrapAt.length)
+      wrapAt = java.util.Arrays.copyOf(wrapAt, (wrapAt.length | (wrapAt.length << 1)) & 0x7FFFFFFE)
+  }
 
   /** Clears the accumulated pretty representation. */
   def clear: this.type = { historic.clear; current.setLength(0); lastIndent = 0; this }
@@ -31,36 +51,126 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   /** Contains the current line being built. */
   val current = new java.lang.StringBuilder
 
+  /** Appends an opening brace to the current line. */
+  def lbrace: this.type = {
+    nextIndent += myIndent
+    current append "{ "
+    if (nextIndent > myIndent) {
+      val w = current.length | (nextIndent.toLong << 32)
+      println(f"$wrapN: $nextIndent ${current.length} $w%016x $current")
+      ensureWrapSpace
+      wrapAt(wrapN) = w
+      wrapN += 1     
+    }
+    this
+  }
+
+  /** Appends a closing brace to the current line. */
+  def rbrace: this.type = {
+    nextIndent -= myIndent
+    if (wrapN > 0) wrapN -= 1
+    current.append(if (current.length <= lastIndent) "}" else " }")
+    this
+  }
+
+  /** Appends an opening bracket to the current line. */
+  def lbracket: this.type = {
+    nextIndent += myIndent
+    current append "[ "
+    if (nextIndent > myIndent) {
+      val w = current.length | (nextIndent.toLong << 32)
+      if (current.toString.trim != "[") println(f"$wrapN: $nextIndent $w%016x ${current.length} $current")
+      ensureWrapSpace
+      wrapAt(wrapN) = w
+      wrapN += 1
+    }
+    this
+  }
+
+  /** Appends a closing bracket to the current line. */
+  def rbracket: this.type = {
+    nextIndent -= myIndent
+    if (wrapN > 0) wrapN -= 1
+    current.append(if (current.length <= lastIndent) "]" else " ]")
+    this
+  }
+
+  /** Appends a comma to the current line. */
+  def comma: this.type = {
+    if (current.length >= myMargin - 1 || nextIndent < lastIndent) {
+      current append ","
+      nl(nextIndent)
+    }
+    else current append ", "
+    this
+  }
+
+  /** Appends a colon to the current line. */
+  def colon: this.type = {
+    current append ": "
+    this
+  }
+
   /** Appends a string to the current line. */
-  def append(s: String): this.type = { current append s; this }
+  def append(s: String): this.type = {
+    current append s
+    this
+  }
 
   /** Appends a JSON value to the current line (as a single line). */
-  def append(j: Json): this.type = { j.jsonString(current); this }
+  def append(j: Json): this.type = {
+    j.jsonString(current)
+    this
+  }
 
   /** Appends a StringBuilder to the current line. */
-  def slurp(sb: java.lang.StringBuilder): this.type  = { current append sb; sb.setLength(0); this }
+  def slurp(sb: java.lang.StringBuilder): this.type  = {
+    current append sb
+    sb.setLength(0)
+    this
+  }
 
   /** Creates a new line indented the specified number of characters.
     *
     * Note: this method does not obey the `indentation` parameter.  It is assumed that the argument will be selected with the correct indentation in mind.
     */
   def nl(indent: Int): this.type = {
+    if (wrapN > 0) {
+      val w = wrapAt(0)
+      val i = ((w >>> 32) & 0x7FFFFFFFL).toInt
+      val n = (w & 0x7FFFFFFFL).toInt
+      if (current.length > n) {
+        val shift = i - n
+        historic += current.substring(0, n)
+        val blank =
+          if (i - lastIndent == myIndent) myOne
+          else { ensureSpaces(i - lastIndent); new String(spaces, 0, i - lastIndent) }
+        println(f"Switching because $i $n $w%016x ${current.length}")
+        println(current.toString)
+        current.replace(lastIndent, n, blank)
+        println(current.toString)
+        lastIndent = i
+        var j = 1
+        while (j < wrapN) {
+          wrapAt(j-1) = wrapAt(j) + shift
+          j += 1
+        }
+        wrapN -= 1
+        if (current.length >= myMargin) return nl(indent)
+        else return this
+      }
+    }
     val in = math.max(0, indent)
     historic += current.toString
     if (lastIndent > 0) current.setLength(math.min(lastIndent, in))
     else current.setLength(0)
     val n = in - current.length
     if (n > 0) {
-      var m = spaces.length
-      while (n > m) m = math.min(Int.MaxValue, m.toLong * 2).toInt
-      if (m > spaces.length) {
-        val a = new Array[Char](m)
-        java.util.Arrays.fill(a, spaces(0))
-        spaces = a
-      }
+      ensureSpaces(n)
       current append (spaces, 0, n)
     }
     lastIndent = in
+    wrapN = 0
     this
   }
 
@@ -81,7 +191,6 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   ///////////////////////////////////////////////////
   // This section implements the JsonVisitor trait //
   ///////////////////////////////////////////////////
-  private[this] var nextIndent = 0
   private[this] var wasEmpty: Boolean = false
   private[this] var mySb = new java.lang.StringBuilder
 
@@ -92,39 +201,35 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   def visit(num: Json.Num): this.type = { append(num.toString); this }
   def goIn: Boolean = if (wasEmpty) { wasEmpty = false; false } else true
   def visit(jad: Json.Arr.Dbl): this.type = { 
-    if (jad.size > 0) { append("["); nextIndent += myIndent }
-    else { append("[]"); wasEmpty = true }
-    this
+    if (jad.size > 0) lbracket
+    else { append("[]"); wasEmpty = true; this }
   }
   def visitDblIndex(index: Int, value: Double): this.type = {
-    if (index > 0) current append ","
+    if (index > 0) comma
     append(Json.Num(value))
     this
   }
-  def outOfDblArr: this.type = { nextIndent -= myIndent; append("]"); this }
+  def outOfDblArr: this.type = rbracket
   def visit(jaa: Json.Arr.All): this.type = { 
-    if (jaa.size > 0) { append("["); nextIndent += myIndent }
-    else { append("[]"); wasEmpty = true }
-    this
+    if (jaa.size > 0) lbracket
+    else { append("[]"); wasEmpty = true; this }
   }
-  def nextIndex(index: Int): this.type = { if (index > 0) append(","); this }
-  def outOfAllArr: this.type = { nextIndent -= myIndent; append("]"); this }
+  def nextIndex(index: Int): this.type = { if (index > 0) comma; this }
+  def outOfAllArr: this.type = rbracket
   def visit(obj: Json.Obj): this.type = { 
-    if (obj.size > 0) { append("{"); nextIndent += myIndent }
-    else { append("{}"); wasEmpty = true }
-    this
+    if (obj.size > 0) lbrace
+    else { append("{}"); wasEmpty = true; this }
   }
   def nextKey(index: Int, key: String): this.type = {
-    if (index > 0) { append(","); nextIndent -= myIndent }
+    if (index > 0) comma
     mySb setLength 0
     Json.Str.addJsonString(mySb, key)
     slurp(mySb)
-    append(":")
-    nextIndent += myIndent
+    colon
     this
   }
-  def outOfObj: this.type = { nextIndent -= 2*myIndent; append("}"); this }
-  def finish: this.type = { nl(0); this }
+  def outOfObj: this.type = rbrace
+  def finish: this.type = this
 }
 object PrettyJson {
   private [jsonal] val aLotOfSpaces = Array.fill(1024)(' ')
