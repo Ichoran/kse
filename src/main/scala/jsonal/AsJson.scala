@@ -13,9 +13,6 @@ trait AsJson {
   /** The JSON representation of this object. */
   def json: Json
 
-  /** Accumulate the serialized JSON representation of this object in a prettyprinter. */
-  def jsonPretty(pretty: PrettyJson, depth: Int) { json.jsonPretty(pretty, depth) }
-
   /** Accumulate the serialized JSON representation of this object in a Java StringBuilder. */
   def jsonString(sb: java.lang.StringBuilder) { json.jsonString(sb) }
 

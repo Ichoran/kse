@@ -11,6 +11,8 @@
   *
   * It is powerful: objects have a custom map implementation that enables rapid lookup in the underlying array.
   *
+  * It is fast: faster than Jackson, comparable to Boon in most cases.
+  *
   * It loves numbers: arrays of numbers end up as arrays of numbers, not a clunky boxed mess!
   *
   * It is easy to build: just say the name of what you want to build, e.g. `Json.Obj`,
@@ -47,7 +49,7 @@ import scala.util.control.NonFatal
   * val maybeJson = Jast.parse("""{"red":[true, {"dish":27.5}], "blue":"fish"}""")
   * val redDish = maybeJson("red")(1)("dish")    // JSON representation of 27.5
   * val wrong   = maybeJson("blue")(3)("fish")   // JastError("Indexing into string")
-  * val dishTwo = maybeJson \ "red" \ 1 \ "dish" // Alternative lookup syntax
+  * val dishTwo = maybeJson \ "red" \ 1 \ "dish" // Alternative Lift-style syntax
   * }}}
   */
 sealed trait Jast {
@@ -127,7 +129,6 @@ sealed trait Json extends Jast with AsJson {
 
   def json: Json = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
-  override def jsonPretty(pretty: PrettyJson, depth: Int) { jsonString(pretty.lastLine) }
 }
 /** The companion object for Json provides a variety of ways to construct JSON values.
   *
@@ -455,23 +456,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       case _ => false
     }
 
-    override def jsonString(sb: java.lang.StringBuilder) {
-      var i = 0
-      sb append '"'
-      while (i < text.length) {
-        val c = text.charAt(i)
-        if (c == '"' || c == '\\') sb append '\\' append c
-        else if (c >= ' ' && c <= '~') sb append c
-        else if (c == '\n') sb append "\\n"
-        else if (c == '\t') sb append "\\t"
-        else if (c == '\r') sb append "\\r"
-        else if (c == '\f') sb append "\\f"
-        else if (c == '\b') sb append "\\b"
-        else sb append "\\u%04x".format(c.toInt)
-        i += 1
-      }
-      sb append '"'
-    }
+    override def jsonString(sb: java.lang.StringBuilder) { Str.addJsonString(sb, text) }
 
     override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
       var b = if (bb.hasRemaining) bb else refresh(bb)
@@ -514,6 +499,24 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
   }
   object Str extends FromJson[Str] {
+    def addJsonString(sb: java.lang.StringBuilder, text: String) {
+      var i = 0
+      sb append '"'
+      while (i < text.length) {
+        val c = text.charAt(i)
+        if (c == '"' || c == '\\') sb append '\\' append c
+        else if (c >= ' ' && c <= '~') sb append c
+        else if (c == '\n') sb append "\\n"
+        else if (c == '\t') sb append "\\t"
+        else if (c == '\r') sb append "\\r"
+        else if (c == '\f') sb append "\\f"
+        else if (c == '\b') sb append "\\b"
+        else sb append "\\u%04x".format(c.toInt)
+        i += 1
+      }
+      sb append '"'
+    }
+
     /** Returns `Left(JastError)` unless the input is a `Json.Str` */
     override def parse(input: Json): Either[JastError, Str] = input match {
       case s: Str => Right(s)
@@ -1069,16 +1072,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         }
         case _ => false
       }
-      override def jsonPretty(pretty: PrettyJson, depth: Int) {
-        // TODO--actually make this pretty.
-        if (size == 0) pretty append "[]"
-        else if (size == 1 && values(0).simple) {
-          pretty append "["
-          values(0).jsonString(pretty.lastLine)
-          pretty append "]"
-        }
-        else jsonString(pretty.lastLine)
-      }
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
         if (values.length > 0) {
@@ -1310,16 +1303,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           true
         }
         case _ => false
-      }
-      override def jsonPretty(pretty: PrettyJson, depth: Int) {
-        // TODO--actually make this pretty.
-        if (size == 0) pretty append "[]"
-        else if (size == 1) {
-          pretty append "["
-          Num(doubles(0)).jsonString(pretty.lastLine)
-          pretty append "]"
-        }
-        else jsonString(pretty.lastLine)
       }
       override def jsonString(sb: java.lang.StringBuilder) {
         sb append '['
@@ -1831,11 +1814,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       if (myMap.size > 1) sb append " }" else sb append '}'
     }
-      override def jsonPretty(pretty: PrettyJson, depth: Int) {
-        // TODO--actually make this pretty.
-        if (size == 0) pretty append "{}"
-        else jsonString(pretty.lastLine)
-      }
     override def jsonString(sb: java.lang.StringBuilder) {
       if (underlying ne null) {
         if (underlying.length > 3) sb append "{ " else sb append '{'

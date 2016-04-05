@@ -11,9 +11,6 @@ trait Jsonize[A] {
   /** Convert the object to its JSON representation. */
   def jsonize(a: A): Json
 
-  /** Accumulate the serialized JSON representation of the object in a prettyprinter. */
-  def jsonizePretty(a: A, pretty: PrettyJson, depth: Int) { jsonize(a).jsonPretty(pretty, depth) }
-
   /** Accumulate the serialized JSON representation of the object in a Java StringBuilder. */
   def jsonizeString(a: A, sb: java.lang.StringBuilder) { jsonize(a).jsonString(sb) }
 
