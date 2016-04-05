@@ -29,6 +29,10 @@ trait PriorityTwoJsonConverters extends PriorityThreeJsonConverters {
 
 object JsonConverters extends PriorityTwoJsonConverters {
   implicit val booleanIsImplicitlyJsonized = new Jsonize[Boolean] { def jsonize(b: Boolean) = Json.Bool(b) }
+  implicit val intIsImplicitlyJsonized = new Jsonize[Int] { def jsonize(i: Int) = Json.Num(i) }
+  implicit val longIsImplictlyJsonized = new Jsonize[Long] { def jsonize(l: Long) = Json.Num(l) }
+  @deprecated("Direct Float to Double conversion can create lots of insignificant decimal digits.  Manually use .toString.toDouble for a nice decimal representation or .toDouble if you do not care.", "0.3.0")
+  implicit val floatIsImplicitlyJsonized = new Jsonize[Float] { def jsonize(f: Float) = Json.Num(f.toDouble) }
   implicit val doubleIsImplicitlyJsonized = new Jsonize[Double] { def jsonize(d: Double) = Json.Num(d) }
   implicit val stringIsImplicitlyJsonized = new Jsonize[String] { def jsonize(s: String) = Json.Str(s) }
   implicit val instantIsImplicitlyJsonized = new Jsonize[java.time.Instant] { 
@@ -48,6 +52,13 @@ object JsonConverters extends PriorityTwoJsonConverters {
     def parse(js: Json): Either[JastError, Boolean] = js.bool match {
       case None => Left(JastError("Not a boolean"))
       case Some(b) => Right(b)
+    }
+  }
+
+  implicit val longFromJson: FromJson[Long] = new FromJson[Long] {
+    def parse(js: Json): Either[JastError, Long] = js match {
+      case n: Json.Num if n.isLong => Right(n.long)
+      case _ => Left(JastError("Not a long"))
     }
   }
 

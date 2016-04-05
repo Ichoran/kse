@@ -201,6 +201,11 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   def wasNumber(x: Double) = java.lang.Double.doubleToRawLongBits(x) != Json.not_a_normal_NaN_bits
 
 
+  /** Returns a JSON value if a conversion exists, handling null inputs properly */
+  def orNull[A](a: A)(implicit jser: Jsonize[A]): Json =
+    if (a.asInstanceOf[AnyRef] eq null) Null
+    else jser.jsonize(a)
+
   /** Returns an empty JSON value (in this case, a JSON null) */
   def apply(): Json = Null
 
@@ -212,6 +217,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
   /** Returns the JSON representation of a Long */
   def apply(l: Long): Json = Num(l)
+
+  /** Warns against putting `Float` into JSON without deciding what you want */
+  @deprecated("for Float arguments.  Use .toString.toDouble for a nice decimal representation or .toDouble if you do not need one.", "0.3.0")
+  def apply(f: Float): Json = Num(f.toDouble)
 
   /** Returns the JSON representation of a Double.  NaN and +-Infinty are mapped to JSON null. */
   def apply(d: Double): Json = Num(d)
@@ -234,6 +243,17 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
   def apply(keys: Array[String], values: Array[Json]): Jast = Obj(keys, values)
 
+
+  /** Int can fit into Double just fine, so we allow this without warning */
+  def ~(int: Int): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ int.toDouble
+
+  /** Warns against putting `Long` into JSON unguarded, as promotion to Long causes problems. */
+  @deprecated("for Long arguments.  Use .toDouble to indicate that precision should be lost from this value, or use Arr.All to store Longs without loss of precision.", "0.3.0")
+  def ~(long: Long): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ long.toDouble
+
+  /** Warns against putting `Float` into JSON unguarded, as promotion to Double causes problems. */
+  @deprecated("for Float arguments.  Use .toString.toDouble for a nice decimal representation or .toDouble if you do not need one.", "0.3.0")
+  def ~(flt: Float): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ flt.toDouble
 
   /** Build an array of doubles as a JSON array, starting with this value */
   def ~(dbl: Double): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ dbl
@@ -624,34 +644,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     * }}}
     */
   object Num extends FromJson[Num] {
-    /*
-    private[jsonal] def formatNum(precision: Int, value: Double): String = {
-      // Note--returns used to untangle deeply nested conditionals.
-      if (precision < 0) return value.toString
-      val fmt = formatTable(precision)
-      val s = fmt.format(value)
-      if (fmt.charAt(fmt.length-1) == 'f') {
-        if (s.charAt(s.length-1) != '0') return s
-        val i = s.indexOf('.')
-        if (i < 0) return s
-        var j = s.length - 2
-        while (j > i && s.charAt(j) == '0') j -= 1
-        if (j == i) j -= 1
-        s.substring(0,j+1)
-      }
-      else {
-        val i = s.lastIndexOf('e')
-        if (i <= 2 || s.charAt(i-1) != '0') return s
-        var j = i-2
-        while (j > 0 && s.charAt(j) == '0') j -= 1
-        if (s.charAt(j) != '.') j += 1
-        s.substring(0, j) + s.substring(i) 
-      }
-    }
-    */
 
     /** Return the JSON number corresponding to this Long */
     def apply(l: Long): Num = new Num(java.lang.Double.longBitsToDouble(l), null)
+
+    /** Warns against unguarded conversion of Float--may produce unpleasant decimal expansions. */
+    @deprecated("for Float arguments.  Use .toString.toDouble for a nice decimal representation or .toDouble if you do not need one.", "0.3.0")
+    def apply(f: Float): Json = apply(f.toDouble)
 
     /** Return the JSON number corresponding to this Double, or a JSON null if the Double is infinite or NaN */
     def apply(d: Double): Json =
@@ -989,6 +988,17 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     /** Creates an empty JSON array */
     def ~(me: Arr.type) = Dbl.empty
+
+    /** Int can fit into Double just fine, so we allow this without warning */
+    def ~(int: Int): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ int.toDouble
+
+    /** Warns against putting `Long` into JSON unguarded, as promotion to Long causes problems. */
+    @deprecated("for Long arguments.  Use .toDouble to indicate that precision should be lost from this value, or use Arr.All to store Longs without loss of precision.", "0.3.0")
+    def ~(long: Long): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ long.toDouble
+
+    /** Warns against putting `Float` into JSON unguarded, as promotion to Double causes problems. */
+    @deprecated("for Float arguments.  Use .toString.toDouble for a nice decimal representation or .toDouble if you do not need one.", "0.3.0")
+    def ~(flt: Float): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ flt.toDouble
 
     /** Starts building a double-valued JSON array, beginning with this double value */
     def ~(dbl: Double): Dbl.Build[Arr] = (new Dbl.Build[Arr]) ~ dbl
@@ -1407,6 +1417,17 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       /** Builds the empty JSON array that could have contained only numbers */
       def ~(me: Dbl.type) = empty
 
+      /** Int can fit into Double just fine, so we allow this without warning */
+      def ~(int: Int): Build[Dbl] = (new Build[Dbl]) ~ int.toDouble
+
+      /** Warns against putting `Long` into JSON unguarded, as promotion to Long causes problems. */
+      @deprecated("for Long arguments.  Use .toDouble to indicate that precision should be lost from this value, or use Arr.All to store Longs without loss of precision.", "0.3.0")
+      def ~(long: Long): Build[Dbl] = (new Build[Dbl]) ~ long.toDouble
+
+      /** Warns against putting `Float` into JSON unguarded, as promotion to Double causes problems. */
+      @deprecated("for Float arguments.  Use .toString.toDouble for a nice decimal representation or .toDouble if you do not need one.", "0.3.0")
+      def ~(flt: Float): Build[Dbl] = (new Build[Dbl]) ~ flt.toDouble
+
       /** Begin building a numeric JSON array, starting with this double */
       def ~(dbl: Double): Build[Dbl] = (new Build[Dbl]) ~ dbl
 
@@ -1448,6 +1469,17 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           */
         def ~(done: JsonBuildTerminator[T]): T =
           new Dbl(if (i==a.length) a else java.util.Arrays.copyOf(a, i))
+
+        /** Int can fit into Double just fine, so we allow this without warning */
+        def ~(int: Int): this.type = this ~ int.toDouble
+
+        /** Warns against putting `Long` into JSON unguarded, as promotion to Long causes problems. */
+        @deprecated("for Long arguments.  Use .toDouble to indicate that precision should be lost from this value, or use Arr.All to store Longs without loss of precision.", "0.3.0")
+        def ~(long: Long): this.type = this ~ long.toDouble
+
+        /** Warns against putting `Float` into JSON unguarded, as promotion to Double causes problems. */
+        @deprecated("for Float arguments.  Use .toString.toDouble for a nice decimal representation or .toDouble if you do not need one.", "0.3.0")
+        def ~(flt: Float): this.type = this ~ flt.toDouble
 
         /** Adds another Double to this numeric JSON array */
         def ~(dbl: Double): this.type = {
