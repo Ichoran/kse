@@ -86,8 +86,13 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   /** Appends a closing brace to the current line. */
   def rbrace: this.type = {
     nextIndent -= myIndent
-    current append " }"
-    if (current.length >= myMargin) tryWrap()
+    if (current.length >= myMargin - 2) tryWrap()
+    if (current.length == nextIndent) current append "}"
+    else if (current.length >= myMargin - 2) {
+      nl(nextIndent)
+      current append "}"
+    }
+    else current append " }"
     this
   }
 
@@ -101,8 +106,13 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   /** Appends a closing bracket to the current line. */
   def rbracket: this.type = {
     nextIndent -= myIndent
-    current append " ]"
-    if (current.length >= myMargin) tryWrap()
+    if (current.length >= myMargin - 2) tryWrap()
+    if (current.length == nextIndent) current append "]"
+    else if (current.length >= myMargin - 2) {
+      nl(nextIndent)
+      current append "]"
+    }
+    else current append " ]"
     this
   }
 
