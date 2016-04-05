@@ -35,6 +35,7 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   private[this] var lastIndent = 0
   private[this] var nextIndent = 0
   private[this] var wrapAt = new Array[Long](6)
+  private[this] var keyed: Boolean = false
   var wrapN = 0
 
   private[this] def ensureWrapSpace {
@@ -43,7 +44,7 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   }
 
   /** Clears the accumulated pretty representation. */
-  def clear: this.type = { historic.clear; current.setLength(0); lastIndent = 0; this }
+  def clear: this.type = { historic.clear; current.setLength(0); lastIndent = 0; nextIndent = 0; wrapN = 0; this }
 
   /** Contains the lines prior to the current line. */
   val historic = collection.mutable.ArrayBuffer.empty[String]
@@ -51,35 +52,23 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   /** Contains the current line being built. */
   val current = new java.lang.StringBuilder
 
-  /** Appends an opening brace to the current line. */
-  def lbrace: this.type = {
-    nextIndent += myIndent
-    current append "{ "
-    if (nextIndent > myIndent) {
-      val w = current.length | (nextIndent.toLong << 32)
-      println(f"$wrapN: $nextIndent ${current.length} $w%016x $current")
+  private[this] def markOpeningIfKeyed: this.type = {
+    if (keyed) {
       ensureWrapSpace
+      val w = current.length | 0x80000000L | ((nextIndent-1).toLong << 32)
+      while (wrapN > 0 && wrapAt(wrapN-1) > w) wrapN -= 1
       wrapAt(wrapN) = w
-      wrapN += 1     
+      wrapN += 1
+      keyed = false
     }
     this
   }
 
-  /** Appends a closing brace to the current line. */
-  def rbrace: this.type = {
-    nextIndent -= myIndent
-    if (wrapN > 0) wrapN -= 1
-    current.append(if (current.length <= lastIndent) "}" else " }")
-    this
-  }
-
-  /** Appends an opening bracket to the current line. */
-  def lbracket: this.type = {
-    nextIndent += myIndent
-    current append "[ "
-    if (nextIndent > myIndent) {
-      val w = current.length | (nextIndent.toLong << 32)
-      if (current.toString.trim != "[") println(f"$wrapN: $nextIndent $w%016x ${current.length} $current")
+  private[this] def markComma: this.type = {
+    val w = current.length | 0x80000000L | ((nextIndent-1).toLong << 32)
+    while (wrapN > 0 && wrapAt(wrapN-1) > w) wrapN -= 1
+    if (wrapN > 0 && ((wrapAt(wrapN-1) ^ w) & 0xFFFFFFFF80000000L) == 0) wrapAt(wrapN-1) = w
+    else {
       ensureWrapSpace
       wrapAt(wrapN) = w
       wrapN += 1
@@ -87,27 +76,64 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
     this
   }
 
+  /** Appends an opening brace to the current line. */
+  def lbrace: this.type = {
+    nextIndent += myIndent
+    current append "{ "
+    markOpeningIfKeyed
+  }
+
+  /** Appends a closing brace to the current line. */
+  def rbrace: this.type = {
+    nextIndent -= myIndent
+    current append " }"
+    if (current.length >= myMargin) tryWrap()
+    this
+  }
+
+  /** Appends an opening bracket to the current line. */
+  def lbracket: this.type = {
+    nextIndent += myIndent
+    current append "[ "
+    markOpeningIfKeyed
+  }
+
   /** Appends a closing bracket to the current line. */
   def rbracket: this.type = {
     nextIndent -= myIndent
-    if (wrapN > 0) wrapN -= 1
-    current.append(if (current.length <= lastIndent) "]" else " ]")
+    current append " ]"
+    if (current.length >= myMargin) tryWrap()
     this
   }
 
   /** Appends a comma to the current line. */
   def comma: this.type = {
-    if (current.length >= myMargin - 1 || nextIndent < lastIndent) {
+    keyed = false
+    if (current.length >= myMargin - 1) {
+      current append ", "
+      tryWrap()
+      if (nextIndent < lastIndent) {
+        nl(nextIndent)
+        wrapN = 0
+      }
+      else if (current.length > lastIndent) markComma
+    }
+    else if (nextIndent < lastIndent) {
       current append ","
       nl(nextIndent)
+      wrapN = 0
     }
-    else current append ", "
+    else {
+      current append ", "
+      markComma
+    }
     this
   }
 
   /** Appends a colon to the current line. */
   def colon: this.type = {
     current append ": "
+    keyed = true
     this
   }
 
@@ -130,25 +156,24 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
     this
   }
 
-  /** Creates a new line indented the specified number of characters.
-    *
-    * Note: this method does not obey the `indentation` parameter.  It is assumed that the argument will be selected with the correct indentation in mind.
-    */
-  def nl(indent: Int): this.type = {
-    if (wrapN > 0) {
+  protected def tryWrap(): this.type = {
+    if (wrapN == 0) nl(nextIndent)
+    else {
       val w = wrapAt(0)
-      val i = ((w >>> 32) & 0x7FFFFFFFL).toInt
+      val i = (((w >>> 31) + 1) >>> 1).toInt
       val n = (w & 0x7FFFFFFFL).toInt
       if (current.length > n) {
         val shift = i - n
         historic += current.substring(0, n)
         val blank =
-          if (i - lastIndent == myIndent) myOne
+          if (i - lastIndent <= 0) ""
+          else if (i - lastIndent == myIndent) myOne
           else { ensureSpaces(i - lastIndent); new String(spaces, 0, i - lastIndent) }
-        println(f"Switching because $i $n $w%016x ${current.length}")
-        println(current.toString)
-        current.replace(lastIndent, n, blank)
-        println(current.toString)
+        //println(f"Switching because $i $n $w%016x ${current.length}")
+        //println(current.toString)
+        if (blank.nonEmpty) current.replace(lastIndent, n, blank)
+        else current.delete(lastIndent, n)
+        //println(current.toString)
         lastIndent = i
         var j = 1
         while (j < wrapN) {
@@ -156,10 +181,17 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
           j += 1
         }
         wrapN -= 1
-        if (current.length >= myMargin) return nl(indent)
-        else return this
+        if (current.length >= myMargin) return tryWrap()
       }
     }
+    this
+  }
+
+  /** Creates a new line indented the specified number of characters.
+    *
+    * Note: this method does not obey the `indentation` parameter.  It is assumed that the argument will be selected with the correct indentation in mind.
+    */
+  def nl(indent: Int): this.type = {
     val in = math.max(0, indent)
     historic += current.toString
     if (lastIndent > 0) current.setLength(math.min(lastIndent, in))
@@ -200,9 +232,10 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
   def visit(text: String): this.type = { mySb setLength 0; Json.Str.addJsonString(mySb, text); slurp(mySb); this }
   def visit(num: Json.Num): this.type = { append(num.toString); this }
   def goIn: Boolean = if (wasEmpty) { wasEmpty = false; false } else true
-  def visit(jad: Json.Arr.Dbl): this.type = { 
+  def visit(jad: Json.Arr.Dbl): this.type = {
     if (jad.size > 0) lbracket
-    else { append("[]"); wasEmpty = true; this }
+    else { append("[]"); wasEmpty = true }
+    this
   }
   def visitDblIndex(index: Int, value: Double): this.type = {
     if (index > 0) comma
@@ -210,15 +243,17 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
     this
   }
   def outOfDblArr: this.type = rbracket
-  def visit(jaa: Json.Arr.All): this.type = { 
+  def visit(jaa: Json.Arr.All): this.type = {
     if (jaa.size > 0) lbracket
-    else { append("[]"); wasEmpty = true; this }
+    else { append("[]"); wasEmpty = true }
+    this
   }
   def nextIndex(index: Int): this.type = { if (index > 0) comma; this }
   def outOfAllArr: this.type = rbracket
   def visit(obj: Json.Obj): this.type = { 
     if (obj.size > 0) lbrace
-    else { append("{}"); wasEmpty = true; this }
+    else { append("{}"); wasEmpty = true }
+    this
   }
   def nextKey(index: Int, key: String): this.type = {
     if (index > 0) comma
