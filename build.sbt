@@ -41,7 +41,7 @@ lazy val scalaReflect = Def.setting { "org.scala-lang" % "scala-reflect" % scala
 lazy val jUnit = "com.novocode" % "junit-interface" % "0.9"
 
 lazy val root = (project in file(".")).
-  dependsOn(macros).
+  dependsOn(macros % "compile-internal, test-internal").
   settings(commonSettings: _*).
   settings(
     name := "Kse",
