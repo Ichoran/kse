@@ -1682,6 +1682,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Returns a JSON value if the corresponding key exists, or `null` otherwise */
     def getOrNull(key: String): Json
 
+    /** Folds an initial value through each key-value pair in this JSON object */
+    def fold[A](zero: A)(f: (A, String, Json) => A): A
+
     /** Applies a function to each key-value pair in this JSON object */
     def foreach[U](f: (String, Json) => U): Unit
 
@@ -1795,6 +1798,18 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
     }
     def get(key: String): Option[Json] = Option(getOrNull(key))
+    def fold[A](zero: A)(f: (A, String, Json) => A): A = {
+      if (myMap eq null) myMap.foldLeft(zero)((a,sj) => f(a, sj._1, sj._2))
+      else {
+        var a = zero
+        var i = 0
+        while (i < underlying.length - 1) {
+          a = f(a, underlying(i).asInstanceOf[String], underlying(i+1).asInstanceOf[Json])
+          i += 1
+        }
+        a
+      }
+    }
     def foreach[U](f: (String, Json) => U) {
       if (myMap eq null) {
         var i = 0

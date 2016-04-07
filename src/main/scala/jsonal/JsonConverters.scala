@@ -105,6 +105,22 @@ object JsonConverters extends PriorityTwoJsonConverters {
     }
   }
 
+  implicit def mapFromJson[A, M[String, _] <: collection.Map[String, _]](implicit fj: FromJson[A], cbf: collection.generic.CanBuildFrom[Nothing, (String, A), M[String, A]]) = new FromJson[M[String, A]] {
+    def parse(js: Json): Either[JastError, M[String, A]] = js match {
+      case jo: Json.Obj =>
+        val b = cbf()
+        jo.foreach{ (k,v) =>
+          val a = fj.parse(v) match {
+            case Right(x) => x
+            case Left(e) => return Left(JastError("Error parsing element", because = e))
+          }
+          b += ((k, a))
+        }
+        Right(b.result)
+      case _ => Left(JastError("Not a JSON object"))
+    }
+  }
+
   private[this] val myRightNone: Either[Nothing, Option[Nothing]] = Right(None)
 
   implicit def optionFromJson[A](implicit fj: FromJson[A]) = new FromJson[Option[A]] {
