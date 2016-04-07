@@ -10,6 +10,8 @@ import scala.util.control.NonFatal
 trait PriorityThreeJsonConverters {
   implicit def implicitJsonizationPassesThroughOption[A](implicit jser: Jsonize[A]) = 
     new Jsonize[Option[A]] { def jsonize(o: Option[A]) = o match { case None => Json.Null; case Some(a) => jser.jsonize(a) }}
+  implicit def implicitJsonizationPassesThroughSeq[A](implicit jser: Jsonize[A]) =
+    new Jsonize[collection.Seq[A]] { def jsonize(sa: Seq[A]) = Json.Arr ~~ sa ~~ Json.Arr }
   implicit def implicitJsonizationPassesThroughArray[A](implicit jser: Jsonize[A]) =
     new Jsonize[Array[A]] { def jsonize(a: Array[A]) = Json.Arr ~~ a ~~ Json.Arr } 
   implicit def implicitJsonizationPassesThroughMap[A, M[String, A] <: collection.Map[String, A]](implicit jser: Jsonize[A]) =
@@ -35,8 +37,20 @@ object JsonConverters extends PriorityTwoJsonConverters {
   implicit val floatIsImplicitlyJsonized = new Jsonize[Float] { def jsonize(f: Float) = Json.Num(f.toDouble) }
   implicit val doubleIsImplicitlyJsonized = new Jsonize[Double] { def jsonize(d: Double) = Json.Num(d) }
   implicit val stringIsImplicitlyJsonized = new Jsonize[String] { def jsonize(s: String) = Json.Str(s) }
+  implicit val durationIsImplicitlyJsonized = new Jsonize[java.time.Duration] {
+    def jsonize(d: java.time.Duration) = Json.Str(d.toString)
+  }
   implicit val instantIsImplicitlyJsonized = new Jsonize[java.time.Instant] { 
     def jsonize(i: java.time.Instant) = Json.Str(i.toString)
+  }
+  implicit val localDateTimeIsImplicitlyJsonized = new Jsonize[java.time.LocalDateTime] {
+    def jsonize(ldt: java.time.LocalDateTime) = Json.Str(ldt.toString)
+  }
+  implicit val offsetDateTimeIsImplicitlyJsonzed = new Jsonize[java.time.OffsetDateTime] {
+    def jsonize(odt: java.time.OffsetDateTime) = Json.Str(odt.toString)
+  }
+  implicit val zonedDateTimeIsImplicitlyJsonized = new Jsonize[java.time.ZonedDateTime] {
+    def jsonize(zdt: java.time.ZonedDateTime) = Json.Str(zdt.toString)
   }
   private val genericAsJsonIsJsonized: Jsonize[AsJson] = new Jsonize[AsJson] { def jsonize(aj: AsJson) = aj.json }
   implicit def asJsonIsImplicitlyJsonized[A <: AsJson] = genericAsJsonIsJsonized.asInstanceOf[Jsonize[A]]
@@ -91,7 +105,22 @@ object JsonConverters extends PriorityTwoJsonConverters {
     }
   }
 
+  private val patternForDuration = """PT(?:\d+H)?(?:\d+M)?(?:\d+(?:.\d+)?S)?""".r.pattern
   private val patternForInstant = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$""".r.pattern
+  private val patternForLocalDateTime = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?""".r.pattern
+  private val patternForOffsetDateTime = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})""".r.pattern
+  private val patternForZonedDateTime = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})(?:\[[^\]]+])?""".r.pattern
+
+  implicit val durationFromJson: FromJson[java.time.Duration] = new FromJson[java.time.Duration] {
+    def parse(js: Json): Either[JastError, java.time.Duration] = js match {
+      case Json.Str(text) =>
+        if (patternForDuration.matcher(text).matches)
+          try { return Right(java.time.Duration.parse(text)) }
+          catch { case t if NonFatal(t) => }
+        Left(JastError("Not properly formatted as an Duration"))
+      case _ => Left(JastError("Not an Duration because not a string"))
+    }
+  }
 
   implicit val instantFromJson: FromJson[java.time.Instant] = new FromJson[java.time.Instant] {
     def parse(js: Json): Either[JastError, java.time.Instant] = js match {
@@ -101,6 +130,39 @@ object JsonConverters extends PriorityTwoJsonConverters {
           catch { case t if NonFatal(t) => }
         Left(JastError("Not properly formatted as an Instant"))
       case _ => Left(JastError("Not an Instant because not a string"))
+    }
+  }
+
+  implicit val localDateTimeFromJson: FromJson[java.time.LocalDateTime] = new FromJson[java.time.LocalDateTime] {
+    def parse(js: Json): Either[JastError, java.time.LocalDateTime] = js match {
+      case Json.Str(text) =>
+        if (patternForLocalDateTime.matcher(text).matches)
+          try { return Right(java.time.LocalDateTime.parse(text)) }
+          catch { case t if NonFatal(t) => }
+        Left(JastError("Not properly formatted as a LocalDateTime"))
+      case _ => Left(JastError("Not a LocalDateTime because not a string"))
+    }
+  }
+
+  implicit val offsetDateTimeFromJson: FromJson[java.time.OffsetDateTime] = new FromJson[java.time.OffsetDateTime] {
+    def parse(js: Json): Either[JastError, java.time.OffsetDateTime] = js match {
+      case Json.Str(text) =>
+        if (patternForOffsetDateTime.matcher(text).matches)
+          try { return Right(java.time.OffsetDateTime.parse(text)) }
+          catch { case t if NonFatal(t) => }
+        Left(JastError("Not properly formatted as a OffsetDateTime"))
+      case _ => Left(JastError("Not a OffsetDateTime because not a string"))
+    }
+  }
+
+  implicit val zonedDateTimeFromJson: FromJson[java.time.ZonedDateTime] = new FromJson[java.time.ZonedDateTime] {
+    def parse(js: Json): Either[JastError, java.time.ZonedDateTime] = js match {
+      case Json.Str(text) =>
+        if (patternForZonedDateTime.matcher(text).matches)
+          try { return Right(java.time.ZonedDateTime.parse(text)) }
+          catch { case t if NonFatal(t) => }
+        Left(JastError("Not properly formatted as a ZonedDateTime"))
+      case _ => Left(JastError("Not a ZonedDateTime because not a string"))
     }
   }
 }

@@ -206,6 +206,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     if (a.asInstanceOf[AnyRef] eq null) Null
     else jser.jsonize(a)
 
+  /** Applies automatic conversions to create a JSON value via a typeclass */
+  def apply[A](a: A)(implicit jser: Jsonize[A]): Json = jser.jsonize(a)
+
   /** Returns an empty JSON value (in this case, a JSON null) */
   def apply(): Json = Null
 

@@ -37,17 +37,18 @@ lazy val commonSettings = Seq(
 )
 
 lazy val scalaReflect = Def.setting { "org.scala-lang" % "scala-reflect" % scalaVersion.value }
+lazy val jUnit = "com.novocode" % "junit-interface" % "0.9"
 
 lazy val root = (project in file(".")).
-  dependsOn(macros).
+  dependsOn(macros % "compile-internal").
   settings(commonSettings: _*).
   settings(
     name := "Kse",
-    version := "0.3.0",
+    version := "0.4-SNAPSHOT",
     scalaVersion := "2.11.7",
     mappings in (Compile, packageBin) ++= mappings.in(macros, Compile, packageBin).value,
     mappings in (Compile, packageSrc) ++= mappings.in(macros, Compile, packageSrc).value,
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test"
+    libraryDependencies += jUnit % Test
   )
 
 lazy val macros = (project in file("macros")).
