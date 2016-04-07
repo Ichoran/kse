@@ -240,10 +240,23 @@ object Test_Jsonal extends Test_Kse {
     Json ~ "fish" ~ 2.7 ~ Json =?= Json.Arr.All ~ "fish" ~ 2.7 ~ Json.Arr.All &&
     Json ~ ("fish", 2.7) ~ Json =?= Json.Obj(Map("fish" -> Json(2.7))) &&
     Json ~ ("fish", 2.0) ~ Json =?= Json.Obj ~ ("fish", 2.0) ~ Json.Obj &&
+    Json ~? ("fish", Json()) ~ Json =?= Json.Obj.empty &&
+    Json ~? ("fish", "") ~ Json =?= Json.Obj.empty &&
+    Json ~? ("fish", Option[String](null)) ~ Json =?= Json.Obj.empty &&
+    Json ~? ("fish", Json(Vector.empty[String])) ~ Json =?= Json.Obj.empty &&
+    Json ~? ("fish", Json ~? ("wish", Json(Double.NaN)) ~ Json) ~ Json =?= Json.Obj.empty &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
+    { val dt = java.time.Duration.parse("PT5M2.7S"); Json ~ dt ~ Json =?= Json ~ dt.toString ~ Json } &&
+    { val dt = java.time.Duration.parse("PT5M2.7S"); (Json ~ dt ~ Json).to[Array[java.time.Duration]].right.map(_.headOption) =?= Right(Option(dt)) } &&
     { val now = java.time.Instant.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
-    { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].right.map(_.headOption) =?= Right(Option(now)) }
+    { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].right.map(_.headOption) =?= Right(Option(now)) } &&
+    { val now = java.time.LocalDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
+    { val now = java.time.LocalDateTime.now; (Json ~ now ~ Json).to[Array[java.time.LocalDateTime]].right.map(_.headOption) =?= Right(Option(now)) } &&
+    { val now = java.time.OffsetDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
+    { val now = java.time.OffsetDateTime.now; (Json ~ now ~ Json).to[Array[java.time.OffsetDateTime]].right.map(_.headOption) =?= Right(Option(now)) } &&
+    { val now = java.time.ZonedDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
+    { val now = java.time.ZonedDateTime.now; (Json ~ now ~ Json).to[Array[java.time.ZonedDateTime]].right.map(_.headOption) =?= Right(Option(now)) }
   }
 
   def test_specifics_String: Boolean = {

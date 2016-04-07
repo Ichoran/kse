@@ -10,8 +10,8 @@ import scala.util.control.NonFatal
 trait PriorityThreeJsonConverters {
   implicit def implicitJsonizationPassesThroughOption[A](implicit jser: Jsonize[A]) = 
     new Jsonize[Option[A]] { def jsonize(o: Option[A]) = o match { case None => Json.Null; case Some(a) => jser.jsonize(a) }}
-  implicit def implicitJsonizationPassesThroughSeq[A](implicit jser: Jsonize[A]) =
-    new Jsonize[collection.Seq[A]] { def jsonize(sa: Seq[A]) = Json.Arr ~~ sa ~~ Json.Arr }
+  implicit def implicitJsonizationPassesThroughSeq[A, CC[A] <: collection.Seq[A]](implicit jser: Jsonize[A]) =
+    new Jsonize[CC[A]] { def jsonize(cca: CC[A]) = Json.Arr ~~ cca ~~ Json.Arr }
   implicit def implicitJsonizationPassesThroughArray[A](implicit jser: Jsonize[A]) =
     new Jsonize[Array[A]] { def jsonize(a: Array[A]) = Json.Arr ~~ a ~~ Json.Arr } 
   implicit def implicitJsonizationPassesThroughMap[A, M[String, A] <: collection.Map[String, A]](implicit jser: Jsonize[A]) =

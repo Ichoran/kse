@@ -65,11 +65,20 @@ sealed trait Jast {
     */
   def double: Double
 
-  /** Boolean value corresponding to this JSON object if it is a boolean JSON; `None` otherwise. */
+  /** Boolean value corresponding to this JSON value if it is a boolean JSON; `None` otherwise. */
   def bool: Option[Boolean]
 
-  /** String corresponding to this JSON object if it is a JSON string, `None` otherwise. */
+  /** Boolean value corresponding to this JSON value if it has a value, default otherwise */
+  def boolOr(default: Boolean): Boolean
+
+  /** String corresponding to this JSON value if it is a JSON string, `None` otherwise. */
   def string: Option[String]
+
+  /** String corresponding to this JSON value if it is a JSON string, default otherwise. */
+  def stringOr(default: => String): String
+
+  /** String corresponding to this JSON value if it is a JSON string, null otherwise. */
+  def stringOrNull: String
 
   /** Index into JSON array, if this is a JSON array.  Returns `JastError` otherwise. */
   def apply(i: Int): Jast
@@ -79,6 +88,9 @@ sealed trait Jast {
 
   /** Parse into a class given an implicit (or explicit) converter */
   def to[A](implicit fj: FromJson[A]): Either[JastError, A]
+
+  /** Converts errors into JSON null values */
+  def nullError: Json
 
   /** Lift-style alias for array lookup. */
   @inline final def \(i: Int): Jast = this apply i
@@ -98,10 +110,14 @@ final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.
   def isNull = false
   def double = Json.not_a_normal_NaN
   def bool = None
+  def boolOr(default: Boolean) = default
   def string = None
+  def stringOr(default: => String) = default
+  def stringOrNull: String = null
   def apply(i: Int) = this
   def apply(key: String) = this
   def to[A](implicit fj: FromJson[A]): Either[JastError, A] = Left(this)
+  def nullError: Json = Json.Null
 }
 
 /** This marker trait indicates that a JSON item being built should use type `T` as a stop token. */
@@ -122,10 +138,14 @@ sealed trait Json extends Jast with AsJson {
   def isNull = false
   def double = Json.not_a_normal_NaN
   def bool: Option[Boolean] = None
+  def boolOr(default: Boolean) = default
   def string: Option[String] = None
+  def stringOr(default: => String) = default
+  def stringOrNull: String = null
   def apply(i: Int): Jast = JastError("Indexing into "+myName)
   def apply(key: String): Jast = JastError("Map looking on "+myName)
   def to[A](implicit fj: FromJson[A]): Either[JastError, A] = fj parse this
+  def nullError: Json = this
 
   def json: Json = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
@@ -320,6 +340,24 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   /** Build a JSON object starting with this string key and an object that can be converted to JSON */
   def ~[A](key: String, a: A)(implicit jser: Jsonize[A]) = (new Obj.Build[Json]) ~ (Str(key), jser.jsonize(a))
 
+  /** Adds to this JSON object a JSON string key and a JSON abstract syntax tree element but only if the element is not null, NaN, empty, or an error */
+  def ~?(key: Str, ja: Jast) = (new Obj.Build[Json]) ~? (key, ja)
+
+  /** Adds to this JSON object a string key and a JSON abstract syntax tree element but only if the element is not null, NaN, empty, or an error */
+  def ~?(key: String, ja: Jast) = (new Obj.Build[Json]) ~? (key, ja)
+
+  /** Adds to this JSON object a JSON string key and string value but only if the string value is nonempty and non-null */
+  def ~?(key: Str, value: String) = (new Obj.Build[Json]) ~? (key, value)
+
+  /** Adds to this JSON object a string key and string value but only if the string value is nonempty and non-null */
+  def ~?(key: String, value: String) = (new Obj.Build[Json]) ~? (key, value)
+
+  /** Optionally adds to this JSON object a JSON string key and value of an object convertible to JSON */
+  def ~?[A: Jsonize](key: Str, oa: Option[A]) = (new Obj.Build[Json]) ~? (key, oa)
+
+  /** Optionally adds to this JSON object a string key and value of an object convertible to JSON */
+  def ~?[A: Jsonize](key: String, oa: Option[A]) = (new Obj.Build[Json]) ~? (key, oa)
+
   /** Build a JSON object starting with the string / JSON value pairs in this collection */
   def ~~(coll: collection.TraversableOnce[(String,Json)]) = (new Obj.Build[Json]) ~~ coll
 
@@ -427,6 +465,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     case object True extends Bool { 
       def value = true
       override val bool = Some(true)
+      override def boolOr(default: Boolean) = true
       override def equals(a: Any) = a.asInstanceOf[AnyRef] eq this
       override def jsonString(sb: java.lang.StringBuilder) { sb append "true" }
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
@@ -438,6 +477,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     case object False extends Bool {
       def value = false
       override val bool = Some(false)
+      override def boolOr(default: Boolean) = false
       override def equals(a: Any) = a.asInstanceOf[AnyRef] eq this
       override def jsonString(sb: java.lang.StringBuilder) { sb append "false" }
       override def jsonBytes(bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer =
@@ -471,6 +511,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def simple = true
 
     override def string = Some(text)
+
+    override def stringOr(default: => String) = text
+
+    override def stringOrNull = text
 
     override def hashCode = text.hashCode
 
@@ -573,7 +617,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def simple = true
 
     /** Returns `true` if this number is represented by a finite `Double` value */
-    def isDouble: Boolean = !java.lang.Double.isNaN(content) && !java.lang.Double.isInfinite(content)
+    def isDouble: Boolean = (text eq null) || (!java.lang.Double.isNaN(content) && !java.lang.Double.isInfinite(content))
 
     /** Returns `true` if this number has stored textual representation */
     def explicitTextForm: Boolean = (text ne null) && !text.isEmpty
@@ -966,6 +1010,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Visits each element in this array. */
     def foreach[U](f: Json => U): Unit
 
+    /** Selects some of the elements in this array. */
+    def filter(p: Json => Boolean): Arr
+
     /** Produces an iterator over this array. */
     def iterator: Iterator[Json]
   }
@@ -1055,6 +1102,17 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       def size = values.length
       override def apply(i: Int) = if (i < 0 || i >= values.length) JastError("bad index "+i) else values(i)
       def foreach[U](f: Json => U) { var i = 0; while (i < values.length) { f(values(i)); i += 1 } }
+      def filter(p: Json => Boolean): All = {
+        var i = 0
+        while (i < values.length && p(values(i))) i += 1
+        if (i == values.length) this
+        else {
+          val b = (if (i > 0) All ~~ (values, 0, i) else All.builder)
+          i += 1
+          while (i < values.length) { if (p(values(i))) b ~ values(i); i += 1 }
+          b.result
+        }
+      }
       def iterator: Iterator[Json] = new scala.collection.AbstractIterator[Json] {
         private[this] var i = 0
         def hasNext = i < values.length
@@ -1157,6 +1215,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
       /** Begin building a JSON array, starting with an array of JSON values */
       def ~~(jses: Array[Json]) = (new Build[All]) ~~ jses
+
+      /** Starts building a JSON array, beginning with a segment of an array of JSON values */
+      def ~~(jses: Array[Json], i0: Int, iN: Int) = (new Build[Arr]) ~~ (jses, i0, iN)
 
       /** Begin building a JSON array, starting with an array of objects that can be converted to JSON */
       def ~~[A: Jsonize](as: Array[A]) = (new Build[All]) ~~ as
@@ -1285,6 +1346,28 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         else Num(doubles(i))
       def foreach[U](f: Json => U) { var i = 0; while (i < doubles.length) { f(Num(doubles(i))); i += 1 } }
       def foreach[A](f: Double => Unit)(implicit ev: A =:= Double) { var i = 0; while (i < doubles.length) { f(doubles(i)); i += 1 } }
+      def filter(p: Json => Boolean): Dbl = {
+        var i = 0
+        while (i < doubles.length && p(Num(doubles(i)))) i += 1
+        if (i == doubles.length) this
+        else {
+          val b = (if (i > 0) Dbl ~~ (doubles, 0, i) else Dbl.builder)
+          i += 1
+          while (i < doubles.length) { if (p(Num(doubles(i)))) b ~ doubles(i); i += 1 }
+          b.result
+        }
+      }
+      def filter[A](p: Double => Boolean)(implicit ev: A =:= Double): Dbl = {
+        var i = 0
+        while (i < doubles.length && p(doubles(i))) i += 1
+        if (i == doubles.length) this
+        else {
+          val b = (if (i > 0) Dbl ~~ (doubles, 0, i) else Dbl.builder)
+          i += 1
+          while (i < doubles.length) { if (p(doubles(i))) b ~ doubles(i); i += 1 }
+          b.result
+        }
+      }
       def iterator: Iterator[Json] = new scala.collection.AbstractIterator[Json] {
         private[this] var i = 0
         def hasNext = i < doubles.length
@@ -1599,6 +1682,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Applies a function to each key-value pair in this JSON object */
     def foreach[U](f: (String, Json) => U): Unit
 
+    /** Selects some of the key-value pairs in this JSON object to make a new one */
+    def filter(p: (String, Json) => Boolean): Obj
+
+    /** Counts keys for validation purposes.  Optionally takes a set of keys to consider; otherwise will count all of them. */
+    def countKeys(keyset: Option[collection.Set[String]] = None): collection.Map[String, Int]
+
     /** Gets a map representation of this JSON object.  Duplicate keys will be discarded.  Use `hasDuplicateKeys` to detect discard of keys.
       *
       * Note: this map may be a mutable map used for lookups for this `Json.Obj`; actually modifying this map is
@@ -1712,6 +1801,42 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         }
       }
       else myMap.foreach{ case (k,v) => f(k,v) }
+    }
+    def filter(p: (String, Json) => Boolean): Obj = {
+      if (myMap ne null) new AtomicObj(null, myMap.filter{ case (k,v) => p(k,v) })
+      else {
+        var i = 0
+        while (i < underlying.length - 1 && p(underlying(i).asInstanceOf[String], underlying(i+1).asInstanceOf[Json])) i += 2
+        if (i >= underlying.length) this
+        else {
+          val b = Obj.builder
+          b.appendFrom(underlying, 0, i >> 1)
+          i += 2
+          while (i < underlying.length - 1) {
+            val k = underlying(i).asInstanceOf[String]
+            val v = underlying(i+1).asInstanceOf[Json]
+            b ~ (k,v)
+            i += 2
+          }
+          b.result
+        }
+      }
+    }
+    def countKeys(keyset: Option[collection.Set[String]]): collection.Map[String, Int] = keyset match {
+      case None =>
+        if (myMap ne null) myMap.map{ case (k,v) => k -> 1 }
+        else {
+          val arm = new scala.collection.mutable.AnyRefMap[String, Int]
+          foreach((k, _) => arm(k) = arm.getOrNull(k) + 1)
+          arm
+        }
+      case Some(ks) =>
+        if (myMap ne null) myMap.collect{ case (k, v) if ks(k) => k -> 1 }
+        else {
+          val arm = new scala.collection.mutable.AnyRefMap[String, Int]
+          foreach((k, _) => if (ks(k)) arm(k) = arm.getOrNull(k) + 1)
+          arm
+        }
     }
     def asMap: collection.Map[String, Json] = 
       if (myMap ne null) myMap
@@ -2037,6 +2162,24 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Begins building a JSON object starting with the given string key and an object that can be converted to a JSON value */
     def ~[A](key: String, a: A)(implicit jser: Jsonize[A]) = (new Build[Obj]) ~ (key, jser.jsonize(a))
 
+    /** Adds to this JSON object a JSON string key and a JSON abstract syntax tree element but only if the element is not null, NaN, empty, or an error */
+    def ~?(key: Str, ja: Jast) = (new Build[Obj]) ~? (key, ja)
+
+    /** Adds to this JSON object a string key and a JSON abstract syntax tree element but only if the element is not null, NaN, empty, or an error */
+    def ~?(key: String, ja: Jast) = (new Build[Obj]) ~? (key, ja)
+
+    /** Adds to this JSON object a JSON string key and string value but only if the string value is nonempty and non-null */
+    def ~?(key: Str, value: String) = (new Build[Obj]) ~? (key, value)
+
+    /** Adds to this JSON object a string key and string value but only if the string value is nonempty and non-null */
+    def ~?(key: String, value: String) = (new Build[Obj]) ~? (key, value)
+
+    /** Optionally adds to this JSON object a JSON string key and value of an object convertible to JSON */
+    def ~?[A: Jsonize](key: Str, oa: Option[A]) = (new Build[Obj]) ~? (key, oa)
+
+    /** Optionally adds to this JSON object a string key and value of an object convertible to JSON */
+    def ~?[A: Jsonize](key: String, oa: Option[A]) = (new Build[Obj]) ~? (key, oa)
+
     /** Creates the empty JSON object. */
     def ~~(done: Obj.type) = empty
 
@@ -2072,6 +2215,26 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       private[this] def append(key: Str, js: Json): this.type = append(key.text, js)
 
+      private[this] def isNonEmptyJson(ja: Jast) = ja match {
+        case _: Json.Bool => true 
+        case s: Json.Str => !s.text.isEmpty
+        case n: Json.Num => n.isDouble || n.explicitTextForm
+        case a: Json.Arr => a.size > 0
+        case o: Json.Obj => o.size > 0
+        case _ => false
+      }
+
+      private[jsonal] def appendFrom(that: Array[AnyRef], i0: Int, n: Int) = {
+        val m = math.max(0, 2*math.min((that.length - i0) >> 1, n))
+        if (i >= a.length - m) {
+          var k = a.length
+          while (i >= k - m && k < 0x7FFFFFFE) k = ((k << 1) | k) & 0x7FFFFFFE
+          a = java.util.Arrays.copyOf(a, k)
+          System.arraycopy(that, i0, a, i, 2*m)
+          i += 2*m
+        }
+      }
+
       /** Finish building this JSON object and return it.  See also `~` with a `JsonBuildTerminator`. */
       def result(): Obj =
         new AtomicObj(if (i==a.length) a else java.util.Arrays.copyOf(a,i), null)
@@ -2100,6 +2263,23 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       /** Adds to this JSON object a string key and an object convertible to JSON */
       def ~[A](key: String, a: A)(implicit jser: Jsonize[A]): this.type = this ~ (key, jser.jsonize(a))
 
+      /** Adds to this JSON object a JSON string key and a JSON abstract syntax tree element but only if the element is not null, NaN, empty, or an error */
+      def ~?(key: Str, ja: Jast): this.type = if (isNonEmptyJson(ja)) this ~ (key, ja.asInstanceOf[Json]) else this
+
+      /** Adds to this JSON object a string key and a JSON abstract syntax tree element but only if the element is not null, NaN, empty, or an error */
+      def ~?(key: String, ja: Jast): this.type = if (isNonEmptyJson(ja)) this ~ (key, ja.asInstanceOf[Json]) else this
+
+      /** Adds to this JSON object a JSON string key and string value but only if the string value is nonempty and non-null */
+      def ~?(key: Str, value: String): this.type = if ((value ne null) && !value.isEmpty) this ~ (key, Str(value)) else this
+
+      /** Adds to this JSON object a string key and string value but only if the string value is nonempty and non-null */
+      def ~?(key: String, value: String): this.type = if ((value ne null) && !value.isEmpty) this ~ (key, Str(value)) else this
+
+      /** Optionally adds to this JSON object a JSON string key and value of an object convertible to JSON */
+      def ~?[A](key: Str, oa: Option[A])(implicit jser: Jsonize[A]): this.type = if (oa.isDefined) this ~ (key, jser.jsonize(oa.get)) else this
+
+      /** Optionally adds to this JSON object a string key and value of an object convertible to JSON */
+      def ~?[A](key: String, oa: Option[A])(implicit jser: Jsonize[A]): this.type = if (oa.isDefined) this ~ (key, jser.jsonize(oa.get)) else this
 
       /** Finish building this JSON object and return it.  Note that the terminator is typically the same
         * object used to begin building.
