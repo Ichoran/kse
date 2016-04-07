@@ -14,7 +14,7 @@ It's also supposed to be pretty easy to use.  Basic syntax looks like this:
 ```scala
 import kse.jsonal._
 val jp = Jast.parse("""[true, {"fish": ["herring", "cod"]}]""")
-jp(1)("fish")(0).string   // cod
+jp(1)("fish")(0).string   // Some(cod)
 
 import JsonConverters._
 val jq = Json ~ true ~

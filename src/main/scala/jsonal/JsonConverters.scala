@@ -105,6 +105,28 @@ object JsonConverters extends PriorityTwoJsonConverters {
     }
   }
 
+  private[this] val myRightNone: Either[Nothing, Option[Nothing]] = Right(None)
+
+  implicit def optionFromJson[A](implicit fj: FromJson[A]) = new FromJson[Option[A]] {
+    def parse(js: Json): Either[JastError, Option[A]] = js match {
+      case jn: Json.Null => myRightNone.asInstanceOf[Either[JastError, Option[A]]]
+      case _ => fj.parse(js) match {
+        case Right(r) => Right(Some(r))
+        case l: Left[_, _] => l.asInstanceOf[Either[JastError, Option[A]]]
+      }
+    }
+  }
+
+  implicit def eitherFromJson[L, R](implicit fjl: FromJson[L], fjr: FromJson[R]) = new FromJson[Either[L, R]] {
+    def parse(js: Json): Either[JastError, Either[L, R]] = fjr.parse(js) match {
+      case r: Right[_, _] => Right(r).asInstanceOf[Either[JastError, Either[L, R]]]
+      case _ => fjl.parse(js) match {
+        case Right(l) => Right(Left(l))
+        case e: Left[_, _] => e.asInstanceOf[Either[JastError, Either[L, R]]]
+      }
+    }
+  }
+
   private val patternForDuration = """PT(?:\d+H)?(?:\d+M)?(?:\d+(?:.\d+)?S)?""".r.pattern
   private val patternForInstant = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$""".r.pattern
   private val patternForLocalDateTime = """-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?""".r.pattern
