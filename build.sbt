@@ -32,6 +32,7 @@ pomExtra := (
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.11.7",
+  version := "0.4-SNAPSHOT",
   scalacOptions += "-feature",
   scalacOptions += "-deprecation"
 )
@@ -40,12 +41,10 @@ lazy val scalaReflect = Def.setting { "org.scala-lang" % "scala-reflect" % scala
 lazy val jUnit = "com.novocode" % "junit-interface" % "0.9"
 
 lazy val root = (project in file(".")).
-  dependsOn(macros % "compile-internal").
+  dependsOn(macros).
   settings(commonSettings: _*).
   settings(
     name := "Kse",
-    version := "0.4-SNAPSHOT",
-    scalaVersion := "2.11.7",
     mappings in (Compile, packageBin) ++= mappings.in(macros, Compile, packageBin).value,
     mappings in (Compile, packageSrc) ++= mappings.in(macros, Compile, packageSrc).value,
     libraryDependencies += jUnit % Test
