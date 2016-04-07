@@ -245,6 +245,7 @@ object Test_Jsonal extends Test_Kse {
     Json ~? ("fish", Option[String](null)) ~ Json =?= Json.Obj.empty &&
     Json ~? ("fish", Json(Vector.empty[String])) ~ Json =?= Json.Obj.empty &&
     Json ~? ("fish", Json ~? ("wish", Json(Double.NaN)) ~ Json) ~ Json =?= Json.Obj.empty &&
+    Json ~~ (Json.Obj ~ ("fish", "herring") ~ Json.Obj) ~ Json =?= Json ~ ("fish", "herring") ~ Json &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
     { val dt = java.time.Duration.parse("PT5M2.7S"); Json ~ dt ~ Json =?= Json ~ dt.toString ~ Json } &&

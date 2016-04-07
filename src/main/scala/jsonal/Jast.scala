@@ -370,6 +370,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   /** Build a JSON object starting with the JSON string / JSON-convertible-object pairs in this collection */
   def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= Str) = (new Obj.Build[Json]) ~~ coll
 
+  /** Begins building a JSON object starting with an existing JSON object. */
+  def ~~(jo: Obj) = (new Obj.Build[Json]) ~~ jo
+
 
   /** Parse this JSON value as itself.
     *
@@ -2201,6 +2204,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       */
     def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= Str) = (new Build[Obj]) ~~ coll
 
+    /** Begins building a JSON object starting with an existing JSON object. */
+    def ~~(o: Obj) = (new Build[Obj]) ~~ o
+
 
     /** A builder for JSON objects. */
     class Build[T >: Obj] {
@@ -2224,7 +2230,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         case _ => false
       }
 
-      private[jsonal] def appendFrom(that: Array[AnyRef], i0: Int, n: Int) = {
+      private[jsonal] def appendFrom(that: Array[AnyRef], i0: Int, n: Int): this.type = {
         val m = math.max(0, 2*math.min((that.length - i0) >> 1, n))
         if (i >= a.length - m) {
           var k = a.length
@@ -2233,6 +2239,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           System.arraycopy(that, i0, a, i, 2*m)
           i += 2*m
         }
+        this
       }
 
       /** Finish building this JSON object and return it.  See also `~` with a `JsonBuildTerminator`. */
@@ -2308,6 +2315,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       def ~~[A, S](coll: collection.TraversableOnce[(S,A)])(implicit jser: Jsonize[A], ev: S =:= Str): this.type = {
         coll.foreach{ case (k,a) => this ~ (ev(k),a) }
         this
+      }
+
+      /** Adds to this JSON object the contents of another JSON object. */
+      def ~~(o: Obj): this.type = {
+        val ao = o.asInstanceOf[AtomicObj]
+        if (ao.underlying ne null) { ao.foreach{ case (k,v) => this ~ (k,v) }; this }
+        else appendFrom(ao.underlying, 0, ao.size)
       }
     }
 
