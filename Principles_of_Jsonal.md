@@ -1,4 +1,4 @@
-# Principals Underlying the Design and Implementation of Jsonal
+# Principles Underlying the Design and Implementation of Jsonal
 
 Jsonal is a highly opinionated JSON parser, printer, and Abstract Syntax Tree (AST).
 

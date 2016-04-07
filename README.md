@@ -7,9 +7,9 @@ The Kerr Scala Extensions contain everything that the Scala standard library for
 
 ## Jsonal
 
-Jsonal is a JSON parser tailored for rapid reading of numeric data.  It's also supposed to be pretty easy to use.
+Jsonal is a JSON parser tailored for rapid reading of numeric data.  It's _really_ fast.
 
-Basic syntax looks like this:
+It's also supposed to be pretty easy to use.  Basic syntax looks like this:
 
 ```scala
 import kse.jsonal._
@@ -22,6 +22,8 @@ val jq = Json ~ true ~
   ~ Json
 jp == jq  // true
 ```
+
+Curious about the design goals and how they were met?  [Read more!](Principles_of_Jsonal.md)
 
 ## Maths
 
@@ -47,11 +49,11 @@ Here's an example:
 import kse.flow._
 
 okay[String]{ implicit hop =>
-  List(3).map{ x => if (x>2) hop("bad"); x+5 } 
+  List(3).map{ x => if (x>2) hop("bad"); x+5 }
 }  // No("bad")
 
 okay[String]{ implicit hop =>
-  List(3).map{ x => if (x<2) hop("bad"); x+5 } 
+  List(3).map{ x => if (x<2) hop("bad"); x+5 }
 }  // Yes(List(8))
 ```
 
