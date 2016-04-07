@@ -42,9 +42,9 @@ Jsonal is not so scrupulous as to:
 
 ## Be Efficient?
 
-All parsing and printing routines are written by hand to optimize speed.  (`sun.misc.Unsafe` is off limits for now.)  But there are additional choices that that are dictated by efficiency:
+All parsing and printing routines are written by hand to optimize speed.  (`sun.misc.Unsafe` is used, but only for InputStreams.)  But there are additional choices that that are dictated by efficiency:
 
-1. Parsing big numbers can be slow.  No need to unless they're wanted, so numbers must be stored as a `String` or similar format.
+1. Parsing big numbers can be slow.  No need to unless they're wanted, so big numbers must be stored as a `String` or similar format.
 2. Parsing small numbers can be fast and happen in one pass.  Small numbers should thus be parsed and stored as a `Double` or similar.
 3. Parsing arrays of numbers creates a lot of boxes.  Numbers should be unboxed into a primitive array when possible.
 4. Constructing key-value maps is slow.  Parsing must be into an array.
@@ -66,6 +66,7 @@ The JSON specification does not map perfectly onto Scala's data types.  Therefor
 1. Values that might be JSON or might be in error are of type `Jast` (JSON Abstract Syntax Tree).  This encapsulates an error state as well as correct states for lookups that may fail (e.g. looking up a missing key).
 2. Natural destructuring is provided by `apply` methods for keys and values; on failure, a `Jast` is returned (upon which all destructuring methods are no-ops and just preserve the original error).
 3. Parsers and printers are provided for most common data types or wrappers thereof: `String`, `ByteBuffer`, `CharBuffer`, `InputStream`.  A prettyprinter is provided also.
+4. Converters from common types are provided (mostly via typeclasses), so you don't have to select which type of JSON value you're building.  Usually there is a single obvious choice.
 
 ## Be Mathematical?
 
@@ -73,5 +74,5 @@ The mismatch beween JSON's "numbers are decimal numbers of arbitrary size" and c
 
 1. Mathematics is mostly done with Doubles, so I/O of Doubles should be fast and easy.
 2. Many physical sciences have an idea of precision or significant figures which, if applied, can discard roundoff error and/or allow more compact JSON files.  What is known about precision can be supplied.
-3. Floats are also sometimes used in place of Doubles.  It should be convenient to work with those also.
+3. Floats are also sometimes used in place of Doubles.  But those may have rounding errors.  It shouldn't be easy to mistake one for the other.
 4. Arrays of Doubles should go to-and-from arrays of Doubles. The `Arr` type thus has subtypes `All` (for arbitrary `Json` values) and `Dbl` (for Doubles).
