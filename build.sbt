@@ -31,6 +31,7 @@ pomExtra := (
 ///////////////////////////
 
 lazy val commonSettings = Seq(
+  organization := "kse",
   scalaVersion := "2.11.7",
   version := "0.4-SNAPSHOT",
   scalacOptions += "-feature",
@@ -40,20 +41,12 @@ lazy val commonSettings = Seq(
 lazy val scalaReflect = Def.setting { "org.scala-lang" % "scala-reflect" % scalaVersion.value }
 lazy val jUnit = "com.novocode" % "junit-interface" % "0.9"
 
-lazy val root = (project in file(".")).
-  dependsOn(macros % "compile-internal, test-internal").
-  settings(commonSettings: _*).
-  settings(
-    name := "Kse",
-    mappings in (Compile, packageBin) ++= mappings.in(macros, Compile, packageBin).value,
-    mappings in (Compile, packageSrc) ++= mappings.in(macros, Compile, packageSrc).value,
-    libraryDependencies += jUnit % Test
-  )
+lazy val kse = project in file(".") aggregate macros dependsOn macros
+commonSettings
+libraryDependencies += jUnit % Test
 
-lazy val macros = (project in file("macros")).
-  settings(commonSettings: _*).
-  settings(
-    libraryDependencies += scalaReflect.value,
-    publish := {},
-    publishLocal := {}
-  )
+lazy val macros = project settings (
+  commonSettings,
+  moduleName := "kse-macros",
+  libraryDependencies += scalaReflect.value
+)
