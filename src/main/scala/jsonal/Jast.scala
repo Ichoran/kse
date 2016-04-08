@@ -392,6 +392,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   /** Optionally adds to this JSON object a string key and value of an object convertible to JSON */
   def ~?[A: Jsonize](key: String, oa: Option[A]) = (new Obj.Build[Json]) ~? (key, oa)
 
+  /** Optionally adds to this JSON object a JSON string key and values of an object convertible to JSON. */
+  def ~?[A: Jsonize](key: Str, toa: TraversableOnce[A]) = (new Obj.Build[Json]) ~? (key, toa)
+
+  /** Optionally adds to this JSON object a string key and values of an object convertible to JSON. */
+  def ~?[A: Jsonize](key: String, toa: TraversableOnce[A]) = (new Obj.Build[Json]) ~? (key, toa)
+
   /** Build a JSON object starting with the string / JSON value pairs in this collection */
   def ~~(coll: collection.TraversableOnce[(String,Json)]) = (new Obj.Build[Json]) ~~ coll
 
@@ -1842,7 +1848,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
     def get(key: String): Option[Json] = Option(getOrNull(key))
     def fold[A](zero: A)(f: (A, String, Json) => A): A = {
-      if (myMap eq null) myMap.foldLeft(zero)((a,sj) => f(a, sj._1, sj._2))
+      if (myMap ne null) myMap.foldLeft(zero)((a,sj) => f(a, sj._1, sj._2))
       else {
         var a = zero
         var i = 0
@@ -2272,6 +2278,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Optionally adds to this JSON object a string key and value of an object convertible to JSON */
     def ~?[A: Jsonize](key: String, oa: Option[A]) = (new Build[Obj]) ~? (key, oa)
 
+    /** Optionally adds to this JSON object a JSON string key and values of an object convertible to JSON. */
+    def ~?[A: Jsonize](key: Str, toa: TraversableOnce[A]) = (new Build[Obj]) ~? (key, toa)
+
+    /** Optionally adds to this JSON object a string key and values of an object convertible to JSON. */
+    def ~?[A: Jsonize](key: String, toa: TraversableOnce[A]) = (new Build[Obj]) ~? (key, toa)
+
     /** Creates the empty JSON object. */
     def ~~(done: Obj.type) = empty
 
@@ -2376,6 +2388,16 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
       /** Optionally adds to this JSON object a string key and value of an object convertible to JSON */
       def ~?[A](key: String, oa: Option[A])(implicit jser: Jsonize[A]): this.type = if (oa.isDefined) this ~ (key, jser.jsonize(oa.get)) else this
+
+      /** Optionally adds to this JSON object a JSON string key and values of an object convertible to JSON. */
+      def ~?[A: Jsonize](key: Str, toa: TraversableOnce[A]): this.type =
+        if (toa.isEmpty) this
+        else this ~ (key, Json.Arr ~~ toa ~~ Json.Arr)
+
+      /** Optionally adds to this JSON object a string key and values of an object convertible to JSON. */
+      def ~?[A: Jsonize](key: String, toa: TraversableOnce[A]): this.type =
+        if (toa.isEmpty) this
+        else this ~ (key, Json.Arr ~~ toa ~~ Json.Arr)
 
       /** Finish building this JSON object and return it.  Note that the terminator is typically the same
         * object used to begin building.
