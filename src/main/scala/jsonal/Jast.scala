@@ -292,6 +292,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   def apply(keys: Array[String], values: Array[Json]): Jast = Obj(keys, values)
 
 
+  /** Makes explicit that you're happy to put either of two options into a JSON format without
+    * a key or anything to distingish between the two.
+    */
+  def either[L, R](e: Either[L, R])(implicit jsel: Jsonize[L], jser: Jsonize[R]): Json = e match {
+    case Right(r) => jser.jsonize(r)
+    case Left(l)  => jsel.jsonize(l)
+  }
+
+
   /** Int can fit into Double just fine, so we allow this without warning */
   def ~(int: Int): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ int.toDouble
 
