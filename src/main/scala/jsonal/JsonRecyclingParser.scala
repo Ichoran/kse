@@ -493,7 +493,7 @@ final class JsonRecyclingParser extends RecyclingBuffer {
       c = gB(a, i0+oBytes.toLong)
     }
     if (c == ']') { i0 += 1; return Json.Arr.All.empty }
-    var doubleParse = tryDoubleParse && ((c >= '0' && c <= '9') || (c == 'n'))
+    var doubleParse = tryDoubleParse && ((c >= '0' && c <= '9') || (c == 'n') || (c == '-'))
     var contents = if (doubleParse) null else Json.Arr.All.builder
     var doubles = if (doubleParse) new Array[Double](6) else null
     var moreTokens = true

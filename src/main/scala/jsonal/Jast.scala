@@ -1854,7 +1854,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         var i = 0
         while (i < underlying.length - 1) {
           a = f(a, underlying(i).asInstanceOf[String], underlying(i+1).asInstanceOf[Json])
-          i += 1
+          i += 2
         }
         a
       }

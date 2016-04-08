@@ -51,10 +51,10 @@ trait FromJson[A] {
     while (i < input.size) {
       val ji = input(i) match {
         case jx: Json => jx
-        case je: JastError => return Left(je)
+        case je: JastError => return Left(JastError("Error retriving index "+i, because = je))
       }
       parse(ji) match {
-        case Left(e) => return Left(e)
+        case Left(e) => return Left(JastError("Error parsing index " + i, because = e))
         case Right(x) => a(i) = x
       }
       i += 1
@@ -69,10 +69,10 @@ trait FromJson[A] {
     while (i < input.size) {
       val ji = input(i) match {
         case jx: Json => jx
-        case je: JastError => return Left(je)
+        case je: JastError => return Left(JastError("Error retriving index "+i, because = je))
       }
       parse(ji) match {
-        case Left(e) => return Left(e)
+        case Left(e) => return Left(JastError("Error parsing index " + i, because = e))
         case Right(x) => b += x
       }
       i += 1
