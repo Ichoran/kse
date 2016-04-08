@@ -118,6 +118,31 @@ final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.
   def apply(key: String) = this
   def to[A](implicit fj: FromJson[A]): Either[JastError, A] = Left(this)
   def nullError: Json = Json.Null
+
+  override def toString = {
+    var indent = 0
+    var e: Jast = this
+    val sb = new java.lang.StringBuilder
+    while ((e ne null) && (e != Json.Null)) {
+      if (indent > 0) { sb append '\n'; sb append " "*indent; sb append "because " }
+      e match {
+        case je: JastError =>
+          sb append je.msg
+          if (where >= 0) {
+            sb append '\n'
+            sb append " "*(indent + 2)
+            sb append "near character "
+            sb append je.where
+          }
+          e = je.because
+        case jx =>
+          sb append jx.toString
+          e = Json.Null
+      }
+      indent += 2
+    }
+    sb.toString
+  }
 }
 
 /** This marker trait indicates that a JSON item being built should use type `T` as a stop token. */

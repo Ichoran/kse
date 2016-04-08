@@ -279,9 +279,25 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
 object PrettyJson {
   private [jsonal] val aLotOfSpaces = Array.fill(1024)(' ')
   private [jsonal] val aLotOfTabs = Array.fill(1024)('\t')
+
+  def apply(j: Json): String = {
+    val pj = new PrettyJson()
+    pj traverse j
+    pj.asString
+  }
+
+  def bytes(j: Json): Array[Byte] = {
+    val pj = new PrettyJson()
+    pj traverse j
+    pj.asBytes
+  }
 }
 
-class PrettyContextJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMargin: Int = 78)
+/** This class provides a view of the context as it is prettyprinting.
+  * It is marked as abstract because you must override methods to produce the
+  * context-sensitive output.
+  */
+abstract class PrettyContextJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMargin: Int = 78)
 extends PrettyJson(indentWithTabs, indentation, rightMargin) {
   protected var context: List[Any] = Nil   // Note - ONLY put `String` or `Int` in here!!  (Need union types!)
   override def nextIndex(index: Int): this.type = {
@@ -304,6 +320,14 @@ extends PrettyJson(indentWithTabs, indentation, rightMargin) {
   }
 }
 
+/** This class prettyprints JSON while applying special formatting to numeric values based on context.
+  * The `contextFormatter` receives a list of mixed strings and (boxed) ints.
+  * These represent the path from the root JSON object.  E.g. a list of `1 :: "fish" :: 3 :: Nil`
+  * would be the item `true` in this JSON: `[null, 1, false, {"fish": [false, true]}, 2.2]`
+  *
+  * Note: it is up to the user to produce a valid JSON number with the Formatter.  It is recommended
+  * to just use `PrettyNumberFormat.FormatTo` to set absolute and relative precision (if you need it).
+  */
 class PrettyNumberJson(contextFormatter: List[Any] => PrettyNumberJson.Formatter = PrettyNumberJson.defaultContext, rightMargin: Int = 129)
 extends PrettyContextJson(false, 2, rightMargin) {
   private[this] var fmt: PrettyNumberJson.Formatter = null
