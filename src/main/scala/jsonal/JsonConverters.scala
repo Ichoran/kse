@@ -69,6 +69,16 @@ object JsonConverters extends PriorityTwoJsonConverters {
     }
   }
 
+  implicit val intFromJson: FromJson[Int] = new FromJson[Int] {
+    def parse(js: Json): Either[JastError, Int] = js match {
+      case n: Json.Num if n.isLong =>
+        val x = n.long
+        if (x < Int.MinValue || x > Int.MaxValue) Left(JastError("Number out of Int range"))
+        else Right(x.toInt)
+      case _ => Left(JastError("Not an int"))
+    }
+  }
+
   implicit val longFromJson: FromJson[Long] = new FromJson[Long] {
     def parse(js: Json): Either[JastError, Long] = js match {
       case n: Json.Num if n.isLong => Right(n.long)
