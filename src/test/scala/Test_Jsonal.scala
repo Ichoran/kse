@@ -248,6 +248,13 @@ object Test_Jsonal extends Test_Kse {
     Json ~~ (Json.Obj ~ ("fish", "herring") ~ Json.Obj) ~ Json =?= Json ~ ("fish", "herring") ~ Json &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
+    (Json.Obj ~ ("cod", true) ~ ("herring", false) ~ ("herring", 7) ~ Json.Obj).transformValues{ (k,v) =>
+      if (k == "herring") v match {
+        case Json.Bool(b) => Json.Bool(!b)
+        case _ => v
+      }
+      else v
+    } =?= (Json.Obj ~ ("cod", true) ~ ("herring", true) ~ ("herring", 7) ~ Json.Obj) &&
     { val dt = java.time.Duration.parse("PT5M2.7S"); Json ~ dt ~ Json =?= Json ~ dt.toString ~ Json } &&
     { val dt = java.time.Duration.parse("PT5M2.7S"); (Json ~ dt ~ Json).to[Array[java.time.Duration]].right.map(_.headOption) =?= Right(Option(dt)) } &&
     { val now = java.time.Instant.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&

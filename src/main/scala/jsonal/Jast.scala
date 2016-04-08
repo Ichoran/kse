@@ -1716,6 +1716,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Selects some of the key-value pairs in this JSON object to make a new one */
     def filter(p: (String, Json) => Boolean): Obj
 
+    /** Keeping the same keys, transforms the values.  Returns the new Json Obj.
+      *
+      * If the old object was backed by an array, the same old object will be returned.
+      * If it was backed by a map, a new object is returned (backed by an array).
+      *
+      * Note: this operation is NOT safe to use concurrently.
+      */
+    def transformValues(f: (String, Json) => Json): Obj
+
     /** Counts keys for validation purposes.  Optionally takes a set of keys to consider; otherwise will count all of them. */
     def countKeys(keyset: Option[collection.Set[String]] = None): collection.Map[String, Int]
 
@@ -1756,7 +1765,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     private[this] def linearSearchOrNull(key: String): Json = {
       var i = 0
       while (i < underlying.length - 1) {
-        if (key == (underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text })) return underlying(i+1).asInstanceOf[Json]
+        if (key == underlying(i)) return underlying(i+1).asInstanceOf[Json]
         i += 2
       }
       null
@@ -1774,7 +1783,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
               val arm = new collection.mutable.AnyRefMap[String, Json]()
               var i = 0
               while (i < underlying.length - 1) {
-                arm += (underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }, underlying(i+1).asInstanceOf[Json])
+                arm += (underlying(i).asInstanceOf[String], underlying(i+1).asInstanceOf[Json])
                 i += 2
               }
               set(arm)
@@ -1796,10 +1805,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       if (underlying.length < 12) {
         var i = 2
         while (i < underlying.length -1) {
-          val key = underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }
+          val key = underlying(i).asInstanceOf[String]
           var j = 0
           while (j < i) {
-            if (key == (underlying(j) match { case s: String => s; case x => x.asInstanceOf[Str].text })) return true
+            if (key == underlying(j)) return true
             j += 2
           }
           i += 2
@@ -1813,7 +1822,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           val arm = new collection.mutable.AnyRefMap[String, Json]()
           var i = 0
           while (i < underlying.length - 1) {
-            arm += (underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }, underlying(i+1).asInstanceOf[Json])
+            arm += (underlying(i).asInstanceOf[String], underlying(i+1).asInstanceOf[Json])
             i += 2
           }
           if (useWhatWeMake) set(arm)
@@ -1839,11 +1848,42 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       if (myMap eq null) {
         var i = 0
         while (i < underlying.length - 1) {
-          f(underlying(i) match { case s: String => s; case x => x.asInstanceOf[Str].text }, underlying(i+1).asInstanceOf[Json])
+          f(underlying(i).asInstanceOf[String], underlying(i+1).asInstanceOf[Json])
           i += 2
         }
       }
       else myMap.foreach{ case (k,v) => f(k,v) }
+    }
+    def transformValues(f: (String, Json) => Json): Obj = {
+      if (myMap eq null) {
+        get() match {
+          case null =>
+            var i = 0
+            while (i < underlying.length - 1) {
+              val k = underlying(i).asInstanceOf[String]
+              val v = underlying(i+1).asInstanceOf[Json]
+              val x = f(k,v)
+              if (x ne v) underlying(i+1) = x
+              i += 2
+            }
+            this
+          case x if x eq Obj.mapBuildingInProcess => (new AtomicObj(asFlatArray, null)).transformValues(f)
+          case arm: collection.mutable.AnyRefMap[String, Json] =>
+            var i = 0
+            while (i < underlying.length - 1) {
+              val k = underlying(i).asInstanceOf[String]
+              val v = underlying(i+1).asInstanceOf[Json]
+              val x = f(k,v)
+              if (x ne v) {
+                underlying(i+1) = x
+                arm(k) = v
+              }
+              i += 2
+            }
+            this
+        }
+      }
+      else (new AtomicObj(asFlatArray, null)).transformValues(f)
     }
     def filter(p: (String, Json) => Boolean): Obj = {
       if (myMap ne null) new AtomicObj(null, myMap.filter{ case (k,v) => p(k,v) })
@@ -2010,7 +2050,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       while (it.hasNext) {
         val kv = it.next
         if (!first) sb append ", "
-        Str(kv._1).jsonString(sb)
+        Str.addJsonString(sb, kv._1)
         sb append ':'
         kv._2.jsonString(sb)
         first = false
@@ -2023,7 +2063,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         var i = 0
         while (i < underlying.length-1) {
           if (i > 0) sb append ", "
-          (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonString(sb)
+          Str.addJsonString(sb, underlying(i).asInstanceOf[String])
           sb append ':'
           underlying(i+1).asInstanceOf[Json].jsonString(sb)
           i += 2
@@ -2073,7 +2113,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
             if (!b.hasRemaining) b = refresh(b)
             b put ' '.toByte
           }
-          b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonBytes(b, refresh)
+          b = Str(underlying(i).asInstanceOf[String]).jsonBytes(b, refresh)
           if (!b.hasRemaining) b = refresh(b)
           b put ':'.toByte
           underlying(i+1).asInstanceOf[Json].jsonBytes(b, refresh)
@@ -2126,7 +2166,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
             if (b.remaining < 2) b = refresh(b)
             b put ',' put ' '
           }
-          b = (underlying(i) match { case s: Str => s; case x => Str(x.asInstanceOf[String]) }).jsonChars(b, refresh)
+          b = Str(underlying(i).asInstanceOf[String]).jsonChars(b, refresh)
           if (!b.hasRemaining) b = refresh(b)
           b put ':'
           b = underlying(i+1).asInstanceOf[Json].jsonChars(b, refresh)
