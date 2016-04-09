@@ -13,6 +13,8 @@ import kse.flow._
 import kse.coll._
 import kse.maths._
 
+import kse.jsonal._
+
 package object eio {
   import java.io._
   import java.nio._
@@ -531,6 +533,47 @@ package object eio {
     def toFile(f: File, lineEnding: String = null) {
       val p = new java.io.PrintWriter(f)
       try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
+    }
+    /** Atomically replaces the file.
+      *
+      * It is guaranteed not to be corrupted as long as this operation is not run concurrently.
+      *
+      * Returns `true` if the update is successful (whether anything changed on disk or not)
+      */
+    def atomicallyReplace(f: File, lineEnding: String = null): Ok[String, Unit] = {
+      if (f.exists && underlying.isTraversableAgain) {
+        f.slurp match {
+          case Yes(lines) =>
+            val i = lines.iterator
+            if (underlying.forall(line => i.hasNext && i.next == line)) return Ok.UnitYes   // Didn't change anything
+          case _ =>
+        }
+      }
+      val fnew = new File(f.getPath + ".atomic-new")
+      if (fnew.exists) return No("New file for writing, "+fnew.getPath+", already exists")
+      safe{ toFile(fnew, lineEnding) } match {
+        case No(t) => return No("Could not write file "+fnew.getPath+": "+t.getClass.getName)
+        case _ =>
+      }
+      val fexisted = 
+        if (f.exists) {
+          val fold = new File(f.getPath + ".atomic-old")
+          if (fold.exists) return No("Wrote new file but could not move old version because "+fold.getPath+" already exists")
+          safe{ f renameTo fold } match {
+            case Yes(false) => return No("For unknown reason, could not move old version to "+fold.getPath)
+            case No(t) => return No("Could not move old version to "+fold.getPath+" because of "+exceptionAsString(t))
+            case _ =>
+          }
+          Some(fold)
+        }
+        else None
+      safe{ fnew renameTo f } match {
+        case Yes(false) => return No("For unknown reason, could not move new version to "+f.getPath)
+        case No(t) => return No("Could not move new version to "+f.getPath+" because of "+exceptionAsString(t))
+        case _ =>
+      }
+      safe{ fexisted.foreach(_.delete) }
+      Ok.UnitYes
     }
   }
   
