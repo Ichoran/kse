@@ -122,7 +122,7 @@ object JsonConverters extends PriorityTwoJsonConverters {
         jo.foreach{ (k,v) =>
           val a = fj.parse(v) match {
             case Right(x) => x
-            case Left(e) => return Left(JastError("Error parsing element", because = e))
+            case Left(e) => return Left(JastError(f"Error parsing key '$k'", because = e))
           }
           b += ((k, a))
         }

@@ -1913,7 +1913,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           while (i < underlying.length - 1) {
             val k = underlying(i).asInstanceOf[String]
             val v = underlying(i+1).asInstanceOf[Json]
-            b ~ (k,v)
+            if (p(k,v)) b ~ (k,v)
             i += 2
           }
           b.result

@@ -248,6 +248,9 @@ object Test_Jsonal extends Test_Kse {
     Json ~~ (Json.Obj ~ ("fish", "herring") ~ Json.Obj) ~ Json =?= Json ~ ("fish", "herring") ~ Json &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
     (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
+    (Json.Arr.All ~ "cod" ~ true ~ Json.Arr.All).filter(_.string.isDefined) =?= (Json ~ "cod" ~ Json) &&
+    (Json.Arr.Dbl ~ -2.7 ~ 3.7 ~ Json.Arr.Dbl).filter((x: Double) => x > 0) =?= (Json ~ 3.7 ~ Json) &&
+    (Json.Obj ~ ("apple", 0) ~ ("b", 1) ~ ("c", -1) ~ Json.Obj).filter((k,v) => k.length < 2 && v.double >= 0) =?= Json ~ ("b", 1) ~ Json &&
     (Json.Obj ~ ("cod", true) ~ ("herring", false) ~ ("herring", 7) ~ Json.Obj).transformValues{ (k,v) =>
       if (k == "herring") v match {
         case Json.Bool(b) => Json.Bool(!b)
