@@ -503,7 +503,7 @@ final class JsonRecyclingParser extends RecyclingBuffer {
         doubleParse &&
         ( (c >= '0' && c <= '9') ||
           c == '-' ||
-          (c == 'n' && !strictNumbers && atLeast(4) && gI(a, i0 + oBytes.toLong) == nullInInt)
+          (c == 'n' && atLeast(4) && gI(a, i0 + oBytes.toLong) == nullInInt)
         )
       ) {
         val mark = o + i0

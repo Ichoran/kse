@@ -336,7 +336,7 @@ final class JsonByteBufferParser {
     var buffer = new Array[Double](6)
     var n = 0
     while (c != ']') {
-      if (((c < '0' && (c != '-')) || c > '9') && (strictNumbers || c != 'n')) return false
+      if (((c < '0' && (c != '-')) || c > '9') && c != 'n') return false
       cache = null
       val ans = 
         if (c != 'n') parseNum(input, c)

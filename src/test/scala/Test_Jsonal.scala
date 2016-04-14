@@ -288,7 +288,7 @@ object Test_Jsonal extends Test_Kse {
     Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}").right.get &&
     Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}").right.get &&
     Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}").right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, -0.16319, -0.14907, -0.0905366, -0.009166, 0.0772224]").right.get.getClass 
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]").right.get.getClass 
   }
 
   def test_specifics_CharBuffer: Boolean = {
@@ -310,7 +310,7 @@ object Test_Jsonal extends Test_Kse {
     Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".cb).right.get &&
     Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".cb).right.get &&
     Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".cb).right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, -0.16319, -0.14907, -0.0905366, -0.009166, 0.0772224]".cb).right.get.getClass
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".cb).right.get.getClass
   }
 
   def test_specifics_ByteBuffer: Boolean = {
@@ -332,7 +332,7 @@ object Test_Jsonal extends Test_Kse {
     Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".bb).right.get &&
     Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".bb).right.get &&
     Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".bb).right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, -0.16319, -0.14907, -0.0905366, -0.009166, 0.0772224]".bb).right.get.getClass
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".bb).right.get.getClass
   }
 
   def test_specifics_InputStream: Boolean = {
@@ -356,7 +356,7 @@ object Test_Jsonal extends Test_Kse {
     Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".is).right.get &&
     Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".is).right.get &&
     Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".is).right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, -0.16319, -0.14907, -0.0905366, -0.009166, 0.0772224]".is).right.get.getClass
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".is).right.get.getClass
   }
 
   def main(args: Array[String]) { typicalMain(args) }

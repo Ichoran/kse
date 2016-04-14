@@ -332,7 +332,7 @@ final class JsonStringParser {
       val ans = 
         if (c == '-') parseNum(input, i, end, true, false)
         else if (c >= '0' && c <= '9') parseNum(input, i, end, false, false)
-        else if (!strictNumbers && c == 'n') {
+        else if (c == 'n') {
           if (i < end-2 && input.charAt(i+1)=='u' && input.charAt(i+2)=='l' && input.charAt(i+3)=='l') {
             idx = i+4
             Double.NaN
