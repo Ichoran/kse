@@ -666,7 +666,6 @@ object JsonRecyclingParser {
     val jrp = (new JsonRecyclingParser).refresh(input).recycle()
     if (jrp.available < 4) return Left(JastError("Expected JSON null but not enough input", jrp.start))
     if (jrp.buffer(jrp.start) != 'n') Left(JastError("Expected JSON null but did not find 'n'", jrp.start))
-    jrp.start += 1
     jrp.parseNull() match {
       case j: kse.jsonal.Json.Null => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(j)
       case e: JastError => Left(e)
@@ -686,8 +685,7 @@ object JsonRecyclingParser {
   def Str(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null): Either[JastError, kse.jsonal.Json.Str] = {
     val jrp = (new JsonRecyclingParser).refresh(input).recycle()
     if (jrp.available < 2) return Left(JastError("Expected JSON string but not enough input", jrp.start))
-    if (jrp.buffer(jrp.start) != 'n') Left(JastError("Expected JSON string but did not find '\"'", jrp.start))
-    jrp.start += 1
+    if (jrp.buffer(jrp.start) != '"') return Left(JastError("Expected JSON string but did not find '\"'", jrp.start))
     jrp.parseStr() match {
       case js: kse.jsonal.Json.Str => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(js)
       case je: JastError => Left(je)
@@ -699,7 +697,6 @@ object JsonRecyclingParser {
     if (jrp.available < 1) return Left(JastError("Expected JSON number but not enough input", jrp.start))
     val c = jrp.buffer(jrp.start)
     if (!((c >= '0' && c <= '9') || c == '.')) return Left(JastError("Expected JSON number but did not find digit or '-'", jrp.start))
-    jrp.start += 1
     jrp.parseJastNum(c) match {
       case jn: kse.jsonal.Json.Num => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(jn)
       case je: JastError => Left(je)

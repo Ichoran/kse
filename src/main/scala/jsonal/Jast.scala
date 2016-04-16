@@ -53,6 +53,9 @@ import scala.util.control.NonFatal
   * }}}
   */
 sealed trait Jast {
+  /** True if and only if this represents an error condition instead of a JSON value */
+  def isError: Boolean
+
   /** True if and only if this represents a simple JSON value (null, true, false, number, or String) */
   def simple: Boolean
 
@@ -106,6 +109,7 @@ object Jast extends ParseToJast(false) {
 
 /** Representation of an error that occured during JSON parsing or access. */
 final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.Null) extends Jast {
+  def isError = true
   def simple = false
   def isNull = false
   def double = Json.not_a_normal_NaN
@@ -160,6 +164,7 @@ trait JsonBuildTerminator[T] {}
   */
 sealed trait Json extends Jast with AsJson {
   protected def myName: String
+  def isError = false
   def isNull = false
   def double = Json.not_a_normal_NaN
   def bool: Option[Boolean] = None
@@ -167,8 +172,8 @@ sealed trait Json extends Jast with AsJson {
   def string: Option[String] = None
   def stringOr(default: => String) = default
   def stringOrNull: String = null
-  def apply(i: Int): Jast = JastError("Indexing into "+myName)
-  def apply(key: String): Jast = JastError("Map looking on "+myName)
+  def apply(i: Int): Jast = Json.notIndexableError
+  def apply(key: String): Jast = Json.notKeyedError
   def to[A](implicit fj: FromJson[A]): Either[JastError, A] = fj parse this
   def nullError: Json = this
 
@@ -186,6 +191,9 @@ sealed trait Json extends Jast with AsJson {
   * methods for more details.
   */
 object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
+  private[jsonal] val notIndexableError = JastError("Indexing into something that is not an array")
+  private[jsonal] val notKeyedError = JastError("Key lookup on something that is not an object")
+
   private[jsonal] val not_a_normal_NaN_bits: Long = 0x7FF9000000000000L
   private[jsonal] val not_a_normal_NaN = java.lang.Double.longBitsToDouble(not_a_normal_NaN_bits)
 
@@ -682,6 +690,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       if (text eq null) java.lang.Double.doubleToRawLongBits(content)
       else fallback
 
+    /** Returns `true` if the value cannot be accurately represented by a `Long` or `Double`.
+      *
+      * Note: this method may serialize the value, so it may be slow.
+      */
+    def isPrimitive: Boolean =
+      !explicitTextForm || (isDouble && Num.numericStringEquals(double.toString, text))
+
     /** Returns a BigDecimal value that corresponds to this JSON number.
       *
       * Note: this operation is not cached, so performance may suffer if it is called repeatedly.
@@ -1064,6 +1079,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     * arrays.
     */
   object Arr extends FromJson[Arr] with JsonBuildTerminator[Arr] {
+    private[jsonal] val noSuchIndexError = JastError("Index out of bounds")
+
     /** Wraps an array of JSON values as a JSON array */
     def apply(aj: Array[Json]): Arr = All(aj)
 
@@ -1143,7 +1160,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Represents a JSON array of not-only-numeric values */
     final class All(val values: Array[Json]) extends Arr {
       def size = values.length
-      override def apply(i: Int) = if (i < 0 || i >= values.length) JastError("bad index "+i) else values(i)
+      override def apply(i: Int) = if (i < 0 || i >= values.length) noSuchIndexError else values(i)
       def foreach[U](f: Json => U) { var i = 0; while (i < values.length) { f(values(i)); i += 1 } }
       def filter(p: Json => Boolean): All = {
         var i = 0
@@ -1384,11 +1401,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       */
     final class Dbl(val doubles: Array[Double]) extends Arr {
       def size = doubles.length
-      override def apply(i: Int) =
-        if (i < 0 || i >= doubles.length) JastError("bad index "+i)
-        else Num(doubles(i))
+      override def apply(i: Int) = if (i < 0 || i >= doubles.length) noSuchIndexError else Num(doubles(i))
       def foreach[U](f: Json => U) { var i = 0; while (i < doubles.length) { f(Num(doubles(i))); i += 1 } }
-      def foreach[A](f: Double => Unit)(implicit ev: A =:= Double) { var i = 0; while (i < doubles.length) { f(doubles(i)); i += 1 } }
+      def foreach[A](f: Double => Unit)(implicit ev: A =:= Double) {
+        var i = 0
+        while (i < doubles.length) { f(doubles(i)); i += 1 }
+      }
       def filter(p: Json => Boolean): Dbl = {
         var i = 0
         while (i < doubles.length && p(Num(doubles(i)))) i += 1
@@ -1716,11 +1734,20 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Returns `true` if the JSON object has duplicate keys.  This requires map creation, so may be slow. */
     def hasDuplicateKeys: Boolean
 
+    /** Returns a JSON string key by index or a JastError if the index does not exist */
+    def keyAt(index: Int): Jast
+
+    /** Returns a JSON value by index or a JastError if the index does not exist */
+    def valueAt(index: Int): Jast
+
     /** Returns `Some(value)` (a JSON value) if the corresponding key exists, or `None` otherwise */
     def get(key: String): Option[Json]
 
-    /** Returns a JSON value if the corresponding key exists, or `null` otherwise */
-    def getOrNull(key: String): Json
+    /** Returns a JSON value if the corresponding key exists, or Java `null` otherwise */
+    def get_or_java_null(key: String): Json
+
+    /** Returns true if the corresponding key exists */
+    def contains(key: String): Boolean = (get_or_java_null(key) eq null)
 
     /** Folds an initial value through each key-value pair in this JSON object */
     def fold[A](zero: A)(f: (A, String, Json) => A): A
@@ -1743,12 +1770,28 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     /** Counts keys for validation purposes.  Optionally takes a set of keys to consider; otherwise will count all of them. */
     def countKeys(keyset: Option[collection.Set[String]] = None): collection.Map[String, Int]
 
+    /** Gets a JSON object that corresponds to this one except that an ordering for keys is decided.
+      * If this object already has an ordering, the method will return the same object.
+      */
+    def stableOrder: Obj
+
+    /** Gets a JSON object that corresponds to this one except that the keys are sorted.  If the
+      * keys are already sorted, this method will return the same object.
+      */
+    def sortKeys: Obj
+
     /** Gets a map representation of this JSON object.  Duplicate keys will be discarded.  Use `hasDuplicateKeys` to detect discard of keys.
       *
       * Note: this map may be a mutable map used for lookups for this `Json.Obj`; actually modifying this map is
       * discouraged even when is possible.
       */
     def asMap: collection.Map[String, Json]
+
+    /** This method queries whether this JSON object is backed by an array of key-value pairs.
+      *
+      * See `asFlatArray` for packing information.
+      */
+    def isArrayBacked: Boolean
 
     /** Gets the underlying representation of key-value pairs.
       *
@@ -1785,7 +1828,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       null
     }
-    def getOrNull(key: String): Json = {
+    def get_or_java_null(key: String): Json = {
       if (myMap ne null) myMap.getOrElse(key, null)
       else if (size < 6) linearSearchOrNull(key)
       else {
@@ -1813,8 +1856,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
     def size = if (myMap eq null) underlying.size >> 1 else myMap.size
     override def apply(key: String): Jast = {
-      val ans = getOrNull(key)
-      if (ans eq null) JastError("no key: " + key) else ans
+      val ans = get_or_java_null(key)
+      if (ans eq null) Obj.noSuchKeyError else ans
     }
     def hasDuplicateKeys: Boolean = (myMap eq null) && underlying.length >= 4 && {
       if (underlying.length < 12) {
@@ -1846,7 +1889,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         m.size != size
       }
     }
-    def get(key: String): Option[Json] = Option(getOrNull(key))
+    def keyAt(index: Int): Jast =
+      if (underlying eq null) Obj.notIndexedObjectError
+      else if (index < 0 || index >= (underlying.length >>> 1)) Obj.noSuchIndexError
+      else Json.Str(underlying(index*2).asInstanceOf[String])
+    def valueAt(index: Int): Jast =
+      if (underlying eq null) Obj.notIndexedObjectError
+      else if (index < 0 || index >= (underlying.length >>> 1)) Obj.noSuchIndexError
+      else underlying(index*2 + 1).asInstanceOf[Json]
+    def get(key: String): Option[Json] = Option(get_or_java_null(key))
     def fold[A](zero: A)(f: (A, String, Json) => A): A = {
       if (myMap ne null) myMap.foldLeft(zero)((a,sj) => f(a, sj._1, sj._2))
       else {
@@ -1936,6 +1987,30 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           arm
         }
     }
+    def stableOrder: Obj = if (underlying ne null) this else new AtomicObj(asFlatArray)
+    def sortKeys: Obj = {
+      val a = if (underlying ne null) underlying else asFlatArray
+      var i = 2
+      while (
+        i < a.length-3 &&
+        a(i).asInstanceOf[String].compareTo(a(i+2).asInstanceOf[String]) <= 0
+      ) i += 2
+      if (i >= a.length - 1) return this
+      val b = new Array[(String, Json)](a.length >>> 1)
+      i = 0
+      while (i < b.length) { b(i) = (a(2*i).asInstanceOf[String], a(2*i+1).asInstanceOf[Json]); i += 1 }
+      java.util.Arrays.sort(
+        b,
+        new java.util.Comparator[(String, Json)] {
+          def compare(a: (String, Json), b: (String, Json)) = a._1.compareTo(b._1)
+        }
+      )
+      val c = if (underlying ne null) new Array[AnyRef](underlying.length) else a
+      i = 0
+      var j = 0
+      while (i < b.length) { val bi = b(i); c(j) = bi._1; j +=1; c(j) = bi._2; j += 1; i += 1 }
+      new AtomicObj(c)
+    }
     def asMap: collection.Map[String, Json] = 
       if (myMap ne null) myMap
       else {
@@ -1953,6 +2028,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         }
         else m
       }
+    def isArrayBacked: Boolean = underlying ne null
     def asFlatArray: Array[AnyRef] =
       if (underlying ne null) underlying
       else {
@@ -2043,7 +2119,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         }
         else {
           while (i < a.length - 1) {
-            val o = getOrNull(a(i).asInstanceOf[String])
+            val o = get_or_java_null(a(i).asInstanceOf[String])
             if (o eq null) return false
             else if (o != a(i+1)) return false
             i += 2
@@ -2204,6 +2280,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
   object Obj extends FromJson[Obj] with JsonBuildTerminator[Obj] {
     private[jsonal] val mapBuildingInProcess = new collection.mutable.AnyRefMap[String, Json]()
+    private[jsonal] val noSuchKeyError = JastError("Key not found")
+    private[jsonal] val notIndexedObjectError = JastError("Indexing into un-ordered object")
+    private[jsonal] val noSuchIndexError = JastError("Ordered object does not contain requested index")
 
     /** The empty JSON object. */
     val empty: Obj = new AtomicObj(Array())

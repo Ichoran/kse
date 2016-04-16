@@ -273,6 +273,14 @@ object Test_Jsonal extends Test_Kse {
   def test_specifics_String: Boolean = {
     import JsonConverters._
 
+    Right(Json.Null) =?= Json.Null.parse("null") &&
+    Right(Json.Bool.True) =?= Json.Bool.parse("true") &&
+    Right(Json.Bool.False) =?= Json.Bool.parse("false") &&
+    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"") &&
+    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7") &&
+    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]") &&
+    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]") &&
+    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}") &&
     Json.Null =?= Json.parse("null").right.get &&
     Json.Bool.True =?= Json.parse("true").right.get &&
     Json.Bool.False =?= Json.parse("false").right.get &&
@@ -295,6 +303,14 @@ object Test_Jsonal extends Test_Kse {
     import JsonConverters._
     implicit class StringToCharBuffer(private val string: String) { def cb: CharBuffer = CharBuffer.wrap(string.toCharArray) }
 
+    Right(Json.Null) =?= Json.Null.parse("null".cb) &&
+    Right(Json.Bool.True) =?= Json.Bool.parse("true".cb) &&
+    Right(Json.Bool.False) =?= Json.Bool.parse("false".cb) &&
+    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".cb) &&
+    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7".cb) &&
+    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".cb) &&
+    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".cb) &&
+    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".cb) &&
     Json.Null =?= Json.parse("null".cb).right.get &&
     Json.Bool.True =?= Json.parse("true".cb).right.get &&
     Json.Bool.False =?= Json.parse("false".cb).right.get &&
@@ -317,6 +333,14 @@ object Test_Jsonal extends Test_Kse {
     import JsonConverters._
     implicit class StringToCharBuffer(private val string: String) { def bb: ByteBuffer = ByteBuffer.wrap(string.getBytes) }
 
+    Right(Json.Null) =?= Json.Null.parse("null".bb) &&
+    Right(Json.Bool.True) =?= Json.Bool.parse("true".bb) &&
+    Right(Json.Bool.False) =?= Json.Bool.parse("false".bb) &&
+    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".bb) &&
+    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7".bb) &&
+    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".bb) &&
+    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".bb) &&
+    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".bb) &&
     Json.Null =?= Json.parse("null".bb).right.get &&
     Json.Bool.True =?= Json.parse("true".bb).right.get &&
     Json.Bool.False =?= Json.parse("false".bb).right.get &&
@@ -341,6 +365,14 @@ object Test_Jsonal extends Test_Kse {
       def is: java.io.InputStream = new java.io.ByteArrayInputStream(string.getBytes)
     }
 
+    Right(Json.Null) =?= Json.Null.parse("null".is) &&
+    Right(Json.Bool.True) =?= Json.Bool.parse("true".is) &&
+    Right(Json.Bool.False) =?= Json.Bool.parse("false".is) &&
+    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".is) &&
+    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7".is) &&
+    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".is) &&
+    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".is) &&
+    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".is) &&
     Json.Null =?= Json.parse("null".is).right.get &&
     Json.Bool.True =?= Json.parse("true".is).right.get &&
     Json.Bool.False =?= Json.parse("false".is).right.get &&

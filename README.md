@@ -23,7 +23,9 @@ val jq = Json ~ true ~
 jp == jq  // true
 ```
 
-Curious about the design goals and how they were met?  [Read more!](Principles_of_Jsonal.md)
+Curious about the design goals and how they were met?  [Read more!](docs/Principles_of_Jsonal.md)
+
+Or perhaps you want to [read the tutorial](docs/Jsonal_Tutorial.md).
 
 ## Maths
 

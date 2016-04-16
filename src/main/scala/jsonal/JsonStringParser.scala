@@ -85,8 +85,8 @@ final class JsonStringParser {
 
   private[jsonal] def parseBool(input: String, index: Int, end: Int): Jast =
     if (index < end) input.charAt(index) match {
-      case 't' => parseTrue(input, index, end)
-      case 'f' => parseFalse(input, index, end)
+      case 't' => parseTrue(input, index+1, end)
+      case 'f' => parseFalse(input, index+1, end)
       case c => JastError("Expected boolean but found character "+c, index)
     }
     else JastError("Expected boolean but found end of input", index)
@@ -427,7 +427,7 @@ final class JsonStringParser {
         { if (i < N) true else return JastError("end of input after object key -- no value", index) } && 
         { c = input.charAt(i); c < 0x21 && (c == ' ' || c == '\n' || c == '\r' || c == '\t')}
       ) i += 1
-      if (c != ':') return JastError("object key not followed with ':'", i)
+      if (c != ':') return JastError(f"object's key ${kvs(n-1)} not followed with ':'", i)
       i += 1
       while (
         { if (i < N) true else return JastError("end of input after object key -- no value", index) } && 
@@ -462,20 +462,20 @@ object JsonStringParser{
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON or an error?"))
     }
-  def Null(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Null] = {
+  def Null(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, kse.jsonal.Json.Null] = {
     val i = math.max(0, i0)
     val iM = math.min(iN, input.length)
     if (i >= iM) return Left(JastError("Expected JSON null but at end of input"))
-    if (input.charAt(i) != 'n') return Left(JastError("Expected JSON null but found character "+input.charAt(i), i))
-    val jsp = (new JsonStringParser).relaxedNumbers(relaxed)
-    jsp.parseNull(input, math.max(0, i0), math.min(iN, input.length)) match {
+    if (input.charAt(i) != 'n') return Left(JastError("Expected JSON null but found character "+input.charAt(i).toString, i))
+    val jsp = new JsonStringParser
+    jsp.parseNull(input, i+1, iM) match {
       case jn: kse.jsonal.Json.Null => if (ep ne null) jsp.setEndpoint(ep); myRightNull
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON null or an error?"))
     }
   }
-  def Bool(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Bool] = {
-    val jsp = (new JsonStringParser).relaxedNumbers(relaxed)
+  def Bool(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, kse.jsonal.Json.Bool] = {
+    val jsp = new JsonStringParser
     jsp.parseBool(input, math.max(0, i0), math.min(iN, input.length)) match {
       case jb: kse.jsonal.Json.Bool =>
         if (ep ne null) jsp.setEndpoint(ep)
@@ -484,13 +484,13 @@ object JsonStringParser{
       case _ => Left(JastError("Internal error: parse did not produce JSON boolean or an error?"))
     }
   }
-  def Str(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Str] = {
+  def Str(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, kse.jsonal.Json.Str] = {
     val i = math.max(0, i0)
     val iM = math.min(iN, input.length)
     if (i >= iM) return Left(JastError("Expected JSON string but at end of input"))
-    if (input.charAt(i) != '"') return Left(JastError("Expected JSON string but found character "+input.charAt(i), i))
-    val jsp = (new JsonStringParser).relaxedNumbers(relaxed)
-    jsp.parseStr(input, math.max(0, i0), math.min(iN, input.length)) match {
+    if (input.charAt(i) != '"') return Left(JastError("Expected JSON string but found character "+input.charAt(i).toString, i))
+    val jsp = new JsonStringParser
+    jsp.parseStr(input, i+1, iM) match {
       case js: kse.jsonal.Json.Str => if (ep ne null) jsp.setEndpoint(ep); Right(js)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
@@ -501,9 +501,9 @@ object JsonStringParser{
     val iM = math.min(iN, input.length)
     if (i >= iM) return Left(JastError("Expected JSON number but at end of input"))
     val c = input.charAt(i)
-    if (c != '-' && (c < '0' || c > '9')) return Left(JastError("Expected JSON number but found character "+input.charAt(i), i))
+    if (c != '-' && (c < '0' || c > '9')) return Left(JastError("Expected JSON number but found character "+input.charAt(i).toString, i))
     val jsp = (new JsonStringParser).relaxedNumbers(relaxed)
-    jsp.parseJastNum(input, math.max(0, i0), math.min(iN, input.length), c == '-') match {
+    jsp.parseJastNum(input, i, iM, c == '-') match {
       case jn: kse.jsonal.Json.Num => if (ep ne null) jsp.setEndpoint(ep); Right(jn)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON number or an error?"))
@@ -513,9 +513,9 @@ object JsonStringParser{
     val i = math.max(0, i0)
     val iM = math.min(iN, input.length)
     if (i >= iM) return Left(JastError("Expected JSON array but at end of input"))
-    if (input.charAt(i) != '[') return Left(JastError("Expected JSON array but found character "+input.charAt(i), i))
+    if (input.charAt(i) != '[') return Left(JastError("Expected JSON array but found character "+input.charAt(i).toString, i))
     val jsp = (new JsonStringParser).relaxedNumbers(relaxed)
-    jsp.parseArr(input, math.max(0, i0), math.min(iN, input.length)) match {
+    jsp.parseArr(input, i+1, iM) match {
       case ja: kse.jsonal.Json.Arr => if (ep ne null) jsp.setEndpoint(ep); Right(ja)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON array or an error?"))
@@ -525,9 +525,9 @@ object JsonStringParser{
     val i = math.max(0, i0)
     val iM = math.min(iN, input.length)
     if (i >= iM) return Left(JastError("Expected JSON object but at end of input"))
-    if (input.charAt(i) != '"') return Left(JastError("Expected JSON object but found character "+input.charAt(i), i))
+    if (input.charAt(i) != '{') return Left(JastError("Expected JSON object but found character "+input.charAt(i).toString, i))
     val jsp = (new JsonStringParser).relaxedNumbers(relaxed)
-    jsp.parseObj(input, math.max(0, i0), math.min(iN, input.length)) match {
+    jsp.parseObj(input, i+1, math.min(iN, input.length)) match {
       case jo: kse.jsonal.Json.Obj => if (ep ne null) jsp.setEndpoint(ep); Right(jo)
       case je: JastError => Left(je)
       case _ => Left(JastError("Internal error: parse did not produce JSON object or an error?"))

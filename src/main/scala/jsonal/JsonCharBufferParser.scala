@@ -419,7 +419,7 @@ final class JsonCharBufferParser {
       if (c != ':') { 
         val p = input.position - 1
         input.position(zero)
-        return JastError("object key not followed with ':'", p)
+        return JastError(f"object's key ${kvs(n-1)} not followed with ':'", p)
       }
       while (
         { if (input.hasRemaining) true else { input.position(zero); return JastError("end of input after object key", zero) } } && 
@@ -543,7 +543,7 @@ object JsonCharBufferParser{
   def Obj(input: CharBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Obj] = {
     if (!input.hasRemaining) return Left(JastError("Expected JSON object but at end of input"))
     val c = input.get
-    if (c != '"') {
+    if (c != '{') {
       input.position(input.position-1)
       return Left(JastError("Expected JSON object but found character "+c, input.position))
     }
