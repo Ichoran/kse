@@ -220,7 +220,26 @@ object Test_Jsonal extends Test_Kse {
             ans
           }
         case e: JastError => println(j); println("relaxed InputStream"); println(e); false
-      })
+      }) &&
+      k2.right.exists{ kk2 =>
+        val s = kk2.toString
+        val ss = { val sb = new java.lang.StringBuilder; kk2.jsonString(sb); sb.toString }
+        val sss = {
+          val b = new Array[Byte](s.length + s.length/4 + 128)
+          val bb = java.nio.ByteBuffer.wrap(b)
+          kk2.jsonBytes(bb, _ => throw new Exception("too long"))
+          new String(b, 0, bb.position)
+        }
+        val ssss = {
+          val c = new Array[Char](s.length + s.length/4 + 128)
+          val cc = java.nio.CharBuffer.wrap(c)
+          kk2.jsonChars(cc, _ => throw new Exception("too long"))
+          new String(c, 0, cc.position)
+        }
+        s =?= ss &&
+        s =?= sss &&
+        s =?= ssss
+      }
     }
   }
 

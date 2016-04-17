@@ -632,4 +632,103 @@ res5: Either[kse.jsonal.JastError,Person] = Right(Person(Arthur,Pendragon))
 
 ## Printing and prettyprinting
 
-TODO -- write this section.
+### Basic output
+
+All members of the JSON syntax tree will serialize themselves to valid JSON when
+their `toString` method is called.  In addition, both `Json` and subclasses, plus
+anything implementing `AsJson` can push its representation onto a `java.lang.StringBuilder`,
+a `ByteBuffer` (with an operation to refresh the buffer when its full), or a `CharBuffer`.
+
+Note: the Java StringBuilder was chosen because the JIT compiler will sometimes optimize
+operations using it.  (Whether that actually matters in this library was not tested.)
+
+Examples:
+
+```scala
+scala> import kse.jsonal._, JsonConverters._
+import kse.jsonal._
+import JsonConverters._
+
+scala> val j = Json ~ true ~ (Json ~ ("fish", "salmon") ~ ("wish", true) ~ Json) ~ Json
+j: kse.jsonal.Json = [true, { "fish":"salmon", "wish":true }]
+
+scala> j.toString
+res0: String = [true, { "fish":"salmon", "wish":true }]
+
+scala> { val sb = new java.lang.StringBuilder
+     |   j.jsonString(sb)
+     |   sb.toString
+     | }
+res1: String = [true, { "fish":"salmon", "wish":true }]
+
+scala> { val b = new Array[Byte](128)
+     |   val bb = java.nio.ByteBuffer.wrap(b)
+     |   j.jsonBytes(bb, _ => throw new Exception("no space left!"))
+     |   new String(b, 0, bb.position)
+     | }
+res2: String = [true, { "fish":"salmon", "wish":true }]
+```
+
+### Pretty output
+
+Jsonal includes a prettyprinting facility also, if a human may read the JSON output.
+By default it has a two-space indent and a right margin of 78, but these can be set
+if one creates a `PrettyJson` instance with different defaults.
+
+```scala
+scala> PrettyJson(j)
+res3: String = [ true, { "fish": "salmon", "wish": true } ]
+
+scala> val pj = new PrettyJson(indentation = 4, rightMargin = 10)
+pj: kse.jsonal.PrettyJson = kse.jsonal.PrettyJson@18bc05f1
+
+scala> { pj traverse j; pj.asString }
+res4: String =
+[ true,
+    { "fish": "salmon",
+        "wish": true
+    } ]
+
+scala> val pj2 = new PrettyJson(indentation = 2, rightMargin = 10)
+pj2: kse.jsonal.PrettyJson = kse.jsonal.PrettyJson@4ce9a0fe
+
+scala> { pj2 traverse j; pj2.asString }
+res5: String =
+[ true,
+  { "fish": "salmon",
+    "wish": true
+  } ]
+```
+
+Note that despite being supposedly "pretty", the 4-space indent isn't lined up as well as the 2-space.
+
+If you have a lot of numeric data, you may wish to use the `PrettyNumberJson` class, which will
+store a list of object keys and array indices as history, and can use those to decide at what precision
+to print a number.  For instance,
+
+```scala
+scala> val j2 = Json ~ ("x", 1.12345678) ~ ("y", 1.12345678) ~ ("x", Array(1.12345678, 98765432.1)) ~ Json
+j2: kse.jsonal.Json = { "x":1.12345678, "y":1.12345678, "x":[1.12345678, 9.87654321E7] }
+
+scala> // Format a max 3 of digits after decimal point, and max 5 digits after the first
+
+scala> val three = PrettyNumberJson.FormatTo(3, 5)
+three: kse.jsonal.PrettyNumberJson.FormatTo = FormatTo(3,5)
+
+scala> val pnj = new PrettyNumberJson(contextFormatter = _ match {
+     |   case "x" :: more => three
+     |   case _ => PrettyNumberJson.defaultFormatter
+     | }, rightMargin = 10)
+pnj: kse.jsonal.PrettyNumberJson = kse.jsonal.PrettyNumberJson@16b1471e
+
+scala> { pnj traverse j2; pnj.asString }
+res6: String =
+{ "x": 1.123,
+  "y": 1.12345678,
+  "x": [
+    1.123,
+    9.87654e+07
+  ] }
+```
+
+This is far slower than standard output, but it can be worth it.

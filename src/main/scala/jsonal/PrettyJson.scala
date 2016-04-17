@@ -297,16 +297,23 @@ object PrettyJson {
   * It is marked as abstract because you must override methods to produce the
   * context-sensitive output.
   */
-abstract class PrettyContextJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMargin: Int = 78)
+abstract class PrettyContextJson(
+  indentWithTabs: Boolean = false,
+  indentation: Int = 2,
+  rightMargin: Int = 78,
+  trackIndices: Boolean = false
+)
 extends PrettyJson(indentWithTabs, indentation, rightMargin) {
   protected var context: List[Any] = Nil   // Note - ONLY put `String` or `Int` in here!!  (Need union types!)
   override def nextIndex(index: Int): this.type = {
-    if (index == 0) context = index :: context
-    else context = index :: context.tail
+    if (trackIndices) {
+      if (index == 0) context = index :: context
+      else context = index :: context.tail
+    }
     super.nextIndex(index)
   }
   override def outOfAllArr: this.type = {
-    context = context.tail
+    if (trackIndices) context = context.tail
     super.outOfAllArr
   }
   override def nextKey(index: Int, key: String): this.type = {
@@ -328,13 +335,25 @@ extends PrettyJson(indentWithTabs, indentation, rightMargin) {
   * Note: it is up to the user to produce a valid JSON number with the Formatter.  It is recommended
   * to just use `PrettyNumberFormat.FormatTo` to set absolute and relative precision (if you need it).
   */
-class PrettyNumberJson(contextFormatter: List[Any] => PrettyNumberJson.Formatter = PrettyNumberJson.defaultContext, rightMargin: Int = 129)
+class PrettyNumberJson(
+  contextFormatter: List[Any] => PrettyNumberJson.Formatter = PrettyNumberJson.defaultContext,
+  rightMargin: Int = 129,
+  trackIndices: Boolean = true
+)
 extends PrettyContextJson(false, 2, rightMargin) {
   private[this] var fmt: PrettyNumberJson.Formatter = null
-  override def visit(num: Json.Num): this.type = { append(contextFormatter(context) format num); this }
+  private[this] var inDblArray = false
+  override def visit(num: Json.Num): this.type = {
+    val f = if (inDblArray) fmt else contextFormatter(context)
+    append(f format num)
+    this
+  }
   override def visit(jad: Json.Arr.Dbl): this.type = {
     fmt = contextFormatter(context)
+    inDblArray = true
     super.visit(jad)
+    inDblArray = false
+    this
   }
   override def visitDblIndex(index: Int, value: Double): this.type = {
     if (index > 0) comma

@@ -200,13 +200,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   private[jsonal] def loadByteBuffer(bytes: Array[Byte], bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
     var b = bb
     var i = 0
-    while(true) {
-      val n = math.max(bytes.length - i, bb.remaining) match { case 0 => bytes.length - i; case x => x }
+    while(i < bytes.length) {
+      val n = {
+        if (b.remaining == 0) b = refresh(b)
+        math.min(bytes.length - i, b.remaining)
+      }
       b.put(bytes, i, n)
       i += n
-      if (i < bytes.length) b = refresh(b) else return b
     }
-    null
+    b
   }
   private[jsonal] def loadByteBuffer(bytes: String, bb: ByteBuffer, refresh: ByteBuffer => ByteBuffer): ByteBuffer = {
     var b = bb
@@ -224,13 +226,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   private[jsonal] def loadCharBuffer(chars: Array[Char], cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
     var c = cb
     var i = 0
-    while(true) {
-      val n = math.max(chars.length - i, cb.remaining) match { case 0 => chars.length - i; case x => x }
+    while(i < chars.length) {
+      val n = {
+        if (c.remaining == 0) c = refresh(c)
+        math.min(chars.length - i, c.remaining)
+      }
       c.put(chars, i, n)
       i += n
-      if (i < chars.length) c = refresh(c) else return c
     }
-    null
+    c
   }
   private[jsonal] def loadCharBuffer(chars: String, cb: CharBuffer, refresh: CharBuffer => CharBuffer): CharBuffer = {
     var c = cb
@@ -1482,7 +1486,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         while (i < doubles.length) {
           if (i > 0) {
             if (b.remaining < 2) b = refresh(b)
-            b put '['.toByte put ' '.toByte
+            b put ','.toByte put ' '.toByte
           }
           val d = doubles(i)
           val l = d.toLong
@@ -1500,7 +1504,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
         while (i < doubles.length) {
           if (i > 0) {
             if (c.remaining < 2) c = refresh(c)
-            c put '[' put ' '
+            c put ',' put ' '
           }
           val d = doubles(i)
           val l  = d.toLong
@@ -2172,11 +2176,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       while (it.hasNext) {
         val kv = it.next
         if (!first) {
-          if (bb.remaining < 2) b = refresh(b)
+          if (b.remaining < 2) b = refresh(b)
           b put ','.toByte put ' '.toByte
         }
         b = Str(kv._1).jsonBytes(b, refresh)
-        if (!bb.hasRemaining) b = refresh(b)
+        if (!b.hasRemaining) b = refresh(b)
+        b put ':'.toByte
         b = kv._2.jsonBytes(b, refresh)
         first = false
       }
@@ -2199,10 +2204,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (i > 0) {
             if (b.remaining < 2) b = refresh(b)
             b put ','.toByte put ' '.toByte
-          }
-          else {
-            if (!b.hasRemaining) b = refresh(b)
-            b put ' '.toByte
           }
           b = Str(underlying(i).asInstanceOf[String]).jsonBytes(b, refresh)
           if (!b.hasRemaining) b = refresh(b)
@@ -2229,11 +2230,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       while (it.hasNext) {
         val kv = it.next
         if (!first) {
-          if (bb.remaining < 2) b = refresh(b)
+          if (b.remaining < 2) b = refresh(b)
           b put ',' put ' '
         }
         b = Str(kv._1).jsonChars(b, refresh)
-        if (!bb.hasRemaining) b = refresh(b)
+        if (!b.hasRemaining) b = refresh(b)
+        b put ':'
         b = kv._2.jsonChars(b, refresh)
         first = false
       }
