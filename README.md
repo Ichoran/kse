@@ -4,6 +4,22 @@ Does KSE work? [![Build Status](https://semaphoreci.com/api/v1/ichoran/kse/branc
 
 The Kerr Scala Extensions contain everything that the Scala standard library forgot that I have had time to create.
 
+Want KSE?
+
+If you're using SBT, make sure you have the following resolver in your build.sbt:
+
+```scala
+resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+```
+
+and add
+
+```scala
+libraryDependencies += "com.github.ichoran" %% "kse" % "0.4-SNAPSHOT"
+```
+
+If you're using something else, you can probably figure it out from the above.  Or just fork the repository and run `sbt package`.
+
 
 ## Jsonal
 
