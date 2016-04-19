@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2011-15 Rex Kerr, HHMI Janelia, UCSF, and Calico Labs.
+// Copyright (c) 2011-16 Rex Kerr, HHMI Janelia, UCSF, and Calico Labs.
 
 package kse
 
@@ -78,11 +78,26 @@ package object maths {
   implicit class EnrichedIntMaths(private val value: Int) extends AnyVal {
     @inline final def clip(lo: Int, hi: Int) = max(lo, min(hi, value))
     @inline final def in(lo: Int, hi: Int) = lo <= value && value <= hi
+    @inline final def binary32 = java.lang.Float.intBitsToFloat(value)
+    final def hex = {
+      var c = new Array[Char](8)
+      var v = value
+      var i = 7
+      while (v != 0) {
+        val digit = v & 0xF
+        c(i) = (digit + (if (digit < 10) '0' else '7')).toChar
+        v = v >>> 4
+        i -= 1
+      }
+      while (i >= 0) { c(i) = '0'; i -= 1 }
+      new String(c)
+    }
   }
 
   implicit class EnrichedLongMaths(private val value: Long) extends AnyVal {
     @inline final def clip(lo: Long, hi: Long) = max(lo, min(hi, value))
     @inline final def in(lo: Long, hi: Long) = lo <= value && value <= hi
+    @inline final def binary64 = java.lang.Double.longBitsToDouble(value)
     final def pluralizes(format: String) = {
       val fa = format.split('/')
       if (fa.length > 2) fa(0) + fa(if (this.in(1, fa.length-2)) value.toInt else (fa.length-1).toInt)
@@ -90,6 +105,19 @@ package object maths {
       else format        
     }
     final def plural(format: String) = value.toString + " " + this.pluralizes(format)
+    final def hex = {
+      var c = new Array[Char](16)
+      var v = value
+      var i = 15
+      while (v > 0) {
+        val digit = v & 0xF
+        c(i) = (digit + (if (digit < 10) '0' else '7')).toChar
+        v = v >>> 4
+        i -= 1
+      }
+      while (i >= 0) { c(i) = '0'; i -= 1 }
+      new String(c)
+    }
   }
 
   implicit class EnrichedFloatMaths(private val value: Float) extends AnyVal {
@@ -98,7 +126,7 @@ package object maths {
     @inline final def ulp = scala.math.ulp(value)
     @inline final def nan = java.lang.Float.isNaN(value)
     @inline final def inf = java.lang.Float.isInfinite(value)
-    @inline final def finite = !java.lang.Float.isNaN(value) && !java.lang.Float.isInfinite(value)
+    @inline final def finite = (java.lang.Float.floatToRawIntBits(value) & 0x7F800000) != 0x7F800000
     @inline final def bits = java.lang.Float.floatToRawIntBits(value)
     @inline final def clip(lo: Float, hi: Float) = max(lo, min(hi, value))
   }
@@ -138,7 +166,7 @@ package object maths {
     @inline final def ulp = scala.math.ulp(value)
     @inline final def nan = java.lang.Double.isNaN(value)
     @inline final def inf = java.lang.Double.isInfinite(value)
-    @inline final def finite = !java.lang.Double.isNaN(value) && !java.lang.Double.isInfinite(value)
+    @inline final def finite = (java.lang.Double.doubleToRawLongBits(value) & 0x7FF0000000000000L) != 0x7FF0000000000000L
     @inline final def bits = java.lang.Double.doubleToRawLongBits(value)
     @inline final def clip(lo: Double, hi: Double) = max(lo, min(hi, value))
 
