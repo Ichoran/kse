@@ -221,7 +221,8 @@ package base64 {
   object Mime64 extends Base64(true, 72, CommonBase64Encodings.Mime.getBytes) {}
   
   object Url64 extends Base64(false, Int.MaxValue, CommonBase64Encodings.Url.getBytes) {}
-  
+
+    
   object UucodeLine extends Base64(false, Int.MaxValue, CommonBase64Encodings.Uucode.getBytes) {}
   
   object BinhexCore extends Base64(true, 64, CommonBase64Encodings.Binhex.getBytes) {}

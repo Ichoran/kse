@@ -30,6 +30,57 @@ trait PriorityTwoJsonConverters extends PriorityThreeJsonConverters {
 }
 
 object JsonConverters extends PriorityTwoJsonConverters {
+  //  This is fast and safe!
+  private[this] val encoderOfUrlBase64 = java.util.Base64.getUrlEncoder
+
+  // Utility function for decoder.  Note that 'G' = 'a' - 26 and -4 = '0' - 52.
+  private[this] def c2i(c: Char) =
+    if (c >= 'A' && c <= 'Z') c - 'A'
+    else if (c >= 'a' && c <= 'z') c - 'G'
+    else if (c >= '0' && c <= '9') c + 4;
+    else if (c == '-') 62
+    else if (c == '_') 63
+    else -1
+
+  // Java default decoder is not as fast as this one, and also throws exceptions which we want to avoid
+  private[this] def decodeUrl64(s: String, i0: Int = 0, iN: Int = Int.MaxValue): Either[JastError, Array[Byte]] = {
+      var m = math.min(s.length, iN)
+      var i = math.max(i0, 0)
+      while (m > i && s.charAt(m-1) == '=') m -= 1
+      val a = new Array[Byte](((3L*(m-i)) >> 2).toInt)
+      var j = 0
+      while (i < m - 3) { 
+        var x = (c2i(s.charAt(i)) << 18)
+        x = x | (c2i(s.charAt(i+1)) << 12)
+        x = x | (c2i(s.charAt(i+2)) << 6)
+        x = x | (c2i(s.charAt(i+3)))
+        a(j+2) = (x&0xFF).toByte
+        a(j+1) = ((x >> 8)&0xFF).toByte
+        a(j) = (x >> 16).toByte
+        if (x == -1) return Left(JastError("Invalid character in Base64 encoded string", i))
+        i += 4
+        j += 3
+      }
+      var x = 0
+      var n = 0
+      if (i < m) {
+        if (i == m - 1) return Left(JastError("A single Base64 character (mod 4) is not a valid encoding!"))
+        else if (i == m - 2) {
+          val x = (c2i(s.charAt(i)) << 6) | c2i(s.charAt(i+1))
+          if ((x & 0xF) != 0) return Left(JastError("Wrong encoding at end of block: these two chars do not fit in a byte"))
+          a(j) = (x >> 4).toByte
+        }
+        else {
+          val x = (c2i(s.charAt(i)) << 12) | (c2i(s.charAt(i+1)) << 6) | c2i(s.charAt(i+2))
+          if ((x & 0x3) != 0) return Left(JastError("Wrong encoding at end of block: these three chars do not fit in two bytes"))
+          a(j+1) = ((x >> 2) & 0xFF).toByte
+          a(j) = ((x >> 10) & 0xFF).toByte
+        }
+      }
+      Right(a)
+    }
+
+
   implicit val booleanIsImplicitlyJsonized = new Jsonize[Boolean] { def jsonize(b: Boolean) = Json.Bool(b) }
   implicit val intIsImplicitlyJsonized = new Jsonize[Int] { def jsonize(i: Int) = Json.Num(i) }
   implicit val longIsImplictlyJsonized = new Jsonize[Long] { def jsonize(l: Long) = Json.Num(l) }
@@ -51,6 +102,9 @@ object JsonConverters extends PriorityTwoJsonConverters {
   }
   implicit val zonedDateTimeIsImplicitlyJsonized = new Jsonize[java.time.ZonedDateTime] {
     def jsonize(zdt: java.time.ZonedDateTime) = Json.Str(zdt.toString)
+  }
+  implicit val byteArrayIsImplicitlyBase64Jasonized = new Jsonize[Array[Byte]] {
+    def jsonize(ab: Array[Byte]) = Json.Str(encoderOfUrlBase64.encodeToString(ab))
   }
   private val genericAsJsonIsJsonized: Jsonize[AsJson] = new Jsonize[AsJson] { def jsonize(aj: AsJson) = aj.json }
   implicit def asJsonIsImplicitlyJsonized[A <: AsJson] = genericAsJsonIsJsonized.asInstanceOf[Jsonize[A]]
@@ -96,7 +150,14 @@ object JsonConverters extends PriorityTwoJsonConverters {
 
   implicit val stringFromJson: FromJson[String] = new FromJson[String] {
     def parse(js: Json): Either[JastError, String] = js match {
-      case Json.Str(text) => Right(text)
+      case s: Json.Str => Right(s.text)
+      case _ => Left(JastError("Not a string"))
+    }
+  }
+
+  implicit def byteArrayFromBase64Json: FromJson[Array[Byte]] = new FromJson[Array[Byte]] {
+    def parse(js: Json) = js match {
+      case s: Json.Str => decodeUrl64(s.text)
       case _ => Left(JastError("Not a string"))
     }
   }
@@ -172,9 +233,9 @@ object JsonConverters extends PriorityTwoJsonConverters {
 
   implicit val instantFromJson: FromJson[java.time.Instant] = new FromJson[java.time.Instant] {
     def parse(js: Json): Either[JastError, java.time.Instant] = js match {
-      case Json.Str(text) =>
-        if (patternForInstant.matcher(text).matches)
-          try { return Right(java.time.Instant.parse(text)) }
+      case s: Json.Str =>
+        if (patternForInstant.matcher(s.text).matches)
+          try { return Right(java.time.Instant.parse(s.text)) }
           catch { case t if NonFatal(t) => }
         Left(JastError("Not properly formatted as an Instant"))
       case _ => Left(JastError("Not an Instant because not a string"))
@@ -183,9 +244,9 @@ object JsonConverters extends PriorityTwoJsonConverters {
 
   implicit val localDateTimeFromJson: FromJson[java.time.LocalDateTime] = new FromJson[java.time.LocalDateTime] {
     def parse(js: Json): Either[JastError, java.time.LocalDateTime] = js match {
-      case Json.Str(text) =>
-        if (patternForLocalDateTime.matcher(text).matches)
-          try { return Right(java.time.LocalDateTime.parse(text)) }
+      case s: Json.Str =>
+        if (patternForLocalDateTime.matcher(s.text).matches)
+          try { return Right(java.time.LocalDateTime.parse(s.text)) }
           catch { case t if NonFatal(t) => }
         Left(JastError("Not properly formatted as a LocalDateTime"))
       case _ => Left(JastError("Not a LocalDateTime because not a string"))
@@ -194,9 +255,9 @@ object JsonConverters extends PriorityTwoJsonConverters {
 
   implicit val offsetDateTimeFromJson: FromJson[java.time.OffsetDateTime] = new FromJson[java.time.OffsetDateTime] {
     def parse(js: Json): Either[JastError, java.time.OffsetDateTime] = js match {
-      case Json.Str(text) =>
-        if (patternForOffsetDateTime.matcher(text).matches)
-          try { return Right(java.time.OffsetDateTime.parse(text)) }
+      case s: Json.Str =>
+        if (patternForOffsetDateTime.matcher(s.text).matches)
+          try { return Right(java.time.OffsetDateTime.parse(s.text)) }
           catch { case t if NonFatal(t) => }
         Left(JastError("Not properly formatted as a OffsetDateTime"))
       case _ => Left(JastError("Not a OffsetDateTime because not a string"))
@@ -205,9 +266,9 @@ object JsonConverters extends PriorityTwoJsonConverters {
 
   implicit val zonedDateTimeFromJson: FromJson[java.time.ZonedDateTime] = new FromJson[java.time.ZonedDateTime] {
     def parse(js: Json): Either[JastError, java.time.ZonedDateTime] = js match {
-      case Json.Str(text) =>
-        if (patternForZonedDateTime.matcher(text).matches)
-          try { return Right(java.time.ZonedDateTime.parse(text)) }
+      case s: Json.Str =>
+        if (patternForZonedDateTime.matcher(s.text).matches)
+          try { return Right(java.time.ZonedDateTime.parse(s.text)) }
           catch { case t if NonFatal(t) => }
         Left(JastError("Not properly formatted as a ZonedDateTime"))
       case _ => Left(JastError("Not a ZonedDateTime because not a string"))

@@ -243,6 +243,25 @@ object Test_Jsonal extends Test_Kse {
     }
   }
 
+  def test_base64: Boolean = {
+    import JsonConverters._
+
+    val r = new scala.util.Random
+    (0 to 1024).forall{ _ =>
+      val a = Array.fill(math.max(-1, r.nextInt(20)-4) + (1 << r.nextInt(10)))(r.nextInt.toByte)
+      val j = Json(a)
+      j.to[Array[Byte]] match {
+        case Right(b) =>
+          var same = a.length == b.length
+          var i = 0
+          while (i < a.length && same) { same = a(i) == b(i); i += 1 }
+          if (!same) println(f"${a.length}:${a.take(i+1).mkString} != ${b.length}:${b.take(i+1).mkString}")
+          same
+        case Left(je) => println(je); println(j); false
+      }
+    }
+  }
+
   def test_specifics_Direct: Boolean = {
     import JsonConverters._
 
