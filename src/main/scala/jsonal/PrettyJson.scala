@@ -216,6 +216,17 @@ class PrettyJson(indentWithTabs: Boolean = false, indentation: Int = 2, rightMar
     this
   }
 
+  /** A representation of the `JSON` value built so far, with one string per line.  This method may be called repeatedly. */
+  def asVector =
+    if (historic.isEmpty) Vector(current.toString)
+    else {
+      val vb = Vector.newBuilder[String]
+      vb.sizeHint(historic.length + (if (current.length > 0) 1 else 0))
+      historic.foreach(line => vb += line.toString)
+      if (current.length > 0) vb += current.toString
+      vb.result
+    }
+
   /** The `String` representation of the `JSON` value as built so far.  This method may be called repeatedly. */
   def asString =
     if (historic.isEmpty) current.toString
@@ -284,6 +295,12 @@ object PrettyJson {
     val pj = new PrettyJson()
     pj traverse j
     pj.asString
+  }
+
+  def vector(j: Json): Vector[String] = {
+    val pj = new PrettyJson()
+    pj traverse j
+    pj.asVector
   }
 
   def bytes(j: Json): Array[Byte] = {
