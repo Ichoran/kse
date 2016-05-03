@@ -141,4 +141,24 @@ object ControlFlowMacroImpl {
     }
     """)
   }
+
+  def keepYesRetNo(c: Context) = {
+    import c.universe._
+
+    c.untypecheck(q"""
+      if (${c.prefix}.isOk) ${c.prefix}.yes
+      else return ${c.prefix}.asInstanceOf[No[${c.prefix.tree.tpe.typeArgs.head}]]
+    """)
+  }
+
+  def keepYesRetNoMap(c: Context)(f: c.Tree) = {
+    import c.universe._
+
+    c.untypecheck(q"""
+      ${c.prefix} match {
+        case Yes(y) => y
+        case No(n) => return No($f(n))
+      }
+    """)
+  }
 }

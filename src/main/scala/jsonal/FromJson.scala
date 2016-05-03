@@ -88,16 +88,19 @@ object FromJson {
 /** A class for functionality that allows one to parse to a a JSON AST. */
 class ParseToJast private[jsonal] (protected val isRelaxed: Boolean) {
   /** Parses a section of a `String` and indicates the end of the parse in a `FromJson.Endpoint` class */
-  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Jast = {
-    val jsp = (new JsonStringParser).relaxedNumbers(isRelaxed)
-    val ans = jsp.parseVal(input, math.max(0, i0), math.min(iN, input.length))
-    if (ep ne null) jsp.setEndpoint(ep)
-    ans
-  }
+  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Jast =
+    if (input eq null) Json.Null
+    else {
+      val jsp = (new JsonStringParser).relaxedNumbers(isRelaxed)
+      val ans = jsp.parseVal(input, math.max(0, i0), math.min(iN, input.length))
+      if (ep ne null) jsp.setEndpoint(ep)
+      ans
+    }
 
   /** Parses a string to a JSON AST. */
   def parse(input: String): Jast =
-    (new JsonStringParser).relaxedNumbers(isRelaxed).parseVal(input, 0, input.length)
+    if (input eq null) Json.Null
+    else (new JsonStringParser).relaxedNumbers(isRelaxed).parseVal(input, 0, input.length)
 
   /** Parses a `ByteBuffer`, starting at its current position, to a JSON AST. */
   def parse(input: ByteBuffer): Jast =

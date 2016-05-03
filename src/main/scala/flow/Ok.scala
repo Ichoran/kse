@@ -3,6 +3,8 @@
 
 package kse.flow
 
+import scala.language.experimental.macros
+
 import scala.util.control.{NonFatal, ControlThrowable}
 
 /** An `Ok` holds either of two possibilities, either the favored one, `Yes`,
@@ -44,6 +46,12 @@ sealed trait Ok[+N, +Y] {
   
   /** Retrieves a stored `N` value or produces one from a `Y` using `f`. */
   def noOr[M >: N](f: Y => M): M
+
+  /** Retrieves a stored `Y` value or executes a local or nonlocal return of the No[N] value */
+  def gate: Y = macro ControlFlowMacroImpl.keepYesRetNo
+
+  /** Retrieves a stored 'Y' value or executes a local or nonlocal return of a transformed N value */
+  def gateTo[M](f: N => M): Y = macro ControlFlowMacroImpl.keepYesRetNoMap
   
   
   /** Maps a favored value from `Y` to `Z` using `f`; does nothing to a disfavored value. */
@@ -216,6 +224,8 @@ object Ok {
   
   /** The canonical favored unit value */
   val UnitYes = Yes(())
+
+  //def yesOrReturn[N, Y](yn: Ok[N, Y]): Y = macro ControlFlowMacroImpl.keepYesRetNo
   
   
   /** Explicit handler for noticing disfavored values. */

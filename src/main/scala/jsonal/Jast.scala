@@ -93,7 +93,7 @@ sealed trait Jast {
   def to[A](implicit fj: FromJson[A]): Either[JastError, A]
 
   /** Converts errors into JSON null values */
-  def nullError: Json
+  def errorToNull: Json
 
   /** Lift-style alias for array lookup. */
   @inline final def \(i: Int): Jast = this apply i
@@ -121,7 +121,7 @@ final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.
   def apply(i: Int) = this
   def apply(key: String) = this
   def to[A](implicit fj: FromJson[A]): Either[JastError, A] = Left(this)
-  def nullError: Json = Json.Null
+  def errorToNull: Json = Json.Null
 
   override def toString = {
     var indent = 0
@@ -175,7 +175,7 @@ sealed trait Json extends Jast with AsJson {
   def apply(i: Int): Jast = Json.notIndexableError
   def apply(key: String): Jast = Json.notKeyedError
   def to[A](implicit fj: FromJson[A]): Either[JastError, A] = fj parse this
-  def nullError: Json = this
+  def errorToNull: Json = this
 
   def json: Json = this
   override def toString = { val sb = new java.lang.StringBuilder; jsonString(sb); sb.toString }
