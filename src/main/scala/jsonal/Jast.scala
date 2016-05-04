@@ -806,7 +806,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
           if (ca == '0' && cb == '0') {
             while (i < a.length - 1 && (ca == '0' || ca == '.')) { i += 1; ca = a.charAt(i) }
             while (j < b.length - 1 && (cb == '0' || cb == '.')) { j += 1; cb = b.charAt(j) }
-            (i == a.length - 1 || (ca | 0x20) == 'e') && (j == b.length - 1 || (cb | 0x20) == 'e')
+            ((i == a.length - 1 && ca == '0') || (ca | 0x20) == 'e') && ((j == b.length - 1 && cb == '0') || (cb | 0x20) == 'e')
           }
           else false
         }
@@ -815,21 +815,33 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       var pb = 0  // Decimal point position for b
       if (ca == '0') {
         pa = -1
-        if (i < a.length - 1 && a.charAt(i+1) != '.') return false
-        else if (i < a.length - 2) {
-          i += 2
-          ca = a.charAt(i)
-          while (ca == '0' && i < a.length-1) { i += 1; ca = a.charAt(i); pa -= 1 }          
+        if (i < a.length - 1) {
+          val x = a.charAt(i+1)
+          if ((x | 0x20) != 'e') {
+            if (x != '.') return false
+            else if (i < a.length - 2) {
+              i += 2
+              ca = a.charAt(i)
+              while (ca == '0' && i < a.length-1) { i += 1; ca = a.charAt(i); pa -= 1 }
+            }
+          }
         }
       }
       if (cb == '0') {
         pb = -1
-        if (j < b.length - 1 && b.charAt(j+1) != '.') return false
-        else if (j < b.length - 2) {
-          j += 2
-          cb = b.charAt(j)
-          while (cb == '0' && j < b.length-1) { j += 1; cb = b.charAt(j); pb -= 1 }
+        if (j < b.length - 1) {
+          val y = b.charAt(j+1)
+          if ((y | 0x20) != 'e') {
+            if (y != '.') return false
+            else if (j < b.length - 2) {
+              j += 2
+              cb = b.charAt(j)
+              while (cb == '0' && j < b.length-1) { j += 1; cb = b.charAt(j); pb -= 1 }
+            }
+          }
         }
+        // Might both be zero.  Check!  (Can ignore exponents when both values are zero.)
+        if (ca < '1' || ca > '9') return (cb < '1' || cb > '9')
       }
       var fa = pa < 0  // Found a's decimal point?
       var fb = pb < 0  // Found b's decimal point?

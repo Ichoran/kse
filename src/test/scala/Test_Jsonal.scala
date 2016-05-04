@@ -255,7 +255,7 @@ object Test_Jsonal extends Test_Kse {
           var same = a.length == b.length
           var i = 0
           while (i < a.length && same) { same = a(i) == b(i); i += 1 }
-          if (!same) println(f"${a.length}:${a.take(i+1).mkString} != ${b.length}:${b.take(i+1).mkString}")
+          if (!same) println(f"${a.length}:${a.take(i+1).mkString(",")} != ${b.length}:${b.take(i+1).mkString(",")}")
           same
         case Left(je) => println(je); println(j); false
       }
@@ -427,6 +427,20 @@ object Test_Jsonal extends Test_Kse {
     Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".is).right.get &&
     Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".is).right.get &&
     classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".is).right.get.getClass
+  }
+
+  def test_numericStringEquals: Boolean = {
+    def nsc(a: String, b: String, expect: Boolean = true) = {
+      val ans = Json.Num.numericStringEquals(a, b)
+      if (ans != expect) println(f"$a ${if (expect) "!" else "="}= $b")
+      ans == expect
+    }
+    val zeros = Seq("0", "-0", "0.0000000", "-0.000000", "0e123", "-0e123", "0.0000000e-321", "-0.00000000e-321")
+    val nonzeros = Seq("1", "0.0000000001", "-1", "-0.00000000001", "0.00000125e-129385718957", "-0.000151e9123751871")
+    zeros.forall(z => zeros.forall(y => nsc(z, y))) &&
+    nsc("1e-123456789123456789", "10.0000e-123456789123456790") &&
+    nsc("0E-277906189","0E-277906189") /* issue 5 */ &&
+    zeros.forall(z => nonzeros.forall(n => nsc(z,n,false) && nsc(n,z,false)))
   }
 
   def main(args: Array[String]) { typicalMain(args) }
