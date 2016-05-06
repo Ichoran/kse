@@ -281,7 +281,7 @@ package object flow extends Priority1HopSpecs {
       *
       * Note: this is similar to Rust's `try!` macro.
       */
-    def success_! : A = macro ControlFlowMacroImpl.returnTryOnFailure
+    def OUT: A = macro ControlFlowMacroImpl.returnTryOnFailure
   }
 
   /** Typecasts `Either` to its left branch.  Not a safe operation unless you've already pattern matched. */
@@ -296,7 +296,7 @@ package object flow extends Priority1HopSpecs {
     }
 
     /** Extracts the right value or performs a local or nonlocal return of the (boxed) left branch */
-    def right_! : R = macro ControlFlowMacroImpl.returnEitherOnLeft
+    def OUT: R = macro ControlFlowMacroImpl.returnEitherOnLeft
   }
   
   /** Typecasts `Ok` to its `No` branch.  Not a safe operation unless you've already pattern matched. */
@@ -310,7 +310,7 @@ package object flow extends Priority1HopSpecs {
     @inline def orHop(implicit hop: Hop[N]): Y = if (underlying.isOk) underlying.yes else { hop(underlying.no); null.asInstanceOf[Y] }
 
     /** Extracts the `yes` value or performs a local or nonlocal return of the (boxed) `no` value */
-    def yes_! : Y = macro ControlFlowMacroImpl.returnOkOnNo
+    def OUT: Y = macro ControlFlowMacroImpl.returnOkOnNo
   }
   
   
