@@ -256,6 +256,9 @@ package object flow extends Priority1HopSpecs {
     @inline def toOk: Ok[Unit, A] = underlying match { case Some(a) => Yes(a); case _ => Ok.UnitNo }
   }
 
+  /** Typecasts `Try` to its failure branch.  Not a safe operation unless you've already pattern matched. */
+  @inline def unsafeCastTryToFailure[A](t: scala.util.Try[A]): scala.util.Failure[Nothing] = t.asInstanceOf[scala.util.Failure[Nothing]]
+  
   /** Allows alternatives to `get` on `Try`. */
   implicit class TryCanHop[A](private val underlying: scala.util.Try[A]) extends AnyVal {
     /** Throws an available `Oops` if the `Try` is a `Failure`, gives the `Success` value otherwise. */

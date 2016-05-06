@@ -149,7 +149,7 @@ object ControlFlowMacroImpl {
   def returnTryOnFailure(c: Context): c.Tree = {
     import c.universe._
     val Apply(_, self :: head) = c.prefix.tree
-    q"$self match { case _root_.scala.util.Success(s) => s; case f: _root_scala.util.Failure => ${Return(q"f")}}"
+    q"$self match { case _root_.scala.util.Success(s) => s; case f => ${Return(q"_root_.kse.flow.unsafeCastTryToFailure(f)")}}"
   }
 
   def returnEitherOnLeft(c: Context): c.Tree = {

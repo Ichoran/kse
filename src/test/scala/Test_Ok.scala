@@ -42,14 +42,6 @@ object Test_Ok extends Test_Kse {
 
   def test_noOr = Yes("fish").alt[Int].noOr(_.length) == 4 && No(123).alt[String].noOr(_.toInt) == 123
 
-  def test_gate = {
-    def g1: Ok[Int, String] = Yes(Yes("fish").alt[Int].gate)
-    def g2: Ok[Int, String] = Yes(No(7).alt[String].gate)
-    def g3: Ok[Int, String] = Yes(Yes("fish").alt[Boolean].gateTo(x => if (x) 1 else 0))
-    def g4: Ok[Int, String] = Yes(No(false).alt[String].gateTo(x => if (x) 1 else 0))
-    g1 == Yes("fish") && g2 == No(7) && g3 == Yes("fish") && g4 == No(0)
-  }
-
   def test_map = Yes("fish").map(_.length) == Yes(4) && No("dog").alt[Int].map(_ + 2) == No("dog")
 
   def test_mapNo = Yes("fish").alt[Int].mapNo(_ + 2) == Yes("fish") && No("dog").mapNo(_.length) == No(3)
