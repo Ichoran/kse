@@ -273,7 +273,16 @@ package object flow extends Priority1HopSpecs {
       case scala.util.Success(a) => Yes(a)
       case scala.util.Failure(t) => No(t)
     }
+
+    /** Extracts the successful result or performs a local or nonlocal return of the failure branch.
+      *
+      * Note: this is similar to Rust's `try!` macro.
+      */
+    def success_! : A = macro ControlFlowMacroImpl.returnTryOnFailure
   }
+
+  /** Typecasts `Either` to its left branch.  Not a safe operation unless you've already pattern matched. */
+  @inline def unsafeCastEitherToLeft[L, R](e: Either[L, R]): Left[L, Nothing] = e.asInstanceOf[Left[L, Nothing]]
   
   /** Supplies a method on `Either` to convert it to an [[Ok]]. */
   implicit class EitherCanBeOk[L,R](private val underlying: scala.util.Either[L,R]) extends AnyVal {
@@ -282,7 +291,13 @@ package object flow extends Priority1HopSpecs {
       case scala.util.Right(r) => Yes(r)
       case scala.util.Left(l) => No(l)
     }
+
+    /** Extracts the right value or performs a local or nonlocal return of the (boxed) left branch */
+    def right_! : R = macro ControlFlowMacroImpl.returnEitherOnLeft
   }
+  
+  /** Typecasts `Ok` to its `No` branch.  Not a safe operation unless you've already pattern matched. */
+  @inline def unsafeCastOkToNo[N, Y](ok: Ok[N, Y]): No[N] = ok.asInstanceOf[No[N]]
   
   /** Allows alternatives to `yes` on [[Ok]] */
   implicit class OkCanHop[N,Y](private val underlying: Ok[N,Y]) extends AnyVal {
@@ -290,6 +305,9 @@ package object flow extends Priority1HopSpecs {
     @inline def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops.hop()
     /** Throws a `No` value with an available `Hop`; gives the `Yes` value otherwise. */
     @inline def orHop(implicit hop: Hop[N]): Y = if (underlying.isOk) underlying.yes else { hop(underlying.no); null.asInstanceOf[Y] }
+
+    /** Extracts the `yes` value or performs a local or nonlocal return of the (boxed) `no` value */
+    def yes_! : Y = macro ControlFlowMacroImpl.returnOkOnNo
   }
   
   

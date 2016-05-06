@@ -14,7 +14,7 @@ import scala.util.control.{NonFatal, ControlThrowable}
   * set of methods are provided; and each of the two branches does not remember
   * what the other alternative might have been, simplifying the code. 
   */
-sealed trait Ok[+N, +Y] {
+sealed trait Ok[+N, +Y] extends Product with Serializable {
   
   /** True if this holds a `Y` which can be retrieved with `yes` */
   def isOk: Boolean
@@ -47,12 +47,6 @@ sealed trait Ok[+N, +Y] {
   /** Retrieves a stored `N` value or produces one from a `Y` using `f`. */
   def noOr[M >: N](f: Y => M): M
 
-  /** Retrieves a stored `Y` value or executes a local or nonlocal return of the No[N] value */
-  def gate: Y = macro ControlFlowMacroImpl.keepYesRetNo
-
-  /** Retrieves a stored 'Y' value or executes a local or nonlocal return of a transformed N value */
-  def gateTo[M](f: N => M): Y = macro ControlFlowMacroImpl.keepYesRetNoMap
-  
   
   /** Maps a favored value from `Y` to `Z` using `f`; does nothing to a disfavored value. */
   def map[Z](f: Y => Z): Ok[N, Z]

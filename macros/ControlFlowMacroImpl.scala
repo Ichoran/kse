@@ -142,23 +142,26 @@ object ControlFlowMacroImpl {
     """)
   }
 
-  def keepYesRetNo(c: Context) = {
-    import c.universe._
+  var inspect: Context = null
 
-    c.untypecheck(q"""
-      if (${c.prefix}.isOk) ${c.prefix}.yes
-      else return ${c.prefix}.asInstanceOf[No[${c.prefix.tree.tpe.typeArgs.head}]]
-    """)
+  def typedAsLeftBranch[L, R](e: Either[L, R]): Left[L, Nothing] = e.asInstanceOf[Left[L, Nothing]]
+
+  def returnTryOnFailure(c: Context): c.Tree = {
+    import c.universe._
+    val Apply(_, self :: head) = c.prefix.tree
+    q"$self match { case _root_.scala.util.Success(s) => s; case f: _root_scala.util.Failure => ${Return(q"f")}}"
   }
 
-  def keepYesRetNoMap(c: Context)(f: c.Tree) = {
+  def returnEitherOnLeft(c: Context): c.Tree = {
     import c.universe._
+    val Apply(_, self :: head) = c.prefix.tree
+    // Basic for courtesy of Retronym
+    q"$self match { case _root_.scala.Right(r) => r; case l => ${Return(q"_root_.kse.flow.unsafeCastEitherToLeft(l)")}}"
+  }
 
-    c.untypecheck(q"""
-      ${c.prefix} match {
-        case Yes(y) => y
-        case No(n) => return No($f(n))
-      }
-    """)
+  def returnOkOnNo(c: Context): c.Tree = {
+    import c.universe._
+    val Apply(_, self :: head) = c.prefix.tree
+    q"$self match { case _root_.kse.flow.Yes(y) => y; case n => ${Return(q"_root_.kse.flow.unsafeCastOkToNo(n)")}}"
   }
 }
