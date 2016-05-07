@@ -55,12 +55,12 @@ object Test_Flow_Macros extends Test_Kse {
 
   def test_early_return = {
     import scala.util._
-    def g1: Ok[Int, String] = { val y = Yes("fish").alt[Int].yes_!; Yes(y) }
-    def g2: Ok[Int, String] = { val y = No(7).alt[String].yes_!; Yes(y) }
-    def h1: Either[Int, String] = { val r = (Right("fish"): Either[Int, String]).right_!; Right(r) }
-    def h2: Either[Int, String] = { val r = (Left(7): Either[Int, String]).right_!; Right(r) }
-    def i1: Try[Int] = { val t = Try("7".toInt).success_!; Try(t) }
-    def i2: Try[Int] = { val t = Try("fish".toInt).success_!; Try(t) }
+    def g1: Ok[Int, String] = { val y = Yes("fish").alt[Int].OUT; Yes(y) }
+    def g2: Ok[Int, String] = { val y = No(7).alt[String].OUT; Yes(y) }
+    def h1: Either[Int, String] = { val r = (Right("fish"): Either[Int, String]).OUT; Right(r) }
+    def h2: Either[Int, String] = { val r = (Left(7): Either[Int, String]).OUT; Right(r) }
+    def i1: Try[Int] = { val t = Try("7".toInt).OUT; Try(t) }
+    def i2: Try[Int] = { val t = Try("fish".toInt).OUT; Try(t) }
     g1 == Yes("fish") && g2 == No(7) && h1 == Right("fish") && h2 == Left(7) && i1 == Success(7) && !i2.isSuccess
   }
 
