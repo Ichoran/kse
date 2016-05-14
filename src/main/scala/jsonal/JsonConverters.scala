@@ -111,10 +111,55 @@ object JsonConverters extends PriorityTwoJsonConverters {
   private val genericJsonOptionIsJsonized: Jsonize[Option[Json]] =
     new Jsonize[Option[Json]] { def jsonize(oj: Option[Json]) = if (oj.isDefined) oj.get else Json.Null }
   implicit def jsonOptionIsImplicitlyJsonized[J <: Json] = genericJsonOptionIsJsonized.asInstanceOf[Jsonize[Option[J]]]
+  implicit val bareNoneIsImplicitlyJsonized: Jsonize[None.type] = new Jsonize[None.type] { def jsonize(n: None.type) = Json.Null }
   implicit def jsonArrayIsImplicitlyJsonized[J <: Json] =
     new Jsonize[Array[J]] { def jsonize(aj: Array[J]) = Json ~~ aj ~~ Json }
   implicit def jsonMapIsImplicitlyJsonized[J <: Json] =
     new Jsonize[collection.Map[String, J]] { def jsonize(mj: collection.Map[String, J]) = Json ~~ mj ~~ Json }
+
+  implicit def tuple2isImplicitlyJsonized[A, B](implicit ja: Jsonize[A], jb: Jsonize[B]) =
+    new Jsonize[(A, B)] { def jsonize(x: (A, B)) = Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ Json }
+  implicit def tuple3isImplicitlyJsonized[A, B, C](implicit ja: Jsonize[A], jb: Jsonize[B], jc: Jsonize[C]) =
+    new Jsonize[(A, B, C)] { def jsonize(x: (A, B, C)) = Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ jc.jsonize(x._3) ~ Json }
+  implicit def tuple4isImplicitlyJsonized[A, B, C, D](implicit ja: Jsonize[A], jb: Jsonize[B], jc: Jsonize[C], jd: Jsonize[D]) =
+    new Jsonize[(A, B, C, D)] {
+      def jsonize(x: (A, B, C, D)) = Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ jc.jsonize(x._3) ~ jd.jsonize(x._4) ~ Json
+    }
+  implicit def tuple5isImplicitlyJsonized[A, B, C, D, E](
+    implicit ja: Jsonize[A], jb: Jsonize[B], jc: Jsonize[C], jd: Jsonize[D], je: Jsonize[E]
+  ) = new Jsonize[(A, B, C, D, E)] {
+    def jsonize(x: (A, B, C, D, E)) =
+      Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ jc.jsonize(x._3) ~ jd.jsonize(x._4) ~ je.jsonize(x._5) ~ Json
+  }
+  implicit def tuple6isImplicitlyJsonized[A, B, C, D, E, F](
+    implicit ja: Jsonize[A], jb: Jsonize[B], jc: Jsonize[C], jd: Jsonize[D], je: Jsonize[E], jf: Jsonize[F]
+  ) = new Jsonize[(A, B, C, D, E, F)] {
+    def jsonize(x: (A, B, C, D, E, F)) =
+      Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ jc.jsonize(x._3) ~ jd.jsonize(x._4) ~ je.jsonize(x._5) ~ jf.jsonize(x._6) ~ Json
+  }
+  implicit def tuple7isImplicitlyJsonized[A, B, C, D, E, F, G](
+    implicit ja: Jsonize[A], jb: Jsonize[B], jc: Jsonize[C], jd: Jsonize[D], je: Jsonize[E], jf: Jsonize[F], jg: Jsonize[G]
+  ) = new Jsonize[(A, B, C, D, E, F, G)] {
+    def jsonize(x: (A, B, C, D, E, F, G)) =
+      Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ jc.jsonize(x._3) ~ jd.jsonize(x._4) ~
+             je.jsonize(x._5) ~ jf.jsonize(x._6) ~ jg.jsonize(x._7) ~ Json
+  }
+  implicit def tuple8isImplicitlyJsonized[A, B, C, D, E, F, G, H](
+    implicit ja: Jsonize[A], jb: Jsonize[B], jc: Jsonize[C], jd: Jsonize[D],
+             je: Jsonize[E], jf: Jsonize[F], jg: Jsonize[G], jh: Jsonize[H]
+  ) = new Jsonize[(A, B, C, D, E, F, G, H)] {
+    def jsonize(x: (A, B, C, D, E, F, G, H)) =
+      Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ jc.jsonize(x._3) ~ jd.jsonize(x._4) ~
+             je.jsonize(x._5) ~ jf.jsonize(x._6) ~ jg.jsonize(x._7) ~ jh.jsonize(x._8) ~ Json
+  }
+  implicit def tuple9isImplicitlyJsonized[A, B, C, D, E, F, G, H, I](
+    implicit ja: Jsonize[A], jb: Jsonize[B], jc: Jsonize[C], jd: Jsonize[D], je: Jsonize[E],
+             jf: Jsonize[F], jg: Jsonize[G], jh: Jsonize[H], ji: Jsonize[I]
+  ) = new Jsonize[(A, B, C, D, E, F, G, H, I)] {
+    def jsonize(x: (A, B, C, D, E, F, G, H, I)) =
+      Json ~ ja.jsonize(x._1) ~ jb.jsonize(x._2) ~ jc.jsonize(x._3) ~ jd.jsonize(x._4) ~ je.jsonize(x._5) ~
+             jf.jsonize(x._6) ~ jg.jsonize(x._7) ~ jh.jsonize(x._8) ~ ji.jsonize(x._9) ~ Json
+  }
 
   implicit val booleanFromJson: FromJson[Boolean] = new FromJson[Boolean] {
     def parse(js: Json): Either[JastError, Boolean] = js.bool match {
@@ -272,6 +317,138 @@ object JsonConverters extends PriorityTwoJsonConverters {
           catch { case t if NonFatal(t) => }
         Left(JastError("Not properly formatted as a ZonedDateTime"))
       case _ => Left(JastError("Not a ZonedDateTime because not a string"))
+    }
+  }
+
+  implicit def tuple2FromJson[A, B](implicit fja: FromJson[A], fjb: FromJson[B]) = new FromJson[(A, B)] {
+    type FJ = Either[JastError, (A, B)]
+    def parse(js: Json): FJ = js match {
+      case ja: Json.Arr =>
+        if (ja.size != 2) Left(JastError("Exactly two elements required."))
+        val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        Right((a, b))
+      case _ => Left(JastError("Not a tuple because not a JSON array"))
+    }
+  }
+  implicit def tuple3FromJson[A, B, C](implicit fja: FromJson[A], fjb: FromJson[B], fjc: FromJson[C]) = new FromJson[(A, B, C)] {
+    type FJ = Either[JastError, (A, B, C)]
+    def parse(js: Json): FJ = js match {
+      case ja: Json.Arr =>
+        if (ja.size != 3) Left(JastError("Exactly three elements required."))
+        val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val c = fjc.parseJast(ja(2)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        Right((a, b, c))
+      case _ => Left(JastError("Not a tuple because not a JSON array"))
+    }
+  }
+  implicit def tuple4FromJson[A, B, C, D](implicit fja: FromJson[A], fjb: FromJson[B], fjc: FromJson[C], fjd: FromJson[D]) =
+    new FromJson[(A, B, C, D)] {
+      type FJ = Either[JastError, (A, B, C, D)]
+      def parse(js: Json): FJ = js match {
+        case ja: Json.Arr =>
+          if (ja.size != 4) Left(JastError("Exactly four elements required."))
+          val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+          val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+          val c = fjc.parseJast(ja(2)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+          val d = fjd.parseJast(ja(3)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+          Right((a, b, c, d))
+        case _ => Left(JastError("Not a tuple because not a JSON array"))
+      }
+    }
+  implicit def tuple5FromJson[A, B, C, D, E](
+    implicit fja: FromJson[A], fjb: FromJson[B], fjc: FromJson[C], fjd: FromJson[D], fje: FromJson[E]
+  ) = new FromJson[(A, B, C, D, E)] {
+    type FJ = Either[JastError, (A, B, C, D, E)]
+    def parse(js: Json): FJ = js match {
+      case ja: Json.Arr =>
+        if (ja.size != 5) Left(JastError("Exactly five elements required."))
+        val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val c = fjc.parseJast(ja(2)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val d = fjd.parseJast(ja(3)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val e = fje.parseJast(ja(4)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        Right((a, b, c, d, e))
+      case _ => Left(JastError("Not a tuple because not a JSON array"))
+    }
+  }
+  implicit def tuple6FromJson[A, B, C, D, E, F](
+    implicit fja: FromJson[A], fjb: FromJson[B], fjc: FromJson[C], fjd: FromJson[D], fje: FromJson[E],
+             fjf: FromJson[F]
+  ) = new FromJson[(A, B, C, D, E, F)] {
+    type FJ = Either[JastError, (A, B, C, D, E, F)]
+    def parse(js: Json): FJ = js match {
+      case ja: Json.Arr =>
+        if (ja.size != 6) Left(JastError("Exactly six elements required."))
+        val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val c = fjc.parseJast(ja(2)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val d = fjd.parseJast(ja(3)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val e = fje.parseJast(ja(4)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val f = fjf.parseJast(ja(5)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        Right((a, b, c, d, e, f))
+      case _ => Left(JastError("Not a tuple because not a JSON array"))
+    }
+  }
+  implicit def tuple7FromJson[A, B, C, D, E, F, G](
+    implicit fja: FromJson[A], fjb: FromJson[B], fjc: FromJson[C], fjd: FromJson[D], fje: FromJson[E],
+             fjf: FromJson[F], fjg: FromJson[G]
+  ) = new FromJson[(A, B, C, D, E, F, G)] {
+    type FJ = Either[JastError, (A, B, C, D, E, F, G)]
+    def parse(js: Json): FJ = js match {
+      case ja: Json.Arr =>
+        if (ja.size != 7) Left(JastError("Exactly seven elements required."))
+        val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val c = fjc.parseJast(ja(2)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val d = fjd.parseJast(ja(3)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val e = fje.parseJast(ja(4)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val f = fjf.parseJast(ja(5)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val g = fjg.parseJast(ja(6)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        Right((a, b, c, d, e, f, g))
+      case _ => Left(JastError("Not a tuple because not a JSON array"))
+    }
+  }
+  implicit def tuple8FromJson[A, B, C, D, E, F, G, H](
+    implicit fja: FromJson[A], fjb: FromJson[B], fjc: FromJson[C], fjd: FromJson[D], fje: FromJson[E],
+             fjf: FromJson[F], fjg: FromJson[G], fjh: FromJson[H]
+  ) = new FromJson[(A, B, C, D, E, F, G, H)] {
+    type FJ = Either[JastError, (A, B, C, D, E, F, G, H)]
+    def parse(js: Json): FJ = js match {
+      case ja: Json.Arr =>
+        if (ja.size != 8) Left(JastError("Exactly eight elements required."))
+        val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val c = fjc.parseJast(ja(2)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val d = fjd.parseJast(ja(3)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val e = fje.parseJast(ja(4)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val f = fjf.parseJast(ja(5)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val g = fjg.parseJast(ja(6)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val h = fjh.parseJast(ja(7)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        Right((a, b, c, d, e, f, g, h))
+      case _ => Left(JastError("Not a tuple because not a JSON array"))
+    }
+  }
+  implicit def tuple9FromJson[A, B, C, D, E, F, G, H, I](
+    implicit fja: FromJson[A], fjb: FromJson[B], fjc: FromJson[C], fjd: FromJson[D], fje: FromJson[E],
+             fjf: FromJson[F], fjg: FromJson[G], fjh: FromJson[H], fji: FromJson[I]
+  ) = new FromJson[(A, B, C, D, E, F, G, H, I)] {
+    type FJ = Either[JastError, (A, B, C, D, E, F, G, H, I)]
+    def parse(js: Json): FJ = js match {
+      case ja: Json.Arr =>
+        if (ja.size != 8) Left(JastError("Exactly eight elements required."))
+        val a = fja.parseJast(ja(0)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val b = fjb.parseJast(ja(1)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val c = fjc.parseJast(ja(2)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val d = fjd.parseJast(ja(3)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val e = fje.parseJast(ja(4)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val f = fjf.parseJast(ja(5)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val g = fjg.parseJast(ja(6)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val h = fjh.parseJast(ja(7)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        val i = fji.parseJast(ja(8)) match { case l: Left[_, _] => return l.asInstanceOf[FJ]; case Right(r) => r }
+        Right((a, b, c, d, e, f, g, h, i))
+      case _ => Left(JastError("Not a tuple because not a JSON array"))
     }
   }
 }

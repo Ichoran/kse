@@ -305,7 +305,15 @@ object Test_Jsonal extends Test_Kse {
     { val now = java.time.OffsetDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
     { val now = java.time.OffsetDateTime.now; (Json ~ now ~ Json).to[Array[java.time.OffsetDateTime]].right.map(_.headOption) =?= Right(Option(now)) } &&
     { val now = java.time.ZonedDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
-    { val now = java.time.ZonedDateTime.now; (Json ~ now ~ Json).to[Array[java.time.ZonedDateTime]].right.map(_.headOption) =?= Right(Option(now)) }
+    { val now = java.time.ZonedDateTime.now; (Json ~ now ~ Json).to[Array[java.time.ZonedDateTime]].right.map(_.headOption) =?= Right(Option(now)) } &&
+    { val x = ("one", 2); Json(x).to[(String, Int)] =?= Right(x) } &&
+    { val x = ("one", 2, 3); Json(x).to[(String, Int, Double)] =?= Right(x) } &&
+    { val x = (1, 2, 3, 4); Json(x).to[(Int, Long, Double, Int)] =?= Right(x) } &&
+    { val x = ("one", 2, 3, "four", 5); Json(x).to[(String, Int, Int, String, Int)] =?= Right(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six"); Json(x).to[(String, Int, Int, String, Int, String)] =?= Right(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six", 7); Json(x).to[(String, Int, Int, String, Int, String, Int)] =?= Right(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six", 7, None); Json(x).to[(String, Int, Int, String, Int, String, Int, Option[String])] =?= Right(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six", 7, None, (0, 9)); Json(x).to[(String, Int, Int, String, Int, String, Int, Option[String], (Int, Double))] =?= Right(x) }
   }
 
   def test_specifics_String: Boolean = {

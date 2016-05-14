@@ -14,6 +14,12 @@ trait FromJson[A] {
   /** Recover the object from its JSON representation. */
   def parse(input: Json): Either[JastError, A]
 
+  /** Recover the object from its JSON representation if there was a JSON representation */
+  def parseJast(input: Jast): Either[JastError, A] = input match {
+    case je: JastError => Left(je)
+    case js: Json => parse(js)
+  }
+
   /** Deserialize the object from a string containing its JSON representation, keeping track of the end of parsing. */
   def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, A] = Json.parse(input, i0, iN, ep) match {
     case Left(je)  => Left(je)
