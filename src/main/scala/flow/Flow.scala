@@ -260,7 +260,7 @@ package object flow extends Priority1HopSpecs {
   @inline def unsafeCastTryToFailure[A](t: scala.util.Try[A]): scala.util.Failure[Nothing] = t.asInstanceOf[scala.util.Failure[Nothing]]
   
   /** Allows alternatives to `get` on `Try`. */
-  implicit class TryCanHop[A](private val underlying: scala.util.Try[A]) extends AnyVal {
+  implicit class TryCanHopAndSuch[A](private val underlying: scala.util.Try[A]) extends AnyVal {
     /** Throws an available `Oops` if the `Try` is a `Failure`, gives the `Success` value otherwise. */
     @inline def grab(implicit oops: Oops): A = underlying match {
       case scala.util.Success(a) => a
@@ -311,6 +311,47 @@ package object flow extends Priority1HopSpecs {
 
     /** Extracts the `yes` value or performs a local or nonlocal return of the (boxed) `no` value */
     def OUT: Y = macro ControlFlowMacroImpl.returnOkOnNo
+  }
+
+  /** Allows [[Ok]] to convert exceptions into a string representation.  Surprisingly complicated to do right! */
+  implicit class OkCanExplainErrors[N <: Throwable, Y](private val underlying: Ok[N, Y]) extends AnyVal {
+    import collection.mutable.LongMap
+    private def notYetSeen(t: Throwable, seen: LongMap[List[Throwable]]): Boolean = {
+      val ihc = System.identityHashCode(t)
+      val entry = seen.getOrNull(ihc)
+      if (entry eq null) { seen += ((ihc, t :: Nil)); true }
+      else if (!entry.exists(_ eq t)) { seen += ((ihc, t :: entry)); true }
+      else false
+    }
+    private def throwableToArray(t0: Throwable, lines: Int, alreadySeen: LongMap[List[Throwable]] = null): Array[String] = {
+      val seen = if (alreadySeen eq null) new LongMap[List[Throwable]] else alreadySeen
+      val sab = Array.newBuilder[String]
+      var t = (t0, "", lines, false) :: Nil
+      while (t.nonEmpty) {
+        val (ti, si, ni, cb) = t.head
+        t = t.tail
+        if (notYetSeen(ti, seen)) {
+          sab += (if (cb) si + "CAUSED BY " else si) + ti.getClass.getName + ": " + ti.getMessage
+          val st = ti.getStackTrace
+          sab ++= st.take(ni).map(_.toString)
+          if (st.length > ni && ni > 0) sab += si + "...[" + (st.length - ni).toString + " lines elided]"
+          val tj = ti.getCause
+          if (tj ne null) t = ((tj, si, lines, true)) :: t
+          val sup = ti.getSuppressed
+          if (sup.length > 0) t = sup.reverse.map(s => (s, si + "> ", lines/2, false)) ++: t
+        }
+        else sab += si + "(Circular reference to " + ti.getClass.getName + ": " + ti.getMessage + ")"
+      }
+      sab.result
+    }
+    def explainAsVector(lines: Int = Int.MaxValue): Ok[Vector[String], Y] = underlying match {
+      case No(n) => No(throwableToArray(n, lines).toVector)
+      case y: Yes[_] => y
+    }
+    def explain(lines: Int = Int.MaxValue): Ok[String, Y] = underlying match {
+      case No(n) => No(throwableToArray(n, lines).mkString("\n"))
+      case y: Yes[_] => y
+    }
   }
   
   

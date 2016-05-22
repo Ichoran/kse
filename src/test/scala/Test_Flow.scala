@@ -100,6 +100,14 @@ object Test_Flow extends Test_Kse {
     ) =?= Seq(No(1), Yes(Yes(0.0)), Yes(No(2)), Yes(No(-1)))
   }
 
+  def test_sane_exceptions = {
+    val e = new Exception("fish");
+    val ee = new Exception("wish", e);
+    safe{ throw ee }.explain().swap.exists(x => x.contains("wish") && x.contains("fish")) &&
+    { e.addSuppressed(ee); safe{ throw(ee) }}.
+      explain().swap.exists(x => x.contains("wish") && x.contains("fish") && x.contains("> (Circ"))
+  }
+
   def main(args: Array[String]) { typicalMain(args) }
 }
 
