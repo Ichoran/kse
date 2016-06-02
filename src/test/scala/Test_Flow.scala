@@ -100,12 +100,16 @@ object Test_Flow extends Test_Kse {
     ) =?= Seq(No(1), Yes(Yes(0.0)), Yes(No(2)), Yes(No(-1)))
   }
 
-  def test_sane_exceptions = {
+  def test_explainExceptions = {
     val e = new Exception("fish");
     val ee = new Exception("wish", e);
-    safe{ throw ee }.explain().swap.exists(x => x.contains("wish") && x.contains("fish")) &&
+    ee.explain().fn(x => x.contains("wish") && x.contains("fish")) &&
+    safe{ throw ee }.explain() =?= No(ee.explain()) &&
     { e.addSuppressed(ee); safe{ throw(ee) }}.
-      explain().swap.exists(x => x.contains("wish") && x.contains("fish") && x.contains("> (Circ"))
+      explain().swap.exists(x => x.contains("wish") && x.contains("fish") && x.contains("> (Circ")) &&
+    safe{ throw ee }.explainAsVector() =?= No(ee.explainAsVector()) &&
+    e.explain() =?= e.explainAsArray().mkString("\n") &&
+    e.explainAsVector() =?= e.explainAsArray().toList
   }
 
   def main(args: Array[String]) { typicalMain(args) }

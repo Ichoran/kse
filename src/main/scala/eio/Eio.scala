@@ -159,7 +159,7 @@ package object eio {
         case fi % _ => fi
         case _ => underlying
       }
-      if (ext == null) f0
+      if (ext == null || ext == "") f0
       else {
         val p0 = f0.getParentFile
         val name = f0.getName + "." + ext

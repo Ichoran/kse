@@ -313,8 +313,8 @@ package object flow extends Priority1HopSpecs {
     def OUT: Y = macro ControlFlowMacroImpl.returnOkOnNo
   }
 
-  /** Allows [[Ok]] to convert exceptions into a string representation.  Surprisingly complicated to do right! */
-  implicit class OkCanExplainErrors[N <: Throwable, Y](private val underlying: Ok[N, Y]) extends AnyVal {
+  /** Allows exceptions to convert themselves to a string representation.  Surprisingly complicated to do right! */
+  implicit class ThrowableCanExplainItself(private val underlying: Throwable) extends AnyVal {
     import collection.mutable.LongMap
     private def notYetSeen(t: Throwable, seen: LongMap[List[Throwable]]): Boolean = {
       val ihc = System.identityHashCode(t)
@@ -323,10 +323,10 @@ package object flow extends Priority1HopSpecs {
       else if (!entry.exists(_ eq t)) { seen += ((ihc, t :: entry)); true }
       else false
     }
-    private def throwableToArray(t0: Throwable, lines: Int, alreadySeen: LongMap[List[Throwable]] = null): Array[String] = {
+    private def myArray(lines: Int, alreadySeen: LongMap[List[Throwable]] = null): Array[String] = {
       val seen = if (alreadySeen eq null) new LongMap[List[Throwable]] else alreadySeen
       val sab = Array.newBuilder[String]
-      var t = (t0, "", lines, false) :: Nil
+      var t = (underlying, "", lines, false) :: Nil
       while (t.nonEmpty) {
         val (ti, si, ni, cb) = t.head
         t = t.tail
@@ -344,15 +344,27 @@ package object flow extends Priority1HopSpecs {
       }
       sab.result
     }
+    def explainAsArray(lines: Int = Int.MaxValue): Array[String] = myArray(lines)
+    def explainAsVector(lines: Int = Int.MaxValue): Vector[String] = myArray(lines).toVector
+    def explain(lines: Int = Int.MaxValue): String = myArray(lines).mkString("\n")
+  }
+
+  /** Allows [[Ok]] to convert exceptions into a string representation. */
+  implicit class OkCanExplainErrors[N <: Throwable, Y](private val underlying: Ok[N, Y]) extends AnyVal {
+    def explainAsArray(lines: Int = Int.MaxValue): Ok[Array[String], Y] = underlying match {
+      case No(n) => No((new ThrowableCanExplainItself(n)).explainAsArray(lines))
+      case y: Yes[_] => y
+    }
     def explainAsVector(lines: Int = Int.MaxValue): Ok[Vector[String], Y] = underlying match {
-      case No(n) => No(throwableToArray(n, lines).toVector)
+      case No(n) => No((new ThrowableCanExplainItself(n)).explainAsVector(lines))
       case y: Yes[_] => y
     }
     def explain(lines: Int = Int.MaxValue): Ok[String, Y] = underlying match {
-      case No(n) => No(throwableToArray(n, lines).mkString("\n"))
+      case No(n) => No((new ThrowableCanExplainItself(n)).explain(lines))
       case y: Yes[_] => y
     }
   }
+
   
   
   /** Provides standard control-flow methods that should exist on Object. */

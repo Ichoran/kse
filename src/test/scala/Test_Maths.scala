@@ -37,6 +37,31 @@ object Test_Maths extends Test_Kse {
     true
   }
 
+  def test_error_estimate: Boolean = {
+    val r = new scala.util.Random(8715351)
+    val x = Array.fill(24){ r.nextDouble }
+    val xm = x.sum / x.length
+    val xs = x.map(_ - xm).map(_.sq).sum
+    (1 until 24).forall{ k =>
+      def is(a: Double, b: Double, what: String = ""): Boolean = {
+        val diff = (a-b).abs
+        if (diff < 1e-12) true else { println(f"$k $a $b ${x.mkString(",")} $what"); false } 
+      }
+      val a = x.take(k)
+      val b = x.drop(k)
+      val ex = stats.Est from x
+      val ea = stats.Est from a
+      val eb = stats.Est from b
+      val e1 = stats.EstM(); x.foreach{ e1 += _ }
+      val e2 = ea.mutable; b.foreach{ e2 += _ }
+      val e3 = ea.mutable; e3 ++= eb
+      val e4 = eb.mutable; e4 ++= ea
+      e1.n =?= e2.n && e1.n =?= e3.n && e1.n =?= e4.n && e1.n =?= ex.n && e1.n =?= x.length &&
+      is(e1.mean, e2.mean, "m12") && is(e1.mean, e3.mean, "m13") && is(e1.mean, e4.mean, "m14") && is(e1.mean, ex.mean) && is(e1.mean, xm, "m") &&
+      is(e1.sse, e2.sse, "s12") && is(e1.sse, e3.sse, "s13") && is(e1.sse, e4.sse, "s14") && is(e1.sse, ex.sse) && is(e1.sse, xs, "s")
+    }
+  }
+
   def main(args: Array[String]) { typicalMain(args) }
 }
 
