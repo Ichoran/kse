@@ -41,9 +41,9 @@ trait Estimate extends Deviable {
   def mean: Double
   def sse: Double
   final def value = mean
-  def variance = sse / (if (n > 2) 1 else n-1)
+  def variance = sse / (if (n > 2) n-1 else 1)
   def sd = math.sqrt(variance)
-  def errorSq = sse / (if (n > 2) 1 else n.toDouble*(n-1))
+  def errorSq = sse / (if (n > 1) n.toDouble*(n-1) else 1)
   def error = math.sqrt(errorSq)
   def coev = error / mean
 }
