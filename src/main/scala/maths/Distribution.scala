@@ -219,30 +219,56 @@ object EstX {
   def from(data: Array[Double]): EstX = from(data, 0, data.length)
 }
 
-/*
 trait Quantile extends Estimate {
   def icdf(p: Double): Double
   def cdf(x: Double): Double
-  def max: Double = icdf(1)
-  def min: Double = icdf(0)
   def median: Double = icdf(0.5)
   def fwhm: Double = icdf(0.75) - icdf(0.25)
 }
 
-trait Histographic extends Quantile {
-  def bin(x: Double): Int
+trait Histographic extends Quantile with Extremal {
   def borders: Array[Double]
+  def bin(x: Double): Int = {
+    if (borders.length == 0) return -1
+    var lo = 0
+    var hi = borders.length - 1
+    while (hi-lo > 1) {
+      val m = (hi+lo)/2
+      if (borders(m) < x) lo = m
+      else hi = m
+    }
+    if (x < lo) lo-1
+    else if (x < hi) lo
+    else hi
+  }
 }
 
-class HistM(initialBorders: Array[Double], fineness: Double = 0.1) extends Histographic {
-  private var bounds =
-    if ((initialBorders eq null) || initialBorders.length < 2) null
-    else java.util.Arrays.copyOf(initialBorders, initialBorders.length)
-  private var counts =
-    if (borders eq null) null
-    else new Array[Int](borders.length - 1)
-  override var max = Double.NaN
-  override var min = Double.NaN
-  var n = 0
+class Hist(val borders: Array[Double]) extends Histographic with Extremal {
+  private val gauss = new EstXM()
+  private val tooLow, tooHigh = new EstM()
+  private val counts = new Array[Int](math.max(0, borders.length - 1))
+  private var cumuls: Array[Int] = null
+  private var cumulThrough = 0
+  private var myNans = 0
+  def max = gauss.max
+  def min = gauss.min
+  def central = gauss.central
+  def n = gauss.n
+  def mean = gauss.mean
+  def sse = gauss.sse
+  def nans = myNans
+  def +=(x: Double): this.type = {
+    if (x.nan) myNans += 1
+    else {
+      gauss += x
+      val i = bin(x)
+      cumulThrough = math.min(cumulThrough, i+1)
+      if (i < 0) tooLow += x
+      else if (i > counts.length) tooHigh += x
+      else counts(i) += 1
+    }
+    this
+  }
+  def cdf(x: Double): Double = ???
+  def icdf(x: Double): Double = ???
 }
-*/
