@@ -42,6 +42,8 @@ object Test_Maths extends Test_Kse {
     val x = Array.fill(24){ r.nextDouble }
     val xm = x.sum / x.length
     val xs = x.map(_ - xm).map(_.sq).sum
+    val xhi = x.max
+    val xlo = x.min
     (1 until 24).forall{ k =>
       def is(a: Double, b: Double, what: String = ""): Boolean = {
         val diff = (a-b).abs
@@ -56,9 +58,17 @@ object Test_Maths extends Test_Kse {
       val e2 = ea.mutable; b.foreach{ e2 += _ }
       val e3 = ea.mutable; e3 ++= eb
       val e4 = eb.mutable; e4 ++= ea
+      val fx = stats.EstX from x
+      val f1 = stats.EstXM(); x.foreach{ f1 += _ }
+      val f2 = stats.EstXM(); f2 ++= (stats.EstX from a); f2 ++= (stats.EstX from b) 
       e1.n =?= e2.n && e1.n =?= e3.n && e1.n =?= e4.n && e1.n =?= ex.n && e1.n =?= x.length &&
       is(e1.mean, e2.mean, "m12") && is(e1.mean, e3.mean, "m13") && is(e1.mean, e4.mean, "m14") && is(e1.mean, ex.mean) && is(e1.mean, xm, "m") &&
-      is(e1.sse, e2.sse, "s12") && is(e1.sse, e3.sse, "s13") && is(e1.sse, e4.sse, "s14") && is(e1.sse, ex.sse) && is(e1.sse, xs, "s")
+      is(e1.sse, e2.sse, "s12") && is(e1.sse, e3.sse, "s13") && is(e1.sse, e4.sse, "s14") && is(e1.sse, ex.sse) && is(e1.sse, xs, "s") &&
+      e1.n =?= fx.n && e1.n =?= f1.n && e1.n =?= f2.n &&
+      is(e1.mean, fx.mean, "fxm") && is(e1.mean, f1.mean, "f1m") && is(e1.mean, f2.mean, "f2m") &&
+      is(e1.sse, fx.sse, "fxe") && is(e1.sse, f1.sse, "f1e") && is(e1.sse, f2.sse, "f2e") &&
+      is(xhi, fx.max, "fx^") && is(fx.max, f1.max, "f1^") && is(fx.max, f2.max, "f2^") &&
+      is(xlo, fx.min, "fx_") && is(fx.min, f1.min, "f1_") && is(fx.min, f2.min, "f2_")
     }
   }
 

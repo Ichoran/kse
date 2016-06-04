@@ -95,11 +95,11 @@ object Est {
     var cuml = 0.0
     var i = iA
     var n = 0
-    while (i < iB) { val x = data(i0); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
+    while (i < iB) { val x = data(i); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
     val mean = if (n > 0) cuml/n else 0.0
     cuml = 0.0
     i = iA
-    while (i < iB) { val x = data(i0); if (!x.nan) { cuml += (data(i) - mean).sq }; i += 1 }
+    while (i < iB) { val x = data(i); if (!x.nan) { cuml += (x - mean).sq }; i += 1 }
     new Est(n, mean, cuml)
   }
   def from(data: Array[Float]): Est = from(data, 0, data.length)
@@ -109,11 +109,11 @@ object Est {
     var cuml = 0.0
     var i = iA
     var n = 0
-    while (i < iB) { val x = data(i0); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
+    while (i < iB) { val x = data(i); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
     val mean = if (n > 0) cuml/n else 0.0
     cuml = 0.0
     i = iA
-    while (i < iB) { val x = data(i0); if (!x.nan) { cuml += (data(i) - mean).sq }; i += 1 }
+    while (i < iB) { val x = data(i); if (!x.nan) { cuml += (x - mean).sq }; i += 1 }
     new Est(n, mean, cuml)
   }
   def from(data: Array[Double]): Est = from(data, 0, data.length)
@@ -175,16 +175,16 @@ object EstX {
     var cuml = 0.0
     var i = iA
     var n = 0
-    while (i < iB) { val x = data(i0); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
+    while (i < iB) { val x = data(i); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
     val mean = if (n > 0) cuml/n else 0.0
     if (n < 2) return EstX(n, mean, 0, mean, mean)
     cuml = 0.0
     i = iA
     var min, max = mean
     while (i < iB) {
-      val x = data(i0)
+      val x = data(i)
       if (!x.nan) { 
-        cuml += (data(i) - mean).sq
+        cuml += (x - mean).sq
         if (x > max) max = x
         else if (x < min) min = x
       }
@@ -199,16 +199,16 @@ object EstX {
     var cuml = 0.0
     var i = iA
     var n = 0
-    while (i < iB) { val x = data(i0); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
+    while (i < iB) { val x = data(i); if (!x.nan) { cuml += x; n += 1 }; i += 1 }
     val mean = if (n > 0) cuml/n else 0.0
     if (n < 2) return EstX(n, mean, 0, mean, mean)
     cuml = 0.0
     i = iA
     var min, max = mean
     while (i < iB) {
-      val x = data(i0)
+      val x = data(i)
       if (!x.nan) { 
-        cuml += (data(i) - mean).sq
+        cuml += (x - mean).sq
         if (x > max) max = x
         else if (x < min) min = x
       }
