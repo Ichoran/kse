@@ -232,7 +232,7 @@ trait Quantile extends Estimate {
 
 trait Histographic extends Quantile with Extremal {
   def borders: Array[Double]
-  def bin(x: Double): Int = {
+  def binOf(x: Double): Int = {
     if (borders.length == 0) return -1
     var lo = 0
     var hi = borders.length - 1
@@ -265,7 +265,7 @@ class HistM(val borders: Array[Double]) extends Histographic with Extremal {
     if (x.nan) myNans += 1
     else {
       gauss += x
-      val i = bin(x)
+      val i = binOf(x)
       cumulThrough = math.min(cumulThrough, i)
       if (i < 0) tooLow += x
       else if (i > counts.length) tooHigh += x
@@ -275,8 +275,12 @@ class HistM(val borders: Array[Double]) extends Histographic with Extremal {
   }
   def lobin: Est = tooLow.immutable
   def hibin: Est = tooHigh.immutable
+  def slot(i: Int): Int = 
+    if (i < 0) tooLow.n
+    else if (i >= counts.length) tooHigh.n
+    else counts(i)
   def rankOf(x: Double): Double = {
-    val i = bin(x)
+    val i = binOf(x)
     if (i < 0 || i > counts.length-1) Double.NaN
     else {
       if (i-1 > cumulThrough) {

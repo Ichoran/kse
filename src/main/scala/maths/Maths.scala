@@ -129,6 +129,7 @@ package object maths {
     @inline final def finite = (java.lang.Float.floatToRawIntBits(value) & 0x7F800000) != 0x7F800000
     @inline final def bits = java.lang.Float.floatToRawIntBits(value)
     @inline final def clip(lo: Float, hi: Float) = max(lo, min(hi, value))
+    @inline final def in(lo: Float, hi: Float) = lo <= value && value <= hi
   }
 
   implicit class EnrichedDoubleMaths(private val value: Double) extends AnyVal {
@@ -169,6 +170,7 @@ package object maths {
     @inline final def finite = (java.lang.Double.doubleToRawLongBits(value) & 0x7FF0000000000000L) != 0x7FF0000000000000L
     @inline final def bits = java.lang.Double.doubleToRawLongBits(value)
     @inline final def clip(lo: Double, hi: Double) = max(lo, min(hi, value))
+    @inline final def in(lo: Double, hi: Double) = lo <= value && value <= hi
 
     /** Formats a string with `sigfig` significant figures and `maxZeros` zeros before a nonzero digit
       * (including the one before the decimal point).  If `sigfig` is negative, the full number of

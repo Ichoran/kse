@@ -72,6 +72,16 @@ object Test_Maths extends Test_Kse {
     }
   }
 
+  def test_histm: Boolean = {
+    val h = new stats.HistM(Array(0, 1, 2, 3, 4))
+    val data = Array(0.5, 1.3, 1.7, 2.1, 2.4, 2.5, 3.8, 3.9)
+    val e = stats.Est from data
+    data.foreach(h += _)
+    h.n == e.n && (h.mean - e.mean).abs < 1e-12 && (h.error - e.error).abs < 1e-12 && (h.sd - e.sd).abs < 1e-12 &&
+    h.valueAt(0.5) == h.median && h.median.in(2.1, 2.9) &&
+    h.rankOf(1).in(1.0/8, 2.0/8) && h.slot(1) == 2 && h.binOf(3.1) == 3
+  }
+
   def main(args: Array[String]) { typicalMain(args) }
 }
 
