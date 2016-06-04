@@ -220,10 +220,14 @@ object EstX {
 }
 
 trait Quantile extends Estimate {
-  def icdf(p: Double): Double
-  def cdf(x: Double): Double
-  def median: Double = icdf(0.5)
-  def fwhm: Double = icdf(0.75) - icdf(0.25)
+  // The estimated value of something at fractional rank `p` (p ranges from 0 to 1)
+  def valueAt(p: Double): Double
+
+  // The estimated fractional rank (0-1) of x if added to this Quantile.
+  def rankOf(x: Double): Double
+
+  def median: Double = valueAt(0.5)
+  def fwhm: Double = valueAt(0.75) - valueAt(0.25)
 }
 
 trait Histographic extends Quantile with Extremal {
@@ -243,12 +247,12 @@ trait Histographic extends Quantile with Extremal {
   }
 }
 
-class Hist(val borders: Array[Double]) extends Histographic with Extremal {
+class HistM(val borders: Array[Double]) extends Histographic with Extremal {
   private val gauss = new EstXM()
   private val tooLow, tooHigh = new EstM()
   private val counts = new Array[Int](math.max(0, borders.length - 1))
   private var cumuls: Array[Int] = null
-  private var cumulThrough = 0
+  private var cumulThrough = -1
   private var myNans = 0
   def max = gauss.max
   def min = gauss.min
@@ -262,13 +266,70 @@ class Hist(val borders: Array[Double]) extends Histographic with Extremal {
     else {
       gauss += x
       val i = bin(x)
-      cumulThrough = math.min(cumulThrough, i+1)
+      cumulThrough = math.min(cumulThrough, i)
       if (i < 0) tooLow += x
       else if (i > counts.length) tooHigh += x
       else counts(i) += 1
     }
     this
   }
-  def cdf(x: Double): Double = ???
-  def icdf(x: Double): Double = ???
+  def lobin: Est = tooLow.immutable
+  def hibin: Est = tooHigh.immutable
+  def rankOf(x: Double): Double = {
+    val i = bin(x)
+    if (i < 0 || i > counts.length-1) Double.NaN
+    else {
+      if (i-1 > cumulThrough) {
+        if (cumuls eq null) cumuls = new Array[Int](counts.length)
+        if (cumulThrough < 0) {
+          cumuls(0) = tooLow.n + counts(0)
+          cumulThrough = 0
+        }
+        var j = cumulThrough+1
+        while (j < i) {
+          cumuls(j) = cumuls(j-1) + counts(j)
+          j += 1
+        }
+        cumulThrough = i-1
+      }
+      val below = cumuls(i-1)
+      val partial = counts(i) * (if (borders(i+1) > borders(i)) (x - borders(i))/(borders(i+1) - borders(i)) else 1.0)
+      (below + partial + 0.5)/(1+gauss.n)
+    }
+  }
+  def valueAt(p: Double): Double = {
+    if (borders.length < 1 || gauss.n == 0 || p*gauss.n < tooLow.n || (1-p)*gauss.n < tooHigh.n) Double.NaN
+    else {
+      val np = p*gauss.n
+      val i = {
+        if (cumulThrough < 0 || cumuls(cumulThrough) < np) {
+          if (cumuls eq null) cumuls = new Array[Int](counts.length)
+          if (cumulThrough < 0) {
+            cumuls(0) = tooLow.n + counts(0)
+            cumulThrough = 0
+          }
+          while (cumuls(cumulThrough) < np && cumulThrough+1 < counts.length) {
+            cumuls(cumulThrough+1) = cumuls(cumulThrough) + counts(cumulThrough+1)
+            cumulThrough += 1
+          }
+          cumulThrough
+        }
+        else {
+          var lo = 0
+          var hi = cumulThrough
+          while (hi - lo > 1) {
+            val m = (hi + lo)/2
+            if (cumuls(m) >= np) hi = m
+            else lo = m
+          }
+          if (cumuls(lo) >= np) lo else hi
+        }
+      }
+
+      val frac = (cumuls(i) - np) / math.max(1,counts(i))
+      val a = borders(i)
+      val b = borders(i+1)
+      (frac*a + (1-frac)*b).clip(a, b)
+    }
+  }
 }
