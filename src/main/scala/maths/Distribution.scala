@@ -46,42 +46,67 @@ trait Estimate extends Deviable {
   def errorSq = sse / (if (n > 2) 1 else n.toDouble*(n-1))
   def error = math.sqrt(errorSq)
   def coev = error / mean
-  def mutable = new EstM(n, mean, sse)
-  def immutable = this match {
-    case e: Est => e
-    case _ => new Est(n, mean, sse)
-  }
 }
 
-class EstM(var n: Int, var mean: Double, var sse: Double) extends Estimate {
-  def this() = this(0, 0, 0)
-  override def clone: EstM = new EstM(n, mean, sse)
-  def ++(that: Estimate): EstM = clone ++= that
-  def +:(x: Double): EstM = clone += x
-  def :+(x: Double): EstM = clone += x
-  def +=(x: Double): this.type = {
+abstract class MutableEstimate(var n: Int, var mean: Double, var sse: Double) extends Estimate {
+  final protected def include(x: Double) {
     val mold = mean
     mean = (n*mean + x)/(n+1)
     sse += (x - mean)*(x - mold)
     n += 1
-    this
   }
-  def ++=(that: Estimate): this.type = {
+  final protected def include(that: MutableEstimate) {
     val nold = n
     n += that.n
     val mold = mean
     mean = (nold*mean + that.mean*that.n)/n
-    sse += that.sse + (mold - that.mean).sq*nold*that.n.toDouble / n
-    this
+    sse += that.sse + (mold - that.mean).sq*nold*that.n.toDouble / n    
   }
+}
+
+final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n0, mean0, sse0) {
+  def this() = this(0, 0, 0)
+  override def clone: EstM = new EstM(n, mean, sse)
+  def immutable = new Est(n, mean, sse)
+  def ++(that: Estimate): EstM = clone ++= that
+  def +:(x: Double): EstM = if (!x.nan) this else clone += x
+  def :+(x: Double): EstM = if (!x.nan) this else clone += x
+  def +=(x: Double): this.type = { if (!x.nan) include(x); this }
+  def ++=(that: Estimate): this.type = { include(that); this }
   override def toString = f"$mean +- $error (n=$n)"
 }
 object EstM {
-  def apply() = new EstM(0, 0, 0)
-  def apply(n: Int, mean: Double, sse: Double) = new EstM(n, mean, sse)
+  def apply(): EstM = new EstM(0, 0, 0)
+  def apply(n: Int, mean: Double, sse: Double): EstM = new EstM(n, mean, sse)
+  def from(xs: Array[Double]): EstM = {
+    var i, n = 0
+    var s = 0.0
+    while (i < xs.length) { val xi = xs(i); if (!xi.nan) { s += xi; n += 1 }; i += 1 }
+    if (n < 2) return new EstM(n, s, 0)
+    val m = s / n;
+    s = 0
+    i = 0
+    while (i < xs.length) { val xi = xs(i); if (!xi.nan) s += (xi - m).sq; i += 1 }
+    new EstM(n, m, s)
+  }
+  def from(xs: Array[Float]): EstM = {
+    var i, n = 0
+    var s = 0.0
+    while (i < xs.length) { val xi = xs(i); if (!xi.nan) { s += xi; n += 1 }; i += 1 }
+    if (n < 2) return new EstM(n, s, 0)
+    val m = s / n;
+    s = 0
+    i = 0
+    while (i < xs.length) { val xi = xs(i); if (!xi.nan) s += (xi - m).sq; i += 1 }
+    new EstM(n, m, s)
+  }
 }
 
-case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
+final case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
+  def mutable = new EstM(n, mean, sse)
+  def +:(x: Double): Est = (mutable += x).immutable
+  def :+(x: Double): Est = (mutable += x).immutable
+  def ++(that: Estimate): Est = (mutable ++= that).immutable
   override val sd = math.sqrt(variance)
   override val error = math.sqrt(errorSq)
 }
@@ -113,3 +138,124 @@ object Est {
   }
   def from(data: Array[Double]): Est = from(data, 0, data.length)
 }
+
+trait Extremal extends Estimate {
+  def max: Double
+  def min: Double
+}
+
+final class EstXM(n0: Int, mean0: Double, sse0: Double, var min: Double, var max: Double)
+extends MutableEstimate(n0, mean0, sse0) with Extremal {
+  def this() = this(0, 0, 0, 0 , 0)
+  override def clone: EstXM = new EstXM(n, mean, sse, min, max)
+  def immutable = new EstX(n, mean, sse, min, max)
+  def ++(that: Estimate): EstM = clone ++= that
+  def ++(that: Extremal): EstXM = clone ++= that
+  def +:(x: Double): EstXM = if (!x.nan) this else clone += x
+  def :+(x: Double): EstXM = if (!x.nan) this else clone += x
+  def +=(x: Double): this.type = {
+    if (!x.nan) {
+      if (n < 1) { min = x; max = x }
+      else if (x > max) max = x
+      else if (x < min) min = x
+      include(x)
+    }
+    this
+  }
+  def ++=(that: Estimate): this.type = { combine(that); this }
+  def ++=(that: Extremal): this.type = {
+    if (n < 1) { min = that.min; max = that.max }
+    else if (that.n > 0) { min = math.min(min, that.min); max = math.max(max, that.max) }
+    combine(that)
+    this
+  }
+  override def toString = f"$mean +- $error (min=$min, max=$max, n=$n)"
+}
+object EstXM {
+  def apply(): EstXM = new EstM(0, 0, 0, 0, 0)
+  def apply(n: Int, mean: Double, sse: Double, min: Double, max: Double): EstM = new EstM(n, mean, sse, min, max)
+  def apply(xs: Array[Double]): EstXM = {
+    var i, n = 0
+    var s = 0.0
+    while (i < xs.length) { val xi = xs(i); if (!xi.nan) { s += xi; n += 1 }; i += 1 }
+    if (n < 2) return new EstM(n, s, 0, s, s)
+    val m = s / n;
+    i = 0
+    var min, max = Double.NaN
+    while (i < xs.length && xs(i).nan) i += 1;
+    var min, max = xs(i)
+    s = (xs(i) - m).sq
+    i += 1
+    while (i < xs.length) {
+      val xi = xs(i)
+      if (!xi.nan) {
+        s += (xi - m).sq
+        if (xi > max) max = xi
+        else if (xi < min) min = xi
+      }
+      i += 1
+    }
+    new EstXM(n, m, s, min, max)
+  }
+  def apply(xs: Array[Float]): EstXM = {
+    var i, n = 0
+    var s = 0.0
+    while (i < xs.length) { val xi = xs(i); if (!xi.nan) { s += xi; n += 1 }; i += 1 }
+    if (n < 2) return new EstM(n, s, 0, s, s)
+    val m = s / n;
+    i = 0
+    var min, max = Double.NaN
+    while (i < xs.length && xs(i).nan) i += 1;
+    var min, max = xs(i)
+    s = (xs(i) - m).sq
+    i += 1
+    while (i < xs.length) {
+      val xi = xs(i)
+      if (!xi.nan) {
+        s += (xi - m).sq
+        if (xi > max) max = xi
+        else if (xi < min) min = xi
+      }
+      i += 1
+    }
+    new EstXM(n, m, s, min, max)
+  }
+}
+
+final case class EstX(n: Int, mean: Double, sse: Double, min: Double, max: Double) extends Extremal {
+  def mutable = new EstXM(n, mean, sse, min, max)
+  def +:(x: Double): Est = (mutable += x).immutable
+  def :+(x: Double): Est = (mutable += x).immutable
+  def ++(that: Estimate): Est = (mutable ++= that).immutable
+  override val sd = math.sqrt(variance)
+  override val error = math.sqrt(errorSq)
+}
+
+
+/*
+trait Quantile extends Estimate {
+  def icdf(p: Double): Double
+  def cdf(x: Double): Double
+  def max: Double = icdf(1)
+  def min: Double = icdf(0)
+  def median: Double = icdf(0.5)
+  def fwhm: Double = icdf(0.75) - icdf(0.25)
+}
+
+trait Histographic extends Quantile {
+  def bin(x: Double): Int
+  def borders: Array[Double]
+}
+
+class HistM(initialBorders: Array[Double], fineness: Double = 0.1) extends Histographic {
+  private var bounds =
+    if ((initialBorders eq null) || initialBorders.length < 2) null
+    else java.util.Arrays.copyOf(initialBorders, initialBorders.length)
+  private var counts =
+    if (borders eq null) null
+    else new Array[Int](borders.length - 1)
+  override var max = Double.NaN
+  override var min = Double.NaN
+  var n = 0
+}
+*/
