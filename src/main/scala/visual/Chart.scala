@@ -1,85 +1,20 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2015 Rex Kerr, UCSF, and Calico Labs.
+// Copyright (c) 2015, 2016 Rex Kerr, UCSF, and Calico Labs.
 
-package kse.see
+package kse.visual
 
 import scala.math._
 import scala.util._
 import scala.collection.mutable.{ AnyRefMap => RMap }
+
 import kse.coll._
 import kse.maths._
+import kse.maths.stats._
 import kse.flow._
 import kse.eio._
 
 object Chart {
   private val q = "\""
-
-  private def mean(xs: Array[Float]) = {
-    var s = 0.0
-    var i = 0
-    var n = 0
-    while (i < xs.length) {
-      val x = xs(i)
-      if (!x.nan) s += xs(i) else n += 1
-      i += 1
-    }
-    if (i > n) (s/(i-n)).toFloat else 0f
-  }
-
-  private case class PStat(n: Int, mean: Float, sd: Float, sem: Float) {}
-
-  private def stats(xs: Array[Float]): PStat = {
-    var s = 0.0
-    var ss = 0.0
-    var i = 0
-    var n = 0
-    while (i < xs.length) {
-      val x = xs(i)
-      if (!x.nan) s += x else n += 1
-      i += 1
-    }
-    val m = if (i > n) s/(i-n) else 0.0
-    i = 0
-    while (i < xs.length) {
-      val x = xs(i) - m
-      if (!x.nan) ss += x*x
-      i += 1
-    }
-    if (i > n) {
-      val k = i-n
-      val sd = if (k == 1) 9.8f*m else sqrt((ss/k - m*m)*(k.toDouble/(k-1)))
-      PStat(k, m.toFloat, sd.toFloat, (sd/sqrt(k)).toFloat)
-    }
-    else PStat(0, 0f, 0f, 0f)
-  }
-
-  private case class NpStat(
-    n: Int,
-    median: Float,
-    loIqr: Float, hiIqr: Float,
-    p05: Float, p95: Float,
-    p025: Float, p975: Float,
-    loFence: Float, hiFence: Float,
-    lo: Array[Float], lolo: Array[Float], hi: Array[Float], hihi: Array[Float]
-  ) {}
-
-  private def pickrank(xs: Array[Float], n: Int, rank: Double, maxout: Boolean = false): Float = if (!(rank >= 0f && rank <= 1f)) Float.NaN else {
-    val i = (n*rank).floor.toInt
-    val j = (n*rank).ceil.toInt
-    ???
-  }
-
-  private def npstats(xs: Array[Float]): NpStat = {
-    var i, n = 0
-    val ys = new Array[Float](xs.length)
-    while (i < xs.length) {
-      val x = xs(i)
-      if (!x.nan) { ys(n) = x; n += 1 }
-      i += 1
-    }
-    java.util.Arrays.sort(ys, 0, n)
-    ???
-  }
 
   trait Svgable {
     def toSvg: Vector[String]
