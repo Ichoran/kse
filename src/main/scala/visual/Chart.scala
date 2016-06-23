@@ -16,6 +16,99 @@ import kse.eio._
 object Chart {
   private val q = "\""
 
+  trait NumberFormatter { def fmt(x: Float): String }
+  trait AppearanceFormatter { def fmt(a: Appearance): String }
+
+  val defaultNumberFormatter = new NumberFormatter { def fmt(x: Float) = x.toString }
+  val emptyAppearanceFormatter = new AppearanceFormatter { def fmt(a: Appearance) = "" }
+
+  sealed trait Quantity[X] {
+    def isDefault: Boolean = false
+    def value: X
+    def defaultValue(x: X): Quantity[X] = new Defaulted(x)
+    def valueTo(x: X): Quantity[X] = new Absolute(x)
+    def map[Y](f: X => Y): Quantity[Y] = new RelQuant(this, f)
+    def flatMap[Y](f: X => Quantity[Y]): Quantity[Y] = new RelQuant(this, f andThen (_.value))
+  }
+  object Quantity {
+    def apply[X](x: X): Quantity[X] = Absolute(x)
+  }
+  final case class Defaulted[X](value: X) extends Quantity[X] { override def isDefault = true }
+  final case class Absolute[X](value: X) extends Quantity[X] {}
+  final class Relative[Y, X](val that: Y, val view: Y => X) extends Quantity[X] { def value = view(that) }
+  final class RelQuant[Y, X](val that: Quantity[Y], val view: Y => X) extends Quantity[X] { def value = view(that.value) }
+
+
+  sealed trait Appearance {
+    def stroke: Quantity[Float]
+    def color: Quantity[Rgba]
+    def strokeColor: Quantity[Rgba]
+    def fillColor: Quantity[Rgba]
+  }
+  sealed trait ProxyAppear {
+    def appear: Quantity[Appearance]
+    val stroke = appear.flatMap(_.stroke)
+    val color = appear.flatMap(_.color)
+    val strokeColor = appear.flatMap(_.strokeColor)
+    val fillColor = appear.flatMap(_.fillColor)
+  }
+  final class AppearanceOf(that: Appearance) extends Appearance {
+    val stroke = that.stroke.map(identity)
+    val color = that.color.map(identity)
+    val strokeColor = that.strokeColor.map(identity)
+    val fillColor = that.fillColor.map(identity)
+  }
+  sealed trait OneColor extends Appearance {
+    val strokeColor = color.map(identity)
+    val fillColor = color.map(identity)
+  }
+
+  final case class IndentedSvg(text: String, level: Int = 0) {
+    override def toString = if (level <= 0) text else " "*(2*level) + text
+  }
+  trait InSvg { def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] }
+
+  sealed trait Primitive {}
+  final case class C(c: Quantity[Vc], r: Quantity[Float], appear: Quantity[Appearance])
+  extends ProxyAppear with InSvg {
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) = {
+      val circ = kse.visual.Circle(c.value, r.value) into xform
+      Vector(IndentedSvg(
+        f"<circle cx=$q${nf fmt circ.center.x}$q cy=$q${nf fmt circ.center.y}$q r=$q${nf fmt circ.radius}$q${af fmt appear.value}/>"
+      ))
+    }
+  }
+
+  final case class Listed(list: List[InSvg]) extends InSvg {
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) = {
+      val b = Vector.newBuilder[IndentedSvg]
+      list.foreach{ l => b ++= l.inSvg(xform) }
+      b.result
+    }
+  }
+
+  def quick(i: InSvg) {
+    val svg = 
+      Vector("<html>", "<body>", """<svg width="640" height="480">""").map(x => IndentedSvg(x)) ++
+      i.inSvg(Xform.flipy(Frame.natural, Frame(0 vc -480, 1 vc 0)))(defaultNumberFormatter, emptyAppearanceFormatter).map(x => x.copy(level = 1)) ++
+      Vector("</svg>", "</body>", "</html>").map(x => IndentedSvg(x))
+    println(svg.mkString("\n"))
+    svg.map(_.toString).toFile("test.html".file)
+  }
+
+
+  sealed trait Stroked { def stroke: Float; def strokeColor: Rgba }
+  sealed trait Filled { def fillColor: Rgba }
+  sealed trait StrokeProxy { def proxy: Stroked; def stroke = proxy.stroke; def strokeColor = proxy.strokeColor }
+  sealed trait FillProxy { def proxy: Filled; def fillColor = proxy.fillColor }
+  final case class Dot(shape: Circle, proxy: Filled) extends FillProxy {}
+  final case class Circ(shape: Circle, proxy: Stroked with Filled) extends StrokeProxy with FillProxy {}
+  final case class Horz(center: Vc, length: Float, proxy: Stroked) extends StrokeProxy {}
+  final case class Vert(center: Vc, length: Float, proxy: Stroked) extends StrokeProxy {}
+  final case class Bar(shape: Rect, proxy: Stroked with Filled) extends StrokeProxy with FillProxy {}
+  final case class Arrowhead(tip: Vc, direction: Vc, angle: Float, fatness: Float, proxy: Stroked with Filled)
+  extends StrokeProxy with FillProxy {}
+
   trait Svgable {
     def toSvg: Vector[String]
   }

@@ -130,6 +130,12 @@ package object maths {
     @inline final def bits = java.lang.Float.floatToRawIntBits(value)
     @inline final def clip(lo: Float, hi: Float) = max(lo, min(hi, value))
     @inline final def in(lo: Float, hi: Float) = lo <= value && value <= hi
+    @inline final def closeTo(that: Float, abstol: Float = 1e-6f, fractol: Float = 1e-6f) = math.abs(value - that) match {
+      case x if x <= abstol =>
+        val big = math.max(math.abs(value), math.abs(that))
+        big <= 1 || x <= big*fractol
+      case _ => false
+    }
   }
 
   implicit class EnrichedDoubleMaths(private val value: Double) extends AnyVal {
@@ -171,6 +177,12 @@ package object maths {
     @inline final def bits = java.lang.Double.doubleToRawLongBits(value)
     @inline final def clip(lo: Double, hi: Double) = max(lo, min(hi, value))
     @inline final def in(lo: Double, hi: Double) = lo <= value && value <= hi
+    @inline final def closeTo(that: Double, abstol: Double = 1e-12, fractol: Double = 1e-12) = math.abs(value - that) match {
+      case x if x <= abstol =>
+        val big = math.max(math.abs(value), math.abs(that))
+        big <= 1 || x <= big*fractol
+      case _ => false
+    }
 
     /** Formats a string with `sigfig` significant figures and `maxZeros` zeros before a nonzero digit
       * (including the one before the decimal point).  If `sigfig` is negative, the full number of
