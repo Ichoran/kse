@@ -19,7 +19,9 @@ object Chart {
   trait NumberFormatter { def fmt(x: Float): String }
   trait AppearanceFormatter { def fmt(a: Appearance): String }
 
-  val defaultNumberFormatter = new NumberFormatter { def fmt(x: Float) = x.toString }
+  val defaultNumberFormatter = new NumberFormatter { 
+    def fmt(x: Float) = if (x.toInt == x) x.toInt.toString else if (x*10 == (x*10).toInt) "%.1f".format(x) else "%.2".format(x)
+  }
   val emptyAppearanceFormatter = new AppearanceFormatter { def fmt(a: Appearance) = "" }
 
   sealed trait Quantity[X] {
@@ -68,14 +70,59 @@ object Chart {
   }
   trait InSvg { def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] }
 
-  sealed trait Primitive {}
-  final case class C(c: Quantity[Vc], r: Quantity[Float], appear: Quantity[Appearance])
+  final case class Circ(c: Quantity[Vc], r: Quantity[Float], appear: Quantity[Appearance])
   extends ProxyAppear with InSvg {
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) = {
-      val circ = kse.visual.Circle(c.value, r.value) into xform
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val vc = c.value
+      val vr = r.value
+      if (!vr.finite || vr == 0 || !vc.finite) return Vector.empty
+      val circ = kse.visual.Circle(vc, vr) into xform
+      if (!circ.radius.finite || circ.radius == 0 || !circ.center.finite) return Vector.empty
       Vector(IndentedSvg(
         f"<circle cx=$q${nf fmt circ.center.x}$q cy=$q${nf fmt circ.center.y}$q r=$q${nf fmt circ.radius}$q${af fmt appear.value}/>"
       ))
+    }
+  }
+
+  final case class Bar(c: Quantity[Vc], r: Quantity[Vc], appear: Quantity[Appearance])
+  extends ProxyAppear with InSvg {
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val vc = c.value
+      val vr = r.value
+      if (!vr.finite || vr.x == 0 || vr.y == 0) return Vector.empty
+      val rect0 = 
+        if (vr.x < vr.y) kse.visual.Rect(vc, Vc(0, vr.y), vr.x/vr.y)
+        else kse.visual.Rect(vc, Vc(vr.x, 0), vr.y/vr.x)
+      val rect = rect0 into xform
+      if (!rect.major.finite || ((rect.major.y closeTo 0) && (rect.major.x closeTo 0)) || !rect.aspect.finite || rect.aspect == 0) return Vector.empty
+      Vector(IndentedSvg({
+        if ((rect.major.x closeTo 0) || (rect.major.y closeTo 0)) {
+          val rw = rect.major.x.abs + (rect.aspect*rect.major.y).abs
+          val rh = rect.major.y.abs + (rect.aspect*rect.major.x).abs
+          val x = rect.center.x - rw;
+          val y = rect.center.y - rh;
+          f"<rect x=$q${nf fmt x}$q y=$q${nf fmt y}$q width=$q${nf fmt 2*rw}$q height=$q${nf fmt 2*rh}$q${af fmt appear.value}/>"
+        }
+        else {
+          f"<polygon points=$q${rect.corners.map{ l => val v = Vc from l; (nf fmt v.x) + "," + (nf fmt v.y)}.mkString(" ")}$q${af fmt appear.value}/>"
+        }
+      }))
+    }
+  }
+
+  final case class Letters(pt: Quantity[Vc], text: Quantity[String], height: Quantity[Float], appear: Quantity[Appearance])
+  extends ProxyAppear with InSvg {
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val p = pt.value
+      val vl = xform(p - Vc(0, 0.5f*height.value))
+      val vh = xform(p + Vc(0, 0.5f*height.value))
+      if (vl.x closeTo vh.x) {
+        val size = (vh.y - vl.y).abs
+        Vector(IndentedSvg(
+          f"<text x=$q${nf fmt vl.x}$q y=$q${nf fmt vl.y}$q font-size=$q${nf fmt size}$q text-anchor=${"\"middle\""}>${text.value}</text>"
+        ))        
+      }
+      else ???
     }
   }
 
@@ -87,27 +134,17 @@ object Chart {
     }
   }
 
-  def quick(i: InSvg) {
+  def quick(i: InSvg, offset: Vc = Vc(0,0)) {
+    val fr = if (offset == Vc(0,0)) Frame.natural else Frame.natural.copy(origin = offset)
     val svg = 
       Vector("<html>", "<body>", """<svg width="640" height="480">""").map(x => IndentedSvg(x)) ++
-      i.inSvg(Xform.flipy(Frame.natural, Frame(0 vc -480, 1 vc 0)))(defaultNumberFormatter, emptyAppearanceFormatter).map(x => x.copy(level = 1)) ++
+      i.inSvg(Xform.flipy(fr, Frame(0 vc -480, 1 vc 0)))(defaultNumberFormatter, emptyAppearanceFormatter).map(x => x.copy(level = 1)) ++
       Vector("</svg>", "</body>", "</html>").map(x => IndentedSvg(x))
     println(svg.mkString("\n"))
     svg.map(_.toString).toFile("test.html".file)
   }
 
 
-  sealed trait Stroked { def stroke: Float; def strokeColor: Rgba }
-  sealed trait Filled { def fillColor: Rgba }
-  sealed trait StrokeProxy { def proxy: Stroked; def stroke = proxy.stroke; def strokeColor = proxy.strokeColor }
-  sealed trait FillProxy { def proxy: Filled; def fillColor = proxy.fillColor }
-  final case class Dot(shape: Circle, proxy: Filled) extends FillProxy {}
-  final case class Circ(shape: Circle, proxy: Stroked with Filled) extends StrokeProxy with FillProxy {}
-  final case class Horz(center: Vc, length: Float, proxy: Stroked) extends StrokeProxy {}
-  final case class Vert(center: Vc, length: Float, proxy: Stroked) extends StrokeProxy {}
-  final case class Bar(shape: Rect, proxy: Stroked with Filled) extends StrokeProxy with FillProxy {}
-  final case class Arrowhead(tip: Vc, direction: Vc, angle: Float, fatness: Float, proxy: Stroked with Filled)
-  extends StrokeProxy with FillProxy {}
 
   trait Svgable {
     def toSvg: Vector[String]

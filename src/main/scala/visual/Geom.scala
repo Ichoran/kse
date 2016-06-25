@@ -34,6 +34,10 @@ object Xform {
     def revert(v: Vc) = to into (v, from)
     override def inverted = new Natural(to, from)
   }
+  final class FlipX(from: Frame, to: Frame) extends Xform(from, to) {
+    def apply(v: Vc) = Frame.natural into ((from into (v, Frame.natural)).xFn(- _), to)
+    def revert(v: Vc) = Frame.natural into ((to into (v, Frame.natural)).xFn(- _), from)
+  }
   final class FlipY(from: Frame, to: Frame) extends Xform(from, to) {
     def apply(v: Vc) = Frame.natural into ((from into (v, Frame.natural)).yFn(- _), to)
     def revert(v: Vc) = Frame.natural into ((to into (v, Frame.natural)).yFn(- _), from)
@@ -125,5 +129,14 @@ case class Rect(center: Vc, major: Vc, aspect: Float) extends Centered with Encl
       }
       else 0
     new Rect(nc, maj*0.5f, nm.toFloat)
+  }
+  def corners: Array[Long] = {
+    val cs = new Array[Long](4)
+    val minor = major.ccw*aspect
+    cs(0) = (center + major + minor).underlying
+    cs(1) = (center + major - minor).underlying
+    cs(2) = (center - major - minor).underlying
+    cs(3) = (center - major + minor).underlying
+    cs
   }
 }

@@ -29,8 +29,10 @@ final class Vc(val underlying: Long) extends AnyVal {
 
   def isNaN = (java.lang.Float.isNaN(x) || java.lang.Float.isNaN(y))
   def isInf = (java.lang.Float.isInfinite(x) || java.lang.Float.isInfinite(y))
+  @deprecated("Use finite", "kse-0.5.0")
   def isFinite = { val a = x; val b = y; !(java.lang.Float.isNaN(a) || java.lang.Float.isInfinite(a) || java.lang.Float.isNaN(b) || java.lang.Float.isInfinite(b)) }
   def isZero = (underlying & 0x7FFFFFFF7FFFFFFFL) == 0
+  def finite = { val a = underlying & 0x7F8000007F800000L; (a.toInt != 0x7F800000) && ((a >> 32) != 0x7F800000) }
 
   def lenSq: Double = { val a = x.toDouble; val b = y.toDouble; a*a + b*b }
   def len: Double = math.sqrt(lenSq)
