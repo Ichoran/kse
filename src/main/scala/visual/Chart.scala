@@ -20,49 +20,68 @@ object Chart {
   trait AppearanceFormatter { def fmt(a: Appearance): String }
 
   val defaultNumberFormatter = new NumberFormatter { 
-    def fmt(x: Float) = if (x.toInt == x) x.toInt.toString else if (x*10 == (x*10).toInt) "%.1f".format(x) else "%.2".format(x)
+    def fmt(x: Float) = if (x.toInt == x) x.toInt.toString else if (x*10 == (x*10).toInt) "%.1f".format(x) else "%.2f".format(x)
   }
   val emptyAppearanceFormatter = new AppearanceFormatter { def fmt(a: Appearance) = "" }
-
-  sealed trait Quantity[X] {
-    def isDefault: Boolean = false
-    def value: X
-    def defaultValue(x: X): Quantity[X] = new Defaulted(x)
-    def valueTo(x: X): Quantity[X] = new Absolute(x)
-    def map[Y](f: X => Y): Quantity[Y] = new RelQuant(this, f)
-    def flatMap[Y](f: X => Quantity[Y]): Quantity[Y] = new RelQuant(this, f andThen (_.value))
+  val defaultAppearanceFormatter = new AppearanceFormatter {
+    def fmt(a: Appearance) =
+      a.strokeColor.get.map(c => f" stroke=$q#${c.rgbText}$q").getOrElse("") +
+      a.stroke.get.filter(x => x.finite && x > 0).map(w => f" stroke-width=$q$w%.2f$q").getOrElse("") +
+      a.fillColor.get.map(c => f" fill=$q#${c.rgbText}$q").getOrElse("") +
+      a.opacity.get.filter(_ < 0.9995).map(o => f" opacity=$q$o%.3f$q").getOrElse("") +
+      ( if (!a.opacity.alive && a.stroke.alive && a.strokeColor.alive)
+          a.strokeColor.value.a match { case x if x < 0.9995 => f" stroke-opacity=$q$x%.3f$x"; case _ => "" }
+        else ""
+      ) +
+      ( if (!a.opacity.alive && a.fillColor.alive)
+          a.fillColor.value.a match { case x if x < 0.9995 => f" fill-opacity=$q$x%.3f$x"; case _ => "" }
+        else ""
+      )
   }
-  object Quantity {
-    def apply[X](x: X): Quantity[X] = Absolute(x)
-  }
-  final case class Defaulted[X](value: X) extends Quantity[X] { override def isDefault = true }
-  final case class Absolute[X](value: X) extends Quantity[X] {}
-  final class Relative[Y, X](val that: Y, val view: Y => X) extends Quantity[X] { def value = view(that) }
-  final class RelQuant[Y, X](val that: Quantity[Y], val view: Y => X) extends Quantity[X] { def value = view(that.value) }
-
 
   sealed trait Appearance {
-    def stroke: Quantity[Float]
-    def color: Quantity[Rgba]
-    def strokeColor: Quantity[Rgba]
-    def fillColor: Quantity[Rgba]
+    def opacity: Q[Float]
+    def stroke: Q[Float]
+    def strokeColor: Q[Rgba]
+    def fillColor: Q[Rgba]
   }
   sealed trait ProxyAppear {
-    def appear: Quantity[Appearance]
+    def appear: Q[Appearance]
+    val opacity = appear.flatMap(_.opacity)
     val stroke = appear.flatMap(_.stroke)
-    val color = appear.flatMap(_.color)
     val strokeColor = appear.flatMap(_.strokeColor)
     val fillColor = appear.flatMap(_.fillColor)
   }
   final class AppearanceOf(that: Appearance) extends Appearance {
+    val opacity = that.opacity.map(identity)
     val stroke = that.stroke.map(identity)
-    val color = that.color.map(identity)
     val strokeColor = that.strokeColor.map(identity)
     val fillColor = that.fillColor.map(identity)
   }
-  sealed trait OneColor extends Appearance {
-    val strokeColor = color.map(identity)
-    val fillColor = color.map(identity)
+  object Plain extends Appearance {
+    val opacity = Q empty 1f
+    val stroke = Q empty 0f
+    val color = Q empty Rgba(0, 0, 0, 1)
+    def fillColor = color
+    def strokeColor = color
+  }
+  final class Filled(theColor: Rgba) extends Appearance {
+    val opacity = Q(theColor.a match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
+    val stroke = Q empty 0f
+    val strokeColor = Q empty Rgba(0, 0, 0, 0)
+    val fillColor = Q(theColor)
+  }
+  object Filled {
+    def apply(theColor: Rgba) = new Filled(theColor)
+  }
+  final class Translucent(theOpacity: Float) extends Appearance {
+    val opacity = Q(theOpacity match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
+    val stroke = Q empty 0f
+    val strokeColor = Plain.color
+    val fillColor = Plain.color
+  }
+  object Translucent {
+    def apply(theOpacity: Float) = new Translucent(theOpacity)
   }
 
   final case class IndentedSvg(text: String, level: Int = 0) {
@@ -70,7 +89,7 @@ object Chart {
   }
   trait InSvg { def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] }
 
-  final case class Circ(c: Quantity[Vc], r: Quantity[Float], appear: Quantity[Appearance])
+  final case class Circ(c: Q[Vc], r: Q[Float], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
       val vc = c.value
@@ -84,7 +103,7 @@ object Chart {
     }
   }
 
-  final case class Bar(c: Quantity[Vc], r: Quantity[Vc], appear: Quantity[Appearance])
+  final case class Bar(c: Q[Vc], r: Q[Vc], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
       val vc = c.value
@@ -110,7 +129,7 @@ object Chart {
     }
   }
 
-  final case class Letters(pt: Quantity[Vc], text: Quantity[String], height: Quantity[Float], appear: Quantity[Appearance])
+  final case class Letters(pt: Q[Vc], text: Q[String], height: Q[Float], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
       val p = pt.value
@@ -119,26 +138,48 @@ object Chart {
       if (vl.x closeTo vh.x) {
         val size = (vh.y - vl.y).abs
         Vector(IndentedSvg(
-          f"<text x=$q${nf fmt vl.x}$q y=$q${nf fmt vl.y}$q font-size=$q${nf fmt size}$q text-anchor=${"\"middle\""}>${text.value}</text>"
+          f"<text x=$q${nf fmt vl.x}$q y=$q${nf fmt vl.y}$q font-size=$q${nf fmt size}$q text-anchor=${"\"middle\""}${af fmt appear.value}>${text.value}</text>"
         ))        
       }
       else ???
     }
   }
 
-  final case class Listed(list: List[InSvg]) extends InSvg {
+  sealed class MuGroup(var elements: Vector[InSvg]) extends InSvg {
+    def +=(i: InSvg): this.type = { elements = elements :+ i; this }
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) = {
-      val b = Vector.newBuilder[IndentedSvg]
-      list.foreach{ l => b ++= l.inSvg(xform) }
-      b.result
+      elements.flatMap(i => i.inSvg(xform)(nf, af)) match {
+        case vs => IndentedSvg("<g>") +: vs.map(x => x.copy(level = x.level + 1)) :+ IndentedSvg("</g>")
+      }
     }
+  }
+  object MuGroup {
+    def apply(es: InSvg*) = new MuGroup(es.toVector)
+  }
+
+  final class Origin(at: Q[Vc], theElements: Vector[InSvg]) extends MuGroup(theElements) {
+    private[this] def unoriginate: Xform = Xform.natural(Frame(at.value, Vc(1,0)), Frame.natural)
+    override def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) =
+      super.inSvg(if (at.alive) unoriginate andThen xform else xform)(nf, af)
+  }
+  object Origin {
+    def apply(at: Q[Vc], theElements: Vector[InSvg]) = new Origin(at, theElements)
+  }
+
+  final class Axes(scaling: Q[Vc], theScaled: Vector[InSvg]) extends MuGroup(theScaled) {
+    private[this] def unscale: Xform = Xform.scaly(scaling.value).inverted
+    override def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) =
+      super.inSvg(if (scaling.alive) unscale andThen xform else xform)(nf, af)
+  }
+  object Axes {
+    def apply(scaling: Q[Vc], theScaled: Vector[InSvg]) = new Axes(scaling, theScaled)
   }
 
   def quick(i: InSvg, offset: Vc = Vc(0,0)) {
     val fr = if (offset == Vc(0,0)) Frame.natural else Frame.natural.copy(origin = offset)
     val svg = 
       Vector("<html>", "<body>", """<svg width="640" height="480">""").map(x => IndentedSvg(x)) ++
-      i.inSvg(Xform.flipy(fr, Frame(0 vc -480, 1 vc 0)))(defaultNumberFormatter, emptyAppearanceFormatter).map(x => x.copy(level = 1)) ++
+      i.inSvg(Xform.flipy(fr, Frame(0 vc -480, 1 vc 0)))(defaultNumberFormatter, defaultAppearanceFormatter).map(x => x.copy(level = x.level+1)) ++
       Vector("</svg>", "</body>", "</html>").map(x => IndentedSvg(x))
     println(svg.mkString("\n"))
     svg.map(_.toString).toFile("test.html".file)

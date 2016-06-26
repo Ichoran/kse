@@ -271,6 +271,75 @@ package coll {
       }
     }
   }
+
+  sealed abstract class Q[+A] { self =>
+    def alive: Boolean
+    def value: A
+    def get: Option[A] = if (alive) Some(value) else None
+    def live: Q[A] = new Q.Zombie(self, true)
+    def dead: Q[A] = new Q.Zombie(self, false)
+    def fix: Q[A] = if (alive) new Q.Alive(value) else new Q.Dead(value)
+    def as[A1 >: A](a: A1): Q[A1] = new Q.Alive(a)
+    def or[A1 >: A](that: Q[A1]): Q[A1] = new Q.Or(self, that)
+    def map[B](f: A => B): Q[B] = new Q.Mapped(self, f)
+    def flatMap[B](f: A => Q[B]): Q[B] = new Q.Flat(self, f)
+    def filter(p: A => Boolean): Q[A] = new Q.Filter(self, p)
+    final def withFilter(p: A => Boolean): Q[A] = filter(p)
+    def foreach[U](f: A => U) { if (alive) f(value) }
+    override def equals(a: Any) = a match {
+      case q: Q[_] => alive == q.alive && value == q.value
+      case _ => false
+    }
+    override def hashCode =
+      if (alive) value.hashCode ^ 0x515B2B41
+      else (if (value.asInstanceOf[AnyRef] eq null) 0 else value.hashCode) ^ 0x4a2B5B51
+    override def toString =
+      if (alive) "_" + value.toString + "_"
+      else if (value.asInstanceOf[AnyRef] eq null) "(null)"
+      else "(" + value.toString + ")"
+  }
+  object Q {
+    def apply[A](value: A): Q[A] = new Alive(value)
+    def eval[A](value: => A): Q[A] = new Eval(() => value)
+    def empty[A](default: A): Q[A] = new Dead(default)
+    def set[A](value: A): Vary[A] = { val v = new Vary(value); v.alive = true; v }
+    def unset[A](default: A): Vary[A] = new Vary(default);
+    private[kse] class Alive[+A](val value: A) extends Q[A] { def alive = true }
+    private[kse] class Dead[+A](val value: A) extends Q[A] { def alive = false }
+    private[kse] class Zombie[+A](that: Q[A], val alive: Boolean) extends Q[A] { def value = that.value }
+    private[kse] class Eval[+A](evaluate: () => A) extends Q[A] {
+      def alive = true
+      def value = evaluate()
+    }
+    class Vary[A](zero: A) extends Q[A] {
+      var alive: Boolean = false
+      def aliveTo(live: Boolean): this.type = { alive = live; this }
+      def aliveFn(f: Boolean => Boolean): this.type = { alive = f(alive); this }
+      private[this] var myValue = zero
+      def value = myValue
+      def value_=(a: A) { myValue = a; alive = true }
+      def valueTo(a: A): this.type = { value = a; alive = true; this }
+      def valueFn(f: A => A): this.type = { value = f(value); alive = true; this }
+    }
+    private[kse] class Or[+A](primary: Q[A], secondary: Q[A]) extends Q[A] {
+      def alive = primary.alive || secondary.alive
+      def value = if (primary.alive) primary.value else if (secondary.alive) secondary.value else primary.value
+    }
+    private[kse] class Mapped[+B, +A](that: Q[A], mapping: A => B) extends Q[B] {
+      def alive = that.alive
+      def value = mapping(that.value)
+      override def map[C](f: B => C): Q[C] = new Q.Mapped(that, mapping andThen f)
+    }
+    private[kse] class Flat[+B, +A](that: Q[A], mapping: A => Q[B]) extends Q[B] {
+      def alive = that.alive && mapping(that.value).alive
+      def value = mapping(that.value).value
+    }
+    private[kse] class Filter[+A](it: Q[A], predicate: A => Boolean) extends Q[A] {
+      def alive = it.alive && predicate(it.value)
+      def value = it.value
+      override def filter(p: A => Boolean): Q[A] = new Filter(it, (a: A) => predicate(a) && p(a))
+    }
+  }
 }
 
 package object coll {

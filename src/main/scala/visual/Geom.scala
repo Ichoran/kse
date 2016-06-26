@@ -16,40 +16,58 @@ object Frame {
   val natural = Frame(0 vc 0, 1 vc 0)
 }
 
-abstract class Xform(val from: Frame, val to: Frame) {
+abstract class Xform { self =>
   def apply(v: Vc): Vc
   def revert(v: Vc): Vc
   def inverted = this match {
     case xi: Xform.Inverted => xi.original
     case _ => new Xform.Inverted(this)
   }
+  def andThen(that: Xform): Xform = new Xform {
+    def apply(v: Vc) = self(that(v))
+    def revert(v: Vc) = that.revert(self.revert(v))
+  }
 }
 object Xform {
-  final class Inverted(val original: Xform) extends Xform(original.to, original.from) {
+  final class Inverted(val original: Xform) extends Xform {
     def apply(v: Vc) = original revert v
     def revert(v: Vc) = original apply v
   }
-  final class Natural(from: Frame, to: Frame) extends Xform(from, to) {
+  sealed abstract class FromTo(val from: Frame, val to: Frame) extends Xform {
+    override def inverted = this match {
+      case xift: Xform.InvertedFromTo => xift.original
+      case _ => new Xform.InvertedFromTo(this)
+    }
+  }
+  final class InvertedFromTo(val original: FromTo) extends FromTo(original.to, original.from) {
+    def apply(v: Vc) = original revert v
+    def revert(v: Vc) = original apply v
+  }
+  final class Natural(from: Frame, to: Frame) extends FromTo(from, to) {
     def apply(v: Vc) = from into (v, to)
     def revert(v: Vc) = to into (v, from)
     override def inverted = new Natural(to, from)
   }
-  final class FlipX(from: Frame, to: Frame) extends Xform(from, to) {
+  final class FlipX(from: Frame, to: Frame) extends FromTo(from, to) {
     def apply(v: Vc) = Frame.natural into ((from into (v, Frame.natural)).xFn(- _), to)
     def revert(v: Vc) = Frame.natural into ((to into (v, Frame.natural)).xFn(- _), from)
   }
-  final class FlipY(from: Frame, to: Frame) extends Xform(from, to) {
+  final class FlipY(from: Frame, to: Frame) extends FromTo(from, to) {
     def apply(v: Vc) = Frame.natural into ((from into (v, Frame.natural)).yFn(- _), to)
     def revert(v: Vc) = Frame.natural into ((to into (v, Frame.natural)).yFn(- _), from)
   }
 
-  val identity: Xform = new Xform(Frame.natural, Frame.natural) {
+  val identity: Xform = new FromTo(Frame.natural, Frame.natural) {
     def apply(v: Vc) = v
     def revert(v: Vc) = v
     override def inverted = this
   }
   def natural(from: Frame, to: Frame): Xform = new Natural(from, to)
   def flipy(from: Frame, to: Frame): Xform = new FlipY(from, to);
+  def scaly(scale: Vc): Xform = new Xform{
+    def apply(v: Vc) = Vc(v.x * scale.x, v.y * scale.y)
+    def revert(v: Vc) = Vc(v.x / scale.x, v.y / scale.y)
+  }
 }
 
 trait Xformable[X <: Xformable[_]] { def into(xform: Xform): X }
