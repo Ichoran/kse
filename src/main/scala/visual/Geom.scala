@@ -24,8 +24,8 @@ abstract class Xform { self =>
     case _ => new Xform.Inverted(this)
   }
   def andThen(that: Xform): Xform = new Xform {
-    def apply(v: Vc) = self(that(v))
-    def revert(v: Vc) = that.revert(self.revert(v))
+    def apply(v: Vc) = that(self(v))
+    def revert(v: Vc) = self.revert(that.revert(v))
   }
 }
 object Xform {
@@ -48,14 +48,6 @@ object Xform {
     def revert(v: Vc) = to into (v, from)
     override def inverted = new Natural(to, from)
   }
-  final class FlipX(from: Frame, to: Frame) extends FromTo(from, to) {
-    def apply(v: Vc) = Frame.natural into ((from into (v, Frame.natural)).xFn(- _), to)
-    def revert(v: Vc) = Frame.natural into ((to into (v, Frame.natural)).xFn(- _), from)
-  }
-  final class FlipY(from: Frame, to: Frame) extends FromTo(from, to) {
-    def apply(v: Vc) = Frame.natural into ((from into (v, Frame.natural)).yFn(- _), to)
-    def revert(v: Vc) = Frame.natural into ((to into (v, Frame.natural)).yFn(- _), from)
-  }
 
   val identity: Xform = new FromTo(Frame.natural, Frame.natural) {
     def apply(v: Vc) = v
@@ -63,10 +55,21 @@ object Xform {
     override def inverted = this
   }
   def natural(from: Frame, to: Frame): Xform = new Natural(from, to)
-  def flipy(from: Frame, to: Frame): Xform = new FlipY(from, to);
-  def scaly(scale: Vc): Xform = new Xform{
-    def apply(v: Vc) = Vc(v.x * scale.x, v.y * scale.y)
-    def revert(v: Vc) = Vc(v.x / scale.x, v.y / scale.y)
+  def flipx(about: Float): Xform = new Xform {
+    def apply(v: Vc) = Vc(about - v.x, v.y)
+    def revert(v: Vc) = Vc(about - v.x, v.y)
+  }
+  def flipy(about: Float): Xform = new Xform {
+    def apply(v: Vc) = Vc(v.x, about - v.y)
+    def revert(v: Vc) = Vc(v.x, about - v.y)
+  }
+  def scale(scales: Vc): Xform = new Xform{
+    def apply(v: Vc) = Vc(v.x * scales.x, v.y * scales.y)
+    def revert(v: Vc) = Vc(v.x / scales.x, v.y / scales.y)
+  }
+  def shiftscale(shift: Vc, scale: Vc) = new Xform {
+    def apply(v: Vc) = { val u = v - shift; Vc(u.x * scale.x, u.y * scale.y) }
+    def revert(v: Vc) = { val u = Vc(v.x / scale.x, v.y / scale.y); u + shift }
   }
 }
 

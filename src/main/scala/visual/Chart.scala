@@ -25,72 +25,106 @@ object Chart {
   val emptyAppearanceFormatter = new AppearanceFormatter { def fmt(a: Appearance) = "" }
   val defaultAppearanceFormatter = new AppearanceFormatter {
     def fmt(a: Appearance) =
-      a.strokeColor.get.map(c => f" stroke=$q#${c.rgbText}$q").getOrElse("") +
-      a.stroke.get.filter(x => x.finite && x > 0).map(w => f" stroke-width=$q$w%.2f$q").getOrElse("") +
-      a.fillColor.get.map(c => f" fill=$q#${c.rgbText}$q").getOrElse("") +
+      a.face.get.map(f => f" font-family=$q$f$q").getOrElse("") +
+      a.stroke.get.map(c => f" stroke=$q#${c.rgbText}$q").getOrElse("") +
+      a.wide.get.filter(x => x.finite && x > 0).map(w => f" stroke-width=$q$w%.2f$q").getOrElse("") +
+      a.fill.get.map(c => f" fill=$q#${c.rgbText}$q").getOrElse("") +
       a.opacity.get.filter(_ < 0.9995).map(o => f" opacity=$q$o%.3f$q").getOrElse("") +
-      ( if (!a.opacity.alive && a.stroke.alive && a.strokeColor.alive)
-          a.strokeColor.value.a match { case x if x < 0.9995 => f" stroke-opacity=$q$x%.3f$x"; case _ => "" }
+      ( if (!a.opacity.alive && a.wide.alive && a.stroke.alive)
+          a.stroke.value.a match { case x if x < 0.9995 => f" stroke-opacity=$q$x%.3f$x"; case _ => "" }
         else ""
       ) +
-      ( if (!a.opacity.alive && a.fillColor.alive)
-          a.fillColor.value.a match { case x if x < 0.9995 => f" fill-opacity=$q$x%.3f$x"; case _ => "" }
+      ( if (!a.opacity.alive && a.fill.alive)
+          a.fill.value.a match { case x if x < 0.9995 => f" fill-opacity=$q$x%.3f$x"; case _ => "" }
         else ""
       )
   }
 
+  sealed trait AppearElement {}
+  object FACE extends AppearElement {}
+  object OPAC extends AppearElement {}
+  object WIDE extends AppearElement {}
+  object STRO extends AppearElement {}
+  object FILL extends AppearElement {}
+
   sealed trait Appearance {
+    def face: Q[String]
     def opacity: Q[Float]
-    def stroke: Q[Float]
-    def strokeColor: Q[Rgba]
-    def fillColor: Q[Rgba]
+    def wide: Q[Float]
+    def stroke: Q[Rgba]
+    def fill: Q[Rgba]
   }
-  sealed trait ProxyAppear {
+  sealed trait ProxyAppear extends Appearance {
     def appear: Q[Appearance]
-    val opacity = appear.flatMap(_.opacity)
-    val stroke = appear.flatMap(_.stroke)
-    val strokeColor = appear.flatMap(_.strokeColor)
-    val fillColor = appear.flatMap(_.fillColor)
+    def turnOff: Set[AppearElement] = Set()
+    lazy val face: Q[String] = if (turnOff(FACE)) appear.flatMap(_.face.dead) else appear.flatMap(_.face)
+    lazy val opacity: Q[Float] =  if (turnOff(OPAC)) appear.flatMap(_.opacity.dead) else appear.flatMap(_.opacity)
+    lazy val wide: Q[Float] = if (turnOff(WIDE)) appear.flatMap(_.wide.dead) else appear.flatMap(_.wide)
+    lazy val stroke: Q[Rgba] = if (turnOff(STRO)) appear.flatMap(_.stroke.dead) else appear.flatMap(_.stroke)
+    lazy val fill: Q[Rgba] = if (turnOff(FILL)) appear.flatMap(_.fill.dead) else appear.flatMap(_.fill)
   }
   final class AppearanceOf(that: Appearance) extends Appearance {
+    val face = that.face.map(identity)
     val opacity = that.opacity.map(identity)
+    val wide = that.wide.map(identity)
     val stroke = that.stroke.map(identity)
-    val strokeColor = that.strokeColor.map(identity)
-    val fillColor = that.fillColor.map(identity)
+    val fill = that.fill.map(identity)
   }
   object Plain extends Appearance {
+    val face = Q empty "Tahoma, Geneva, sans-serif"
     val opacity = Q empty 1f
-    val stroke = Q empty 0f
+    val wide = Q empty 0f
     val color = Q empty Rgba(0, 0, 0, 1)
-    def fillColor = color
-    def strokeColor = color
+    def fill = color
+    def stroke = color
   }
   final class Filled(theColor: Rgba) extends Appearance {
+    val face = Plain.face
     val opacity = Q(theColor.a match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
-    val stroke = Q empty 0f
-    val strokeColor = Q empty Rgba(0, 0, 0, 0)
-    val fillColor = Q(theColor)
+    val wide = Plain.wide
+    val stroke = Plain.stroke
+    val fill = Q(theColor)
   }
   object Filled {
     def apply(theColor: Rgba) = new Filled(theColor)
   }
   final class Stroked(theWidth: Float, theColor: Rgba) extends Appearance {
+    val face = Plain.face
     val opacity = Q(theColor.a match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
-    val stroke = Q(theWidth)
-    val strokeColor = Q(theColor)
-    val fillColor = Q empty Rgba(0, 0, 0, 0)
+    val wide = Q(theWidth)
+    val stroke = Q(theColor)
+    val fill = Plain.fill
   }
   object Stroked {
     def apply(theWidth: Float, theColor: Rgba) = new Stroked(theWidth, theColor)
   }
   final class Translucent(theOpacity: Float) extends Appearance {
+    val face = Plain.face
     val opacity = Q(theOpacity match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
-    val stroke = Q empty 0f
-    val strokeColor = Plain.color
-    val fillColor = Plain.color
+    val wide = Plain.wide
+    val stroke = Plain.color
+    val fill = Plain.color
   }
   object Translucent {
     def apply(theOpacity: Float) = new Translucent(theOpacity)
+  }
+  final class Ornate(font: Option[String] = None, o: Option[Float] = None, w: Option[Float] = None, s: Option[Rgba] = None, f: Option[Rgba] = None)
+  extends Appearance {
+    val face = font match { case None => Plain.face; case Some(x) => Q(x) }
+    val opacity = o match { case None => Plain.opacity; case Some(x) => Q(x) }
+    val wide = w match { case None => Plain.wide; case Some(x) => Q(x) }
+    val stroke = s match { case None => Plain.stroke; case Some(x) => Q(x) }
+    val fill = f match { case None => Plain.fill; case Some(x) => Q(x) }
+  }
+  object Ornate {
+    def apply(font: String = "", o: Float = Float.NaN, w: Float = Float.NaN, s: Rgba = Rgba(0,0,0,0), f: Rgba = Rgba(0,0,0,0)) =
+      new Ornate(
+        if (font.isEmpty) None else Some(font),
+        if (o.finite) Some(o) else None,
+        if (w.finite) Some(w) else None,
+        if (s.a > 0 && s.a.finite) Some(s) else None,
+        if (f.a > 0 && f.a.finite) Some(f) else None
+      )
   }
 
   final case class IndentedSvg(text: String, level: Int = 0) {
@@ -100,6 +134,7 @@ object Chart {
 
   final case class Circ(c: Q[Vc], r: Q[Float], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
+    override def turnOff = Set(FACE)
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
       val vc = c.value
       val vr = r.value
@@ -107,13 +142,14 @@ object Chart {
       val circ = kse.visual.Circle(vc, vr) into xform
       if (!circ.radius.finite || circ.radius == 0 || !circ.center.finite) return Vector.empty
       Vector(IndentedSvg(
-        f"<circle cx=$q${nf fmt circ.center.x}$q cy=$q${nf fmt circ.center.y}$q r=$q${nf fmt circ.radius}$q${af fmt appear.value}/>"
+        f"<circle cx=$q${nf fmt circ.center.x}$q cy=$q${nf fmt circ.center.y}$q r=$q${nf fmt circ.radius}$q${af fmt this}/>"
       ))
     }
   }
 
   final case class Bar(c: Q[Vc], r: Q[Vc], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
+    override def turnOff = Set(FACE)
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
       val vc = c.value
       val vr = r.value
@@ -129,10 +165,10 @@ object Chart {
           val rh = rect.major.y.abs + (rect.aspect*rect.major.x).abs
           val x = rect.center.x - rw;
           val y = rect.center.y - rh;
-          f"<rect x=$q${nf fmt x}$q y=$q${nf fmt y}$q width=$q${nf fmt 2*rw}$q height=$q${nf fmt 2*rh}$q${af fmt appear.value}/>"
+          f"<rect x=$q${nf fmt x}$q y=$q${nf fmt y}$q width=$q${nf fmt 2*rw}$q height=$q${nf fmt 2*rh}$q${af fmt this}/>"
         }
         else {
-          f"<polygon points=$q${rect.corners.map{ l => val v = Vc from l; (nf fmt v.x) + "," + (nf fmt v.y)}.mkString(" ")}$q${af fmt appear.value}/>"
+          f"<polygon points=$q${rect.corners.map{ l => val v = Vc from l; (nf fmt v.x) + "," + (nf fmt v.y)}.mkString(" ")}$q${af fmt this}/>"
         }
       }))
     }
@@ -140,6 +176,7 @@ object Chart {
 
   final case class DataLine(pts: Q[Array[Long]], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
+    override def turnOff = Set(FACE, FILL)
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
       val vps = pts.value
       val v = new Array[Long](vps.length)
@@ -151,8 +188,48 @@ object Chart {
       while (i < 1) { sb ++= "M "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
       while (i < 2) { sb ++= " L "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
       while (i < v.length) { sb += ' '; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
-      sb ++= f"$q${af fmt appear.value}${if (!appear.value.fillColor.alive) " fill=\"none\"" else ""}/>"
+      sb ++= "\" stroke-linejoin=\"round\""
+      sb ++= f"${af fmt this} fill=${q}none${q}/>"
       Vector(IndentedSvg(sb.result))
+    }
+  }
+
+  final case class ErrorBarYY(x: Q[Float], hi: Q[Float], lo: Q[Float], across: Q[Float], bias: Q[Float], appear: Q[Appearance])
+  extends ProxyAppear with InSvg { self =>
+    override def turnOff = Set(FACE, FILL)
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val vx = x.value
+      val va = across.value
+      val vb = bias.value.clip(0f, 1f)
+      val rl = Vc(vx, lo.value)
+      val rh = Vc(vx, hi.value)
+      val cll = Vc(vx - va/2, rl.y)
+      val clr = Vc(vx + va/2, rl.y)
+      val chl = Vc(vx - va/2, rh.y)
+      val chr = Vc(vx + va/2, rh.y)
+      if (vb == 0) Vector(IndentedSvg(
+        f"<path d=${q}M ${nf fmt rl.x} ${nf fmt rl.y} L ${nf fmt rh.x} ${nf fmt rh.y}$q fill=${q}none${q}${af fmt this}/>"
+      ))
+      else if (vb == 1) Vector(IndentedSvg(
+        f"<path d=${q}M ${nf fmt cll.x} ${nf fmt cll.y} L ${nf fmt clr.x} ${nf fmt clr.y} M ${nf fmt chl.x} ${nf fmt chl.y} L ${nf fmt chr.x} ${nf fmt chr.y}$q fill=${q}none${q}${af fmt this}/>"
+      ))
+      else if (vb closeTo 0.5f) Vector(IndentedSvg(
+        f"<path d=${q}M ${nf fmt rl.x} ${nf fmt rl.y} L ${nf fmt rh.x} ${nf fmt rh.y}$q M ${nf fmt cll.x} ${nf fmt cll.y} L ${nf fmt clr.x} ${nf fmt clr.y} M ${nf fmt chl.x} ${nf fmt chl.y} L ${nf fmt chr.x} ${nf fmt chr.y}$q fill=${q}none${q}${af fmt this}/>"
+      ))
+      else {
+        val smaller = 2*math.min(vb, 1-vb);
+        val little = new ProxyAppear{ def appear = Q(self); override lazy val wide = self.wide.map(_ * smaller); override lazy val opacity = Plain.opacity; override lazy val stroke = self.stroke.map((r: Rgba) => r.aTo(1)) }
+        val big = new ProxyAppear { def appear = Q(self); override lazy val opacity = Plain.opacity; override lazy val stroke = self.stroke.map((r: Rgba) => r.aTo(1)) }
+        val ver = if (vb < 0.5) little else big
+        val hor = if (vb < 0.5) big else little
+        val opq = if (stroke.alive && stroke.value.a < 1) stroke.value.a else if (opacity.alive && opacity.value < 1) opacity.value else 1f
+        Vector(
+          IndentedSvg(if (opq < 1) f"<g opacity=$q$opq%.3f$q>" else "<g>"),
+          IndentedSvg(f"<path d=${q}M ${nf fmt rl.x} ${nf fmt rl.y} L ${nf fmt rh.x} ${nf fmt rh.y}$q fill=${q}none${q}${af fmt ver}/>", 1),
+          IndentedSvg(f"<path d=${q}M ${nf fmt cll.x} ${nf fmt cll.y} L ${nf fmt clr.x} ${nf fmt clr.y} M ${nf fmt chl.x} ${nf fmt chl.y} L ${nf fmt chr.x} ${nf fmt chr.y}$q fill=${q}none${q}${af fmt hor}/>",1),
+          IndentedSvg("</g>")
+        )
+      }
     }
   }
 
@@ -165,7 +242,7 @@ object Chart {
       if (vl.x closeTo vh.x) {
         val size = (vh.y - vl.y).abs
         Vector(IndentedSvg(
-          f"<text x=$q${nf fmt vl.x}$q y=$q${nf fmt vl.y}$q font-size=$q${nf fmt size}$q text-anchor=${"\"middle\""}${af fmt appear.value}>${text.value}</text>"
+          f"<text x=$q${nf fmt vl.x}$q y=$q${nf fmt vl.y}$q font-size=$q${nf fmt size}$q text-anchor=${"\"middle\""}${af fmt this}>${text.value}</text>"
         ))        
       }
       else ???
@@ -181,32 +258,22 @@ object Chart {
     }
   }
   object MuGroup {
-    def apply(es: InSvg*) = new MuGroup(es.toVector)
+    def apply(elements: InSvg*) = new MuGroup(elements.toVector)
   }
 
-  final class Origin(at: Q[Vc], theElements: Vector[InSvg]) extends MuGroup(theElements) {
-    private[this] def unoriginate: Xform = Xform.natural(Frame(at.value, Vc(1,0)), Frame.natural)
+  final class Origin(origin: Q[Vc], scaling: Q[Vc], theElements: Vector[InSvg]) extends MuGroup(theElements) {
+    private[this] def undo: Xform = Xform.shiftscale(origin.value, scaling.value).inverted
     override def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) =
-      super.inSvg(if (at.alive) unoriginate andThen xform else xform)(nf, af)
+      super.inSvg(undo andThen xform)(nf, af)
   }
   object Origin {
-    def apply(at: Q[Vc], theElements: Vector[InSvg]) = new Origin(at, theElements)
+    def apply(origin: Q[Vc], scaling: Q[Vc], elements: InSvg*) = new Origin(origin, scaling, elements.toVector)
   }
 
-  final class Axes(scaling: Q[Vc], theScaled: Vector[InSvg]) extends MuGroup(theScaled) {
-    private[this] def unscale: Xform = Xform.scaly(scaling.value).inverted
-    override def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) =
-      super.inSvg(if (scaling.alive) unscale andThen xform else xform)(nf, af)
-  }
-  object Axes {
-    def apply(scaling: Q[Vc], theScaled: Vector[InSvg]) = new Axes(scaling, theScaled)
-  }
-
-  def quick(i: InSvg, offset: Vc = Vc(0,0)) {
-    val fr = if (offset == Vc(0,0)) Frame.natural else Frame.natural.copy(origin = offset)
+  def quick(i: InSvg) {
     val svg = 
       Vector("<html>", "<body>", """<svg width="640" height="480">""").map(x => IndentedSvg(x)) ++
-      i.inSvg(Xform.flipy(fr, Frame(0 vc -480, 1 vc 0)))(defaultNumberFormatter, defaultAppearanceFormatter).map(x => x.copy(level = x.level+1)) ++
+      i.inSvg(Xform.flipy(480))(defaultNumberFormatter, defaultAppearanceFormatter).map(x => x.copy(level = x.level+1)) ++
       Vector("</svg>", "</body>", "</html>").map(x => IndentedSvg(x))
     println(svg.mkString("\n"))
     svg.map(_.toString).toFile("test.html".file)
