@@ -74,6 +74,15 @@ object Chart {
   object Filled {
     def apply(theColor: Rgba) = new Filled(theColor)
   }
+  final class Stroked(theWidth: Float, theColor: Rgba) extends Appearance {
+    val opacity = Q(theColor.a match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
+    val stroke = Q(theWidth)
+    val strokeColor = Q(theColor)
+    val fillColor = Q empty Rgba(0, 0, 0, 0)
+  }
+  object Stroked {
+    def apply(theWidth: Float, theColor: Rgba) = new Stroked(theWidth, theColor)
+  }
   final class Translucent(theOpacity: Float) extends Appearance {
     val opacity = Q(theOpacity match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
     val stroke = Q empty 0f
@@ -126,6 +135,24 @@ object Chart {
           f"<polygon points=$q${rect.corners.map{ l => val v = Vc from l; (nf fmt v.x) + "," + (nf fmt v.y)}.mkString(" ")}$q${af fmt appear.value}/>"
         }
       }))
+    }
+  }
+
+  final case class DataLine(pts: Q[Array[Long]], appear: Q[Appearance])
+  extends ProxyAppear with InSvg {
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val vps = pts.value
+      val v = new Array[Long](vps.length)
+      var i = 0;
+      while (i < v.length) { v(i) = xform(Vc from vps(i)).underlying; i += 1 }
+      val sb = new StringBuilder
+      sb ++= "<path d=\""
+      i = 0;
+      while (i < 1) { sb ++= "M "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
+      while (i < 2) { sb ++= " L "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
+      while (i < v.length) { sb += ' '; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
+      sb ++= f"$q${af fmt appear.value}${if (!appear.value.fillColor.alive) " fill=\"none\"" else ""}/>"
+      Vector(IndentedSvg(sb.result))
     }
   }
 
