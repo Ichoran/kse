@@ -185,8 +185,8 @@ object Chart {
       val sb = new StringBuilder
       sb ++= "<path d=\""
       i = 0;
-      while (i < 1) { sb ++= "M "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
-      while (i < 2) { sb ++= " L "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
+      while (i < math.min(v.length,1)) { sb ++= "M "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
+      while (i < math.min(v.length,2)) { sb ++= " L "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
       while (i < v.length) { sb += ' '; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
       sb ++= "\" stroke-linejoin=\"round\""
       sb ++= f"${af fmt this} fill=${q}none${q}/>"
@@ -194,7 +194,40 @@ object Chart {
     }
   }
 
-  final case class ErrorBarYY(x: Q[Float], hi: Q[Float], lo: Q[Float], across: Q[Float], bias: Q[Float], appear: Q[Appearance])
+  final case class DataRange(xs: Q[Array[Float]], los: Q[Array[Float]], his: Q[Array[Float]], appear: Q[Appearance])
+  extends ProxyAppear with InSvg {
+    override def turnOff = Set(FACE, WIDE, STRO)
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val vxa = xs.value.clone
+      val vxb = vxa.clone
+      val vh = his.value.clone
+      val vl = los.value.clone
+      val L = math.min(vxa.length, math.min(vh.length, vl.length))
+      var i = 0
+      while (i < L) {
+        val l = xform(Vc(vxa(i), vl(i)))
+        val h = xform(Vc(vxb(i), vh(i)))
+        vxa(i) = l.x
+        vl(i) = l.y
+        vxb(i) = h.x
+        vh(i) = h.y
+        i += 1
+      }
+      val sb = new StringBuilder
+      sb ++= "<path d=\""
+      i = 0
+      while (i < math.min(1,L)) { sb ++= "M "; sb ++= nf fmt vxa(i); sb += ' '; sb ++= nf fmt vl(i); i += 1 }
+      while (i < math.min(2,L)) { sb ++= " L "; sb ++= nf fmt vxa(i); sb += ' '; sb ++= nf fmt vl(i); i += 1 }
+      while (i < L) { sb += ' '; sb ++= nf fmt vxa(i); sb += ' '; sb ++= nf fmt vl(i); i += 1 }
+      while (i > math.max(L,1)) { i -= 1; sb += ' '; sb ++= nf fmt vxb(i); sb += ' '; sb ++= nf fmt vh(i) }
+      while (i > 0) { i -= 1; if (vxa.length == 1) sb ++= " L " else sb += ' '; sb ++= nf fmt vxb(i); sb += ' '; sb ++= nf fmt vh(i) }
+      if (L > 0) sb ++= " Z"
+      sb ++= f"$q${af fmt this}/>"
+      Vector(IndentedSvg(sb.result))
+    }
+  }
+
+  final case class ErrorBarYY(x: Q[Float], lo: Q[Float], hi: Q[Float], across: Q[Float], bias: Q[Float], appear: Q[Appearance])
   extends ProxyAppear with InSvg { self =>
     override def turnOff = Set(FACE, FILL)
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
