@@ -16,7 +16,12 @@ import kse.eio._
 object Chart {
   private val q = "\""
 
-  trait NumberFormatter { def fmt(x: Float): String }
+  trait NumberFormatter {
+    def fmt(x: Float): String
+    def vmt(v: Vc, c: Char): String = fmt(v.x) + c.toString + fmt(v.y)
+    def comma(v: Vc) = vmt(v, ',')
+    def space(v: Vc) = vmt(v, ' ')
+  }
   trait AppearanceFormatter { def fmt(a: Appearance): String }
 
   val defaultNumberFormatter = new NumberFormatter { 
@@ -241,13 +246,13 @@ object Chart {
       val chl = Vc(vx - va/2, rh.y)
       val chr = Vc(vx + va/2, rh.y)
       if (vb == 0) Vector(IndentedSvg(
-        f"<path d=${q}M ${nf fmt rl.x} ${nf fmt rl.y} L ${nf fmt rh.x} ${nf fmt rh.y}$q fill=${q}none${q}${af fmt this}/>"
+        f"<path d=${q}M ${nf space rl} L ${nf space rh}$q fill=${q}none${q}${af fmt this}/>"
       ))
       else if (vb == 1) Vector(IndentedSvg(
-        f"<path d=${q}M ${nf fmt cll.x} ${nf fmt cll.y} L ${nf fmt clr.x} ${nf fmt clr.y} M ${nf fmt chl.x} ${nf fmt chl.y} L ${nf fmt chr.x} ${nf fmt chr.y}$q fill=${q}none${q}${af fmt this}/>"
+        f"<path d=${q}M ${nf space cll} L ${nf space clr} M ${nf space chl} L ${nf space chr}$q fill=${q}none${q}${af fmt this}/>"
       ))
       else if (vb closeTo 0.5f) Vector(IndentedSvg(
-        f"<path d=${q}M ${nf fmt rl.x} ${nf fmt rl.y} L ${nf fmt rh.x} ${nf fmt rh.y}$q M ${nf fmt cll.x} ${nf fmt cll.y} L ${nf fmt clr.x} ${nf fmt clr.y} M ${nf fmt chl.x} ${nf fmt chl.y} L ${nf fmt chr.x} ${nf fmt chr.y}$q fill=${q}none${q}${af fmt this}/>"
+        f"<path d=${q}M ${nf space rl} L ${nf space rh}$q M ${nf space cll} L ${nf space clr} M ${nf space chl} L ${nf space chr}$q fill=${q}none${q}${af fmt this}/>"
       ))
       else {
         val smaller = 2*math.min(vb, 1-vb);
@@ -258,11 +263,35 @@ object Chart {
         val opq = if (stroke.alive && stroke.value.a < 1) stroke.value.a else if (opacity.alive && opacity.value < 1) opacity.value else 1f
         Vector(
           IndentedSvg(if (opq < 1) f"<g opacity=$q$opq%.3f$q>" else "<g>"),
-          IndentedSvg(f"<path d=${q}M ${nf fmt rl.x} ${nf fmt rl.y} L ${nf fmt rh.x} ${nf fmt rh.y}$q fill=${q}none${q}${af fmt ver}/>", 1),
-          IndentedSvg(f"<path d=${q}M ${nf fmt cll.x} ${nf fmt cll.y} L ${nf fmt clr.x} ${nf fmt clr.y} M ${nf fmt chl.x} ${nf fmt chl.y} L ${nf fmt chr.x} ${nf fmt chr.y}$q fill=${q}none${q}${af fmt hor}/>",1),
+          IndentedSvg(f"<path d=${q}M ${nf space rl} L ${nf space rh}$q fill=${q}none${q}${af fmt ver}/>", 1),
+          IndentedSvg(f"<path d=${q}M ${nf space cll} L ${nf space clr} M ${nf space chl} L ${nf space chr}$q fill=${q}none${q}${af fmt hor}/>",1),
           IndentedSvg("</g>")
         )
       }
+    }
+  }
+
+  trait Arrowhead{}
+
+  final case class GoTo(from: Q[Vc], to: Q[Vc], indirection: Q[Float], arrow: Q[Arrowhead], appear: Q[Appearance])
+  extends ProxyAppear with InSvg {
+    override def turnOff = Set(FACE, FILL)
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val vf = from.value
+      val vt = to.value
+      val vi = indirection.value
+      val v = vt - vf;
+      val ip = vf + v*0.5f - v.ccw*(2f*vi)
+      val uf = xform(vf)
+      val ut = xform(vt)
+      val iq = xform(ip)
+      if (arrow.alive) ???
+      else Vector(IndentedSvg(
+        if (indirection.alive)
+          f"<path d=${q}M ${nf space uf} Q ${nf space iq} ${nf space ut}${q} fill=${q}none${q}${af fmt this}/>"      
+        else
+          f"<path d=${q}M ${nf space uf} L ${nf space ut}${q} fill=${q}none${q}${af fmt this}/>"
+      ))
     }
   }
 
