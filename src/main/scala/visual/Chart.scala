@@ -83,6 +83,13 @@ object Chart {
     def fill = color
     def stroke = color
   }
+  abstract class Plainly extends Appearance {
+    def face = Plain.face
+    def opacity = Plain.opacity
+    def wide = Plain.wide
+    def fill = Plain.fill
+    def stroke = Plain.stroke
+  }
   final class Filled(theColor: Rgba) extends Appearance {
     val face = Plain.face
     val opacity = Q(theColor.a match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
@@ -271,7 +278,51 @@ object Chart {
     }
   }
 
-  trait Arrowhead{}
+  trait Arrowhead {
+    def setback: Float
+    def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String)
+  }
+  final case class LineArrow(angle: Float, length: Float, thickness: Float) extends Arrowhead {
+    val phi = angle.abs
+    val theta = (math.Pi/2 - phi).toFloat
+    val cosx = if (theta < phi) math.cos(theta).toFloat else math.cos(phi).toFloat
+    val sinx = if (theta < phi) math.sin(theta).toFloat else math.sin(phi).toFloat
+    val setback = 
+      if (phi closeTo (math.Pi/4).toFloat) 0f
+      else if (phi < theta) ((0.5*cosx)/sinx).toFloat
+      else if (2*thickness <= cosx) length*cosx + thickness*sinx
+      else length*cosx + thickness*sinx + (cosx/2 - thickness)/sinx
+    val pointx =
+      if (phi closeTo (math.Pi/4).toFloat) Float.NaN
+      else if (phi < theta) thickness*(2*sinx)
+      else length*cosx + thickness*sinx + (cosx - thickness)/(2*sinx)
+    val barbx =
+      if (phi closeTo (math.Pi/4).toFloat) thickness/2
+      else if (phi < theta) length*cosx - thickness*sinx/2 + cosx/sinx
+      else thickness*sinx/2
+    val barby =
+      if (phi closeTo (math.Pi/4).toFloat) 0.5f+length
+      else 0.5f + length*sinx + thickness*cosx/2
+    def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String) = {
+      val qt = xform(tip)
+      val deltadir = if (direction.lenSq < 0.1f*tip.lenSq) direction else direction*(1f/(50*math.max(1e-3f, tip.len.toFloat)))
+      val dirx = (xform(tip + deltadir) - qt).hat
+      val diry = dirx.ccw
+      val w = appear.wide.value
+      val ap = if (thickness closeTo 1) Plain else new Plainly { override def wide = appear.wide.map(_ * thickness) }
+      val s = w * setback
+      val px = w * pointx
+      val bx = w * barbx
+      val by = w * barby
+      val qA = qt - dirx*bx + diry*by
+      val qB = qt - dirx*bx - diry*by
+      val qC = qt - dirx*px
+      val ans = 
+        if (phi closeTo (math.Pi/4).toFloat) f"<path d=${q}M ${nf space qA} L ${nf space qB}${q}${af fmt ap}/>"
+        else f"<path d=${q}M ${nf space qA} L ${nf space qC} ${nf space qB}${q} stroke-linejoin=${q}miter${q} stroke-miterlimit=${q}10${q}${af fmt ap}/>"
+      (s, ans)
+    }
+  }
 
   final case class GoTo(from: Q[Vc], to: Q[Vc], indirection: Q[Float], arrow: Q[Arrowhead], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
@@ -285,7 +336,22 @@ object Chart {
       val uf = xform(vf)
       val ut = xform(vt)
       val iq = xform(ip)
-      if (arrow.alive) ???
+      if (arrow.alive) {
+        val ar = arrow.value
+        val (setback, arrowline) = ar.stroked(vt, (vt - ip).hat)(xform, this)(nf, af)
+        val wt = ut - setback*(ut - iq).hat
+        val mainline =
+          if (indirection.alive)
+            f"<path d=${q}M ${nf space uf} Q ${nf space iq} ${nf space wt}${q} fill=${q}none${q}/>"      
+          else
+            f"<path d=${q}M ${nf space uf} L ${nf space wt}${q} fill=${q}none${q}/>"
+        Vector(
+          IndentedSvg(f"<g fill=${q}none${q} ${af fmt this}>"),
+          IndentedSvg(mainline, 1),
+          IndentedSvg(arrowline, 1),
+          IndentedSvg("</g>")
+        )
+      }
       else Vector(IndentedSvg(
         if (indirection.alive)
           f"<path d=${q}M ${nf space uf} Q ${nf space iq} ${nf space ut}${q} fill=${q}none${q}${af fmt this}/>"      
