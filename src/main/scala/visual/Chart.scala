@@ -302,25 +302,30 @@ object Chart {
   }
   final case class LineArrow(angle: Float, length: Float, thickness: Float) extends Arrowhead {
     val phi = angle.abs
-    val theta = (math.Pi/2 - phi).toFloat
+    val theta = (math.Pi - phi).toFloat
     val cosx = if (theta < phi) math.cos(theta).toFloat else math.cos(phi).toFloat
     val sinx = if (theta < phi) math.sin(theta).toFloat else math.sin(phi).toFloat
+    val flat = phi closeTo (math.Pi/2).toFloat
+    val underfilled = 2*thickness < cosx
     val setback = 
-      if (phi closeTo (math.Pi/4).toFloat) 0f
-      else if (phi < theta) ((0.5*cosx)/sinx).toFloat
-      else if (2*thickness <= cosx) length*cosx + thickness*sinx
-      else length*cosx + thickness*sinx + (cosx/2 - thickness)/sinx
+      if (flat) 0f
+      else if (phi < theta) (cosx/(2*sinx)).toFloat
+      else if (underfilled) length*cosx + thickness*sinx
+      else length*cosx
     val pointx =
-      if (phi closeTo (math.Pi/4).toFloat) Float.NaN
-      else if (phi < theta) thickness*(2*sinx)
-      else length*cosx + thickness*sinx + (cosx - thickness)/(2*sinx)
+      if (flat) Float.NaN
+      else if (phi < theta) thickness/(2*sinx)
+      else if (underfilled) setback + (cosx - thickness)/(2*sinx)
+      else setback + thickness/(2*sinx)
     val barbx =
-      if (phi closeTo (math.Pi/4).toFloat) thickness/2
-      else if (phi < theta) length*cosx - thickness*sinx/2 + cosx/sinx
+      if (flat) thickness/2
+      else if (phi < theta) setback + 2*pointx + length*cosx - thickness*sinx*0.5f
       else thickness*sinx/2
     val barby =
-      if (phi closeTo (math.Pi/4).toFloat) 0.5f+length
-      else 0.5f + length*sinx + thickness*cosx/2
+      if (flat) 0.5f+length
+      else if (phi < theta) 0.5f + length*sinx + thickness*cosx*0.5f
+      else if (underfilled) 0.5f + length*sinx - thickness*cosx*0.5f
+      else length*sinx + thickness*cosx*0.5f
     def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String) = {
       val qt = xform(tip)
       val deltadir = if (direction.lenSq < 0.1f*tip.lenSq) direction else direction*(1f/(50*math.max(1e-3f, tip.len.toFloat)))
@@ -335,9 +340,10 @@ object Chart {
       val qA = qt - dirx*bx + diry*by
       val qB = qt - dirx*bx - diry*by
       val qC = qt - dirx*px
+      val miterfix = if (3.999*sinx < 1) " stroke-miterlimit=\"%d\"".format(math.ceil(1/sinx+1e-3).toInt) else ""
       val ans = 
-        if (phi closeTo (math.Pi/4).toFloat) f"<path d=${q}M ${nf space qA} L ${nf space qB}${q}${af fmt ap}/>"
-        else f"<path d=${q}M ${nf space qA} L ${nf space qC} ${nf space qB}${q} stroke-linejoin=${q}miter${q} stroke-miterlimit=${q}10${q}${af fmt ap}/>"
+        if (flat) f"<path d=${q}M ${nf space qA} L ${nf space qB}${q}${af fmt ap}/>"
+        else f"<path d=${q}M ${nf space qA} L ${nf space qC} ${nf space qB}${q} stroke-linejoin=${q}miter${q}$miterfix${af fmt ap}/>"
       (s, ans)
     }
   }
