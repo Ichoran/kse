@@ -22,7 +22,14 @@ object Chart {
     def comma(v: Vc) = vmt(v, ',')
     def space(v: Vc) = vmt(v, ' ')
   }
-  trait AppearanceFormatter { def fmt(a: Appearance): String }
+  trait AppearanceFormatter {
+    def fmt(a: Appearance): String
+    def adjust(a: Appearance): Appearance = a
+  }
+  case class ZoomingFormatter(zoom: Float, original: AppearanceFormatter) extends AppearanceFormatter {
+    def fmt(a: Appearance): String = original.fmt(adjust(a))
+    override def adjust(a: Appearance): Appearance = if (a.wide.alive) ZoomAppear(zoom, Q(a)) else a
+  }
 
   val defaultNumberFormatter = new NumberFormatter { 
     def fmt(x: Float) = if (x.toInt == x) x.toInt.toString else if (x*10 == (x*10).toInt) "%.1f".format(x) else "%.2f".format(x)
@@ -74,6 +81,17 @@ object Chart {
     val wide = that.wide.map(identity)
     val stroke = that.stroke.map(identity)
     val fill = that.fill.map(identity)
+  }
+  final class ZoomAppear(val zoom: Float, val appear: Q[Appearance]) extends ProxyAppear {
+    override def turnOff: Set[AppearElement] = appear match {
+      case pa: ProxyAppear => pa.turnOff
+      case _ => super.turnOff
+    }
+    override lazy val wide: Q[Float] = appear.flatMap(_.wide.map(_ * zoom))
+  }
+  object ZoomAppear {
+    def apply(zoom: Float, appear: Appearance) = new ZoomAppear(zoom, Q(appear))
+    def apply(zoom: Float, appear: Q[Appearance]) = new ZoomAppear(zoom, appear)
   }
   object Plain extends Appearance {
     val face = Q empty "Tahoma, Geneva, sans-serif"
@@ -308,8 +326,8 @@ object Chart {
       val deltadir = if (direction.lenSq < 0.1f*tip.lenSq) direction else direction*(1f/(50*math.max(1e-3f, tip.len.toFloat)))
       val dirx = (xform(tip + deltadir) - qt).hat
       val diry = dirx.ccw
-      val w = appear.wide.value
-      val ap = if (thickness closeTo 1) Plain else new Plainly { override def wide = appear.wide.map(_ * thickness) }
+      val w = (af adjust appear).wide.value
+      val ap = if (thickness closeTo 1) Plain else new Plainly { override def wide = Q.eval((af adjust appear).wide.value*thickness) }
       val s = w * setback
       val px = w * pointx
       val bx = w * barbx
@@ -323,6 +341,7 @@ object Chart {
       (s, ans)
     }
   }
+
 
   final case class GoTo(from: Q[Vc], to: Q[Vc], indirection: Q[Float], arrow: Q[Arrowhead], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
@@ -361,6 +380,43 @@ object Chart {
     }
   }
 
+  final case class PolyGo(points: Q[Array[Long]], fwdarrow: Q[Arrowhead], bkwarrow: Q[Arrowhead], appear: Q[Appearance])
+  extends ProxyAppear with InSvg {
+    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
+      val vp = points.value
+      if (vp.length < 2) return Vector.empty
+      val up = {
+        val ans = new Array[Long](vp.length)
+        var i = 0
+        while (i < vp.length) { ans(i) = xform(Vc from vp(i)).underlying; i += 1 }
+        ans
+      }
+      val fwd = (Vc.from(vp(vp.length-1)) - Vc.from(vp(vp.length-2))).hat
+      val bkw = (Vc.from(vp(0)) - Vc.from(vp(1))).hat
+      var arrows = List.empty[String]
+      if (bkwarrow.alive) {
+        val ar = bkwarrow.value
+        val (setback, arrowline) = ar.stroked(Vc from vp(0), bkw)(xform, this)(nf, af)
+        up(0) = (Vc.from(up(0)) - setback*(Vc.from(up(0)) - Vc.from(up(1))).hat).underlying
+        arrows = arrowline :: arrows
+      }
+      if (fwdarrow.alive) {
+        val ar = fwdarrow.value
+        val (setback, arrowline) = ar.stroked(Vc from vp(vp.length-1), fwd)(xform, this)(nf, af)
+        up(up.length-1) = (Vc.from(up(up.length-1)) - setback*(Vc.from(up(up.length-1)) - Vc.from(up(up.length-2))).hat).underlying
+        arrows = arrowline :: arrows
+      }
+      val line = f"d=${q}M ${nf space Vc.from(up(0))} L ${up.drop(1).map(l => nf space Vc.from(l)).mkString(" ")}${q}"
+
+      Vector(
+        IndentedSvg(f"<g fill=${q}none${q} ${af fmt this}>"),
+        IndentedSvg(f"<path fill=${q}none${q} $line/>", 1)
+      ) ++
+      arrows.map(s => IndentedSvg(s, 1)) ++
+      Vector(IndentedSvg("</g>"))
+    }
+  }
+
   final case class Letters(pt: Q[Vc], text: Q[String], height: Q[Float], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
@@ -396,6 +452,15 @@ object Chart {
   }
   object Origin {
     def apply(origin: Q[Vc], scaling: Q[Vc], elements: InSvg*) = new Origin(origin, scaling, elements.toVector)
+  }
+
+  final class ZoomLines(scaling: Q[Float], theElements: Vector[InSvg]) extends MuGroup(theElements) {
+    override def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) =
+      super.inSvg(xform)(nf, ZoomingFormatter(scaling.value, af))
+  }
+  object ZoomLines {
+    def apply(scaling: Q[Float], elements: InSvg*) = new ZoomLines(scaling, elements.toVector)
+    def apply(scaling: Float, elements: InSvg*) = new ZoomLines(Q(scaling), elements.toVector)
   }
 
   def quick(i: InSvg) {
