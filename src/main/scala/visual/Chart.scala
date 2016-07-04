@@ -440,24 +440,60 @@ object Chart {
     }
   }
 
-  final case class Tick(x: Float, yL: Float, yH: Float) {}
-  final case class TickMarks(origin: Q[Vc], axis: Q[Vc], left: Q[Float], right: Q[Float], values: Q[Array[Float]], appear: Q[Appearance])
+  final case class TickMarks(
+    origin: Q[Vc], axis: Q[Vc],
+    left: Q[Float], right: Q[Float], values: Q[Array[Float]],
+    labelSize: Q[Float], labelAt: Q[Float], labelRot: Q[Float], labels: Q[Array[String]],
+    mainSize: Q[Float], mainAt: Q[Float], mainRot: Q[Float], mainText: Q[String],
+    appear: Q[Appearance], textappear: Q[Appearance] = Q empty Plain
+  )
   extends ProxyAppear with InSvg {
     override def turnOff = Set(FILL)
     def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
       val va = axis.value.hat
       val vb = va.ccw
       val w = (af adjust appear.value).wide.value
-      val vl = vb*(left.value*w)
-      val vr = vb*(right.value*w)
+      val ul = left.value * w
+      val ur = right.value * w
       val vo = origin.value
-      val pts = values.value.map{ x =>
+      val vv = values.value
+      val pts = vv.map{ x =>
         val vc = vo + x*va
-        val l = xform(vc + vl)
-        val r = xform(vc + vr)
+        val uc = xform(vc)
+        val orth = (xform(vc+vb*1e-2f) - uc).hat
+        val l = uc + orth*ul
+        val r = uc + orth*ur
         f"M ${nf space l} L ${nf space r}"
       }
-      Vector(IndentedSvg(f"<path d=${q}${pts.mkString(" ")}${q} fill=${q}none${q}${af fmt this}/>"))
+      val uls = w * (if (labelSize.alive) labelSize.value else 10f)
+      val ula =
+        if (labelAt.alive) labelAt.value * w
+        else if ((va * Vc(1,0)).abs > (va * Vc(0,1)).abs) math.min(ul,ur) - (ul-ur).abs - uls/2
+        else math.max(ul, ur) + (ul-ur).abs + uls/2
+      val vlr = if (labelRot.alive) labelRot.value else 0
+      val lb =
+        if (labels.alive) {
+          val lines =
+            (vv zip labels.value).collect{ case (x, l) if l.nonEmpty =>
+              val vc = vo + x*va
+              val uc = xform(vc)
+              val orth = (xform(vc+vb*1e-2f) - uc).hat
+              val u = uc + orth * ula
+              f"<text x=$q${nf fmt u.x}$q y=$q${nf fmt u.y}$q>$l</text>"
+            }
+          if (lines.isEmpty) Vector.empty
+          else {
+            val hanchor = "text-anchor=\"middle\""
+            val vanchor = "alignment-baseline=\"middle\""
+            val app = if (textappear.alive) textappear.value else Filled(appear.value.stroke.value)
+            val common = f"font-size=$q${nf fmt uls}$q$hanchor$vanchor${af fmt app}"
+            IndentedSvg(f"<g $common>") +: lines.toVector.map(l => IndentedSvg(l, 1)) :+ IndentedSvg("</g>")
+          }
+        }
+        else Vector.empty
+      val tickpath = f"<path d=${q}${pts.mkString(" ")}${q} fill=${q}none${q}${af fmt this}/>"
+      if (lb.isEmpty) Vector(IndentedSvg(tickpath))
+      else Vector(IndentedSvg("<g>"), IndentedSvg(tickpath, 1)) ++ lb.map(x => x.copy(level = x.level+1)) :+ IndentedSvg("</g>")
     }
   }
 
@@ -490,6 +526,8 @@ object Chart {
     def apply(scaling: Q[Float], elements: InSvg*) = new ZoomLines(scaling, elements.toVector)
     def apply(scaling: Float, elements: InSvg*) = new ZoomLines(Q(scaling), elements.toVector)
   }
+
+  final class Axes(origin: Q[Vc], scaling: Q[Vc])
 
   def quick(i: InSvg) {
     val svg = 
