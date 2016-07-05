@@ -275,7 +275,7 @@ package coll {
   sealed abstract class Q[+A] { self =>
     def alive: Boolean
     def value: A
-    def get: Option[A] = if (alive) Some(value) else None
+    def opt: Option[A] = if (alive) Some(value) else None
     def live: Q[A] = new Q.Zombie(self, true)
     def dead: Q[A] = new Q.Zombie(self, false)
     def fix: Q[A] = if (alive) new Q.Alive(value) else new Q.Dead(value)
@@ -284,12 +284,25 @@ package coll {
     def map[B](f: A => B): Q[B] = new Q.Mapped(self, f)
     def flatMap[B](f: A => Q[B]): Q[B] = new Q.Flat(self, f)
     def filter(p: A => Boolean): Q[A] = new Q.Filter(self, p)
+    def cache: Q[A] = new Q.Cache(this)
     final def withFilter(p: A => Boolean): Q[A] = filter(p)
     def foreach[U](f: A => U) { if (alive) f(value) }
     override def equals(a: Any) = a match {
       case q: Q[_] => alive == q.alive && value == q.value
       case _ => false
     }
+    def merge[B,Z](b: Q[B])(op: (A,B) => Z): Q[Z] = new Q.Merge2(self, b, op)
+    def merge[B,C,Z](b: Q[B], c: Q[C])(op: (A, B, C) => Z): Q[Z] = new Q.Merge3(self, b, c, op)
+    def merge[B,C,D,Z](b: Q[B], c: Q[C], d: Q[D])(op: (A, B, C, D) => Z): Q[Z] = new Q.Merge4(self, b, c, d, op)
+    def merge[B,C,D,E,Z](b: Q[B], c: Q[C], d: Q[D], e: Q[E])(op: (A, B, C, D, E) => Z): Q[Z] = new Q.Merge5(self, b, c, d, e, op)
+    def merge[B,C,D,E,F,Z](b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F])(op: (A, B, C, D, E, F) => Z): Q[Z] =
+      new Q.Merge6(self, b, c, d, e, f, op)
+    def merge[B,C,D,E,F,G,Z](b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F], g: Q[G])(op: (A, B, C, D, E, F, G) => Z): Q[Z] =
+      new Q.Merge7(self, b, c, d, e, f, g, op)
+    def merge[B,C,D,E,F,G,H,Z](b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F], g: Q[G], h: Q[H])(op: (A, B, C, D, E, F, G, H) => Z): Q[Z] =
+      new Q.Merge8(self, b, c, d, e, f, g, h, op)
+    def merge[B,C,D,E,F,G,H,I,Z](b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F], g: Q[G], h: Q[H], i: Q[I])(op: (A, B, C, D, E, F, G, H, I) => Z): Q[Z] =
+      new Q.Merge9(self, b, c, d, e, f, g, h, i, op)
     override def hashCode =
       if (alive) value.hashCode ^ 0x515B2B41
       else (if (value.asInstanceOf[AnyRef] eq null) 0 else value.hashCode) ^ 0x4a2B5B51
@@ -299,14 +312,23 @@ package coll {
       else "(" + value.toString + ")"
   }
   object Q {
+    private[kse] class Cache[+A](gen: Q[A]) extends Q[A] {
+      private[this] var myValue: AnyRef = null
+      private[this] var myAlive = -1
+      private[this] def mySet { myAlive = if (gen.alive) 1 else 0; myValue = gen.value.asInstanceOf[AnyRef] }
+      def alive = synchronized { if (myAlive < 0) mySet; myAlive == 1 }
+      def value = synchronized { if (myAlive < 0) mySet; myValue.asInstanceOf[A] }
+      override def cache = this
+    }
+
     def apply[A](value: A): Q[A] = new Alive(value)
     def eval[A](value: => A): Q[A] = new Eval(() => value)
     def empty[A](default: A): Q[A] = new Dead(default)
     def set[A](value: A): Vary[A] = { val v = new Vary(value); v.alive = true; v }
     def unset[A](default: A): Vary[A] = new Vary(default);
-    private[kse] class Alive[+A](val value: A) extends Q[A] { def alive = true }
-    private[kse] class Dead[+A](val value: A) extends Q[A] { def alive = false }
-    private[kse] class Zombie[+A](that: Q[A], val alive: Boolean) extends Q[A] { def value = that.value }
+    private[kse] class Alive[+A](val value: A) extends Q[A] { def alive = true; override def cache: Q[A] = this }
+    private[kse] class Dead[+A](val value: A) extends Q[A] { def alive = false; override def cache: Q[A] = this }
+    private[kse] class Zombie[+A](that: Q[A], val alive: Boolean) extends Q[A] { def value = that.value; override def cache: Q[A] = this }
     private[kse] class Eval[+A](evaluate: () => A) extends Q[A] {
       def alive = true
       def value = evaluate()
@@ -338,6 +360,48 @@ package coll {
       def alive = it.alive && predicate(it.value)
       def value = it.value
       override def filter(p: A => Boolean): Q[A] = new Filter(it, (a: A) => predicate(a) && p(a))
+    }
+    private[kse] class Merge2[+A, +B, Z](a: Q[A], b: Q[B], op: (A, B) => Z) extends Q[Z] {
+      def alive = a.alive && b.alive
+      def value = op(a.value, b.value)
+    }
+    private[kse] class Merge3[+A, +B, +C, Z](a: Q[A], b: Q[B], c: Q[C], op: (A, B, C) => Z) extends Q[Z] {
+      def alive = a.alive && b.alive && c.alive
+      def value = op(a.value, b.value, c.value)
+    }
+    private[kse] class Merge4[+A, +B, +C, +D, Z](a: Q[A], b: Q[B], c: Q[C], d: Q[D], op: (A, B, C, D) => Z) extends Q[Z] {
+      def alive = a.alive && b.alive && c.alive && d.alive
+      def value = op(a.value, b.value, c.value, d.value)
+    }
+    private[kse] class Merge5[+A, +B, +C, +D, +E, Z](
+      a: Q[A], b: Q[B], c: Q[C], d: Q[D], e: Q[E], op: (A, B, C, D, E) => Z
+    ) extends Q[Z] {
+      def alive = a.alive && b.alive && c.alive && d.alive && e.alive
+      def value = op(a.value, b.value, c.value, d.value, e.value)
+    }
+    private[kse] class Merge6[+A, +B, +C, +D, +E, +F, Z](
+      a: Q[A], b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F], op: (A, B, C, D, E, F) => Z
+    ) extends Q[Z] {
+      def alive = a.alive && b.alive && c.alive && d.alive && e.alive && f.alive
+      def value = op(a.value, b.value, c.value, d.value, e.value, f.value)
+    }
+    private[kse] class Merge7[+A, +B, +C, +D, +E, +F, +G, Z](
+      a: Q[A], b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F], g: Q[G], op: (A, B, C, D, E, F, G) => Z
+    ) extends Q[Z] {
+      def alive = a.alive && b.alive && c.alive && d.alive && e.alive && f.alive && g.alive
+      def value = op(a.value, b.value, c.value, d.value, e.value, f.value, g.value)
+    }
+    private[kse] class Merge8[+A, +B, +C, +D, +E, +F, +G, +H, Z](
+      a: Q[A], b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F], g: Q[G], h: Q[H], op: (A, B, C, D, E, F, G, H) => Z
+    ) extends Q[Z] {
+      def alive = a.alive && b.alive && c.alive && d.alive && e.alive && f.alive && g.alive && h.alive
+      def value = op(a.value, b.value, c.value, d.value, e.value, f.value, g.value, h.value)
+    }
+    private[kse] class Merge9[+A, +B, +C, +D, +E, +F, +G, +H, +I, Z](
+      a: Q[A], b: Q[B], c: Q[C], d: Q[D], e: Q[E], f: Q[F], g: Q[G], h: Q[H], i: Q[I], op: (A, B, C, D, E, F, G, H, I) => Z
+    ) extends Q[Z] {
+      def alive = a.alive && b.alive && c.alive && d.alive && e.alive && f.alive && g.alive && h.alive && i.alive
+      def value = op(a.value, b.value, c.value, d.value, e.value, f.value, g.value, h.value, i.value)
     }
   }
 }

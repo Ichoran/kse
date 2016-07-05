@@ -37,11 +37,11 @@ object Chart {
   val emptyAppearanceFormatter = new AppearanceFormatter { def fmt(a: Appearance) = "" }
   val defaultAppearanceFormatter = new AppearanceFormatter {
     def fmt(a: Appearance) =
-      a.face.get.map(f => f" font-family=$q$f$q").getOrElse("") +
-      a.stroke.get.map(c => f" stroke=$q#${c.rgbText}$q").getOrElse("") +
-      a.wide.get.filter(x => x.finite && x > 0).map(w => f" stroke-width=$q$w%.2f$q").getOrElse("") +
-      a.fill.get.map(c => f" fill=$q#${c.rgbText}$q").getOrElse("") +
-      a.opacity.get.filter(_ < 0.9995).map(o => f" opacity=$q$o%.3f$q").getOrElse("") +
+      a.face.opt.map(f => f" font-family=$q$f$q").getOrElse("") +
+      a.stroke.opt.map(c => f" stroke=$q#${c.rgbText}$q").getOrElse("") +
+      a.wide.opt.filter(x => x.finite && x > 0).map(w => f" stroke-width=$q$w%.2f$q").getOrElse("") +
+      a.fill.opt.map(c => f" fill=$q#${c.rgbText}$q").getOrElse("") +
+      a.opacity.opt.filter(_ < 0.9995).map(o => f" opacity=$q$o%.3f$q").getOrElse("") +
       ( if (!a.opacity.alive && a.wide.alive && a.stroke.alive)
           a.stroke.value.a match { case x if x < 0.9995 => f" stroke-opacity=$q$x%.3f$x"; case _ => "" }
         else ""
@@ -169,10 +169,13 @@ object Chart {
       val vc = c.value
       val vr = r.value
       if (!vr.finite || vr == 0 || !vc.finite) return Vector.empty
-      val circ = kse.visual.Circle(vc, vr) into xform
-      if (!circ.radius.finite || circ.radius == 0 || !circ.center.finite) return Vector.empty
+      val ctr = xform(vc)
+      val diaxSq = (xform(vc + Vc(vr, 0)) - xform(vc - Vc(vr, 0))).lenSq
+      val diaySq = (xform(vc + Vc(0, vr)) - xform(vc - Vc(0, vr))).lenSq
+      val rad = math.sqrt((diaxSq*diaySq)/(2*(diaxSq + diaySq))).toFloat
+      if (!rad.finite || rad == 0 || !ctr.finite) return Vector.empty
       Vector(IndentedSvg(
-        f"<circle cx=$q${nf fmt circ.center.x}$q cy=$q${nf fmt circ.center.y}$q r=$q${nf fmt circ.radius}$q${af fmt this}/>"
+        f"<circle cx=$q${nf fmt ctr.x}$q cy=$q${nf fmt ctr.y}$q r=$q${nf fmt rad}$q${af fmt this}/>"
       ))
     }
   }
@@ -184,21 +187,19 @@ object Chart {
       val vc = c.value
       val vr = r.value
       if (!vr.finite || vr.x == 0 || vr.y == 0) return Vector.empty
-      val rect0 = 
-        if (vr.x < vr.y) kse.visual.Rect(vc, Vc(0, vr.y), vr.x/vr.y)
-        else kse.visual.Rect(vc, Vc(vr.x, 0), vr.y/vr.x)
-      val rect = rect0 into xform
-      if (!rect.major.finite || ((rect.major.y closeTo 0) && (rect.major.x closeTo 0)) || !rect.aspect.finite || rect.aspect == 0) return Vector.empty
+      val ld = xform(vc - vr)
+      val lu = xform(vc + Vc(-vr.x, vr.y))
+      val rd = xform(vc + Vc(vr.x, -vr.y))
+      val ru = xform(vc + vr)
       Vector(IndentedSvg({
-        if ((rect.major.x closeTo 0) || (rect.major.y closeTo 0)) {
-          val rw = rect.major.x.abs + (rect.aspect*rect.major.y).abs
-          val rh = rect.major.y.abs + (rect.aspect*rect.major.x).abs
-          val x = rect.center.x - rw;
-          val y = rect.center.y - rh;
-          f"<rect x=$q${nf fmt x}$q y=$q${nf fmt y}$q width=$q${nf fmt 2*rw}$q height=$q${nf fmt 2*rh}$q${af fmt this}/>"
+        if ((ld.x closeTo lu.x) && (rd.x closeTo ru.x) && (ld.y closeTo rd.y) && (lu.y closeTo ru.y)) {
+          val c = xform(vc)
+          val rw = 0.25f*(rd.x - ld.x + ru.x - lu.x).abs
+          val rh = 0.25f*(ru.y - rd.y + lu.y - ld.y).abs
+          f"<rect x=$q${nf fmt c.x-rw}$q y=$q${nf fmt c.y-rh}$q width=$q${nf fmt 2*rw}$q height=$q${nf fmt 2*rh}$q${af fmt this}/>"
         }
         else {
-          f"<polygon points=$q${rect.corners.map{ l => val v = Vc from l; (nf fmt v.x) + "," + (nf fmt v.y)}.mkString(" ")}$q${af fmt this}/>"
+          f"<polygon points=$q${nf comma ld} ${nf comma rd} ${nf comma ru} ${nf comma lu}$q${af fmt this}/>"
         }
       }))
     }
@@ -473,18 +474,19 @@ object Chart {
       val vlr = if (labelRot.alive) labelRot.value else 0
       val lb =
         if (labels.alive) {
+          val hanchor = " text-anchor=\"middle\""
+          val vanchor = " dominant-baseline=\"middle\""
           val lines =
             (vv zip labels.value).collect{ case (x, l) if l.nonEmpty =>
               val vc = vo + x*va
               val uc = xform(vc)
               val orth = (xform(vc+vb*1e-2f) - uc).hat
               val u = uc + orth * ula
-              f"<text x=$q${nf fmt u.x}$q y=$q${nf fmt u.y}$q>$l</text>"
+              // Need vanchor here to keep Firefox happy, sadly.
+              f"<text$vanchor x=$q${nf fmt u.x}$q y=$q${nf fmt u.y}$q>$l</text>"
             }
           if (lines.isEmpty) Vector.empty
           else {
-            val hanchor = "text-anchor=\"middle\""
-            val vanchor = "alignment-baseline=\"middle\""
             val app = if (textappear.alive) textappear.value else Filled(appear.value.stroke.value)
             val common = f"font-size=$q${nf fmt uls}$q$hanchor$vanchor${af fmt app}"
             IndentedSvg(f"<g $common>") +: lines.toVector.map(l => IndentedSvg(l, 1)) :+ IndentedSvg("</g>")
