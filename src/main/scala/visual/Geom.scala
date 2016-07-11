@@ -16,6 +16,13 @@ abstract class Xform { self =>
     var i = 0
     while (i < values.length) { values(i) = revert(Vc from values(i)).underlying; i += 1 }    
   }
+  def scale(center: Vc, axis: Vc): Float = (apply(center + axis) - apply(center - axis)).len.toFloat
+  def radius(center: Vc, r: Vc): Float = {
+    val s = r.ccw
+    val d2a = (apply(center + r) - apply(center - r)).lenSq
+    def d2b = (apply(center + s) - apply(center - s)).lenSq
+    math.sqrt((d2a*d2b)/(2*(d2a + d2b))).toFloat
+  }
   def mag(v: Vc): Float = {
     val step = math.max(1e-3f, math.max(math.abs(v.x), math.abs(v.y)))
     val left = apply(Vc(v.x + step, v.y)) - apply(Vc(v.x - step, v.y))
@@ -78,9 +85,9 @@ object Xform {
     def apply(v: Vc) = Vc(v.x, about - v.y)
     def revert(v: Vc) = Vc(v.x, about - v.y)
   }
-  def shiftscale(shift: Vc, scale: Vc): Xform = new Xform {
-    def apply(v: Vc) = { val u = v - shift; Vc(u.x * scale.x, u.y * scale.y) }
-    def revert(v: Vc) = { val u = Vc(v.x / scale.x, v.y / scale.y); u + shift }
+  def shiftscale(shifted: Vc, scaled: Vc): Xform = new Xform {
+    def apply(v: Vc) = { val u = v - shifted; Vc(u.x * scaled.x, u.y * scaled.y) }
+    def revert(v: Vc) = { val u = Vc(v.x / scaled.x, v.y / scaled.y); u + shifted }
   }
   def rotate(theta: Float): Xform = new Xform {
     private[this] val xaxis = Vc(math.cos(theta).toFloat, math.sin(theta).toFloat)

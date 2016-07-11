@@ -13,290 +13,214 @@ import kse.maths.stats._
 import kse.flow._
 import kse.eio._
 
-object Chart {
-  private val q = "\""
+package object chart {
+  private[chart] val q = "\""
 
-  trait NumberFormatter {
-    def fmt(x: Float): String
-    def vmt(v: Vc, c: Char): String = fmt(v.x) + c.toString + fmt(v.y)
-    def comma(v: Vc) = vmt(v, ',')
-    def space(v: Vc) = vmt(v, ' ')
+  def quick(i: InSvg) {
+    val svg = 
+      Vector("<html>", "<body>", """<svg width="640" height="480">""").map(x => Indent(x)) ++
+      i.inSvg(Xform.flipy(480), None)(DefaultFormatter).map(x => x.in) ++
+      Vector("</svg>", "</body>", "</html>").map(x => Indent(x))
+    println(svg.mkString("\n"))
+    svg.map(_.toString).toFile("test.html".file)
   }
-  trait AppearanceFormatter {
-    def fmt(a: Appearance): String
-    def adjust(a: Appearance): Appearance = a
-  }
-  case class ZoomingFormatter(zoom: Float, original: AppearanceFormatter) extends AppearanceFormatter {
-    def fmt(a: Appearance): String = original.fmt(adjust(a))
-    override def adjust(a: Appearance): Appearance = if (a.wide.alive) ZoomAppear(zoom, Q(a)) else a
-  }
+}
 
-  val defaultNumberFormatter = new NumberFormatter { 
-    def fmt(x: Float) = if (x.toInt == x) x.toInt.toString else if (x*10 == (x*10).toInt) "%.1f".format(x) else "%.2f".format(x)
+package chart {
+  case class Magnification(value: Float) {
+    def scale(factor: Float) = new Magnification(value*factor)
   }
-  val emptyAppearanceFormatter = new AppearanceFormatter { def fmt(a: Appearance) = "" }
-  val defaultAppearanceFormatter = new AppearanceFormatter {
-    def fmt(a: Appearance) =
-      a.face.opt.map(f => f" font-family=$q$f$q").getOrElse("") +
-      a.stroke.opt.map(c => f" stroke=$q#${c.rgbText}$q").getOrElse("") +
-      a.wide.opt.filter(x => x.finite && x > 0).map(w => f" stroke-width=$q$w%.2f$q").getOrElse("") +
-      a.fill.opt.map(c => f" fill=$q#${c.rgbText}$q").getOrElse("") +
-      a.opacity.opt.filter(_ < 0.9995).map(o => f" opacity=$q$o%.3f$q").getOrElse("") +
-      ( if (!a.opacity.alive && a.wide.alive && a.stroke.alive)
-          a.stroke.value.a match { case x if x < 0.9995 => f" stroke-opacity=$q$x%.3f$x"; case _ => "" }
-        else ""
-      ) +
-      ( if (!a.opacity.alive && a.fill.alive)
-          a.fill.value.a match { case x if x < 0.9995 => f" fill-opacity=$q$x%.3f$x"; case _ => "" }
-        else ""
-      )
-  }
-
-  sealed trait AppearElement {}
-  object FACE extends AppearElement {}
-  object OPAC extends AppearElement {}
-  object WIDE extends AppearElement {}
-  object STRO extends AppearElement {}
-  object FILL extends AppearElement {}
-
-  sealed trait Appearance {
-    def face: Q[String]
-    def opacity: Q[Float]
-    def wide: Q[Float]
-    def stroke: Q[Rgba]
-    def fill: Q[Rgba]
-  }
-  sealed trait ProxyAppear extends Appearance {
-    def appear: Q[Appearance]
-    def turnOff: Set[AppearElement] = Set()
-    lazy val face: Q[String] = if (turnOff(FACE)) appear.flatMap(_.face.dead) else appear.flatMap(_.face)
-    lazy val opacity: Q[Float] =  if (turnOff(OPAC)) appear.flatMap(_.opacity.dead) else appear.flatMap(_.opacity)
-    lazy val wide: Q[Float] = if (turnOff(WIDE)) appear.flatMap(_.wide.dead) else appear.flatMap(_.wide)
-    lazy val stroke: Q[Rgba] = if (turnOff(STRO)) appear.flatMap(_.stroke.dead) else appear.flatMap(_.stroke)
-    lazy val fill: Q[Rgba] = if (turnOff(FILL)) appear.flatMap(_.fill.dead) else appear.flatMap(_.fill)
-  }
-  final class AppearanceOf(that: Appearance) extends Appearance {
-    val face = that.face.map(identity)
-    val opacity = that.opacity.map(identity)
-    val wide = that.wide.map(identity)
-    val stroke = that.stroke.map(identity)
-    val fill = that.fill.map(identity)
-  }
-  final class ZoomAppear(val zoom: Float, val appear: Q[Appearance]) extends ProxyAppear {
-    override def turnOff: Set[AppearElement] = appear match {
-      case pa: ProxyAppear => pa.turnOff
-      case _ => super.turnOff
-    }
-    override lazy val wide: Q[Float] = appear.flatMap(_.wide.map(_ * zoom))
-  }
-  object ZoomAppear {
-    def apply(zoom: Float, appear: Appearance) = new ZoomAppear(zoom, Q(appear))
-    def apply(zoom: Float, appear: Q[Appearance]) = new ZoomAppear(zoom, appear)
-  }
-  object Plain extends Appearance {
-    val face = Q empty "Tahoma, Geneva, sans-serif"
-    val opacity = Q empty 1f
-    val wide = Q empty 0f
-    val color = Q empty Rgba(0, 0, 0, 1)
-    def fill = color
-    def stroke = color
-  }
-  abstract class Plainly extends Appearance {
-    def face = Plain.face
-    def opacity = Plain.opacity
-    def wide = Plain.wide
-    def fill = Plain.fill
-    def stroke = Plain.stroke
-  }
-  final class Filled(theColor: Rgba) extends Appearance {
-    val face = Plain.face
-    val opacity = Q(theColor.a match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
-    val wide = Plain.wide
-    val stroke = Plain.stroke
-    val fill = Q(theColor)
-  }
-  object Filled {
-    def apply(theColor: Rgba) = new Filled(theColor)
-  }
-  final class Stroked(theWidth: Float, theColor: Rgba) extends Appearance {
-    val face = Plain.face
-    val opacity = Q(theColor.a match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
-    val wide = Q(theWidth)
-    val stroke = Q(theColor)
-    val fill = Plain.fill
-  }
-  object Stroked {
-    def apply(theWidth: Float, theColor: Rgba) = new Stroked(theWidth, theColor)
-  }
-  final class Translucent(theOpacity: Float) extends Appearance {
-    val face = Plain.face
-    val opacity = Q(theOpacity match { case x if x.finite && x >= 0 && x < 1 => x; case _ => 1f })
-    val wide = Plain.wide
-    val stroke = Plain.color
-    val fill = Plain.color
-  }
-  object Translucent {
-    def apply(theOpacity: Float) = new Translucent(theOpacity)
-  }
-  final class Ornate(font: Option[String] = None, o: Option[Float] = None, w: Option[Float] = None, s: Option[Rgba] = None, f: Option[Rgba] = None)
-  extends Appearance {
-    val face = font match { case None => Plain.face; case Some(x) => Q(x) }
-    val opacity = o match { case None => Plain.opacity; case Some(x) => Q(x) }
-    val wide = w match { case None => Plain.wide; case Some(x) => Q(x) }
-    val stroke = s match { case None => Plain.stroke; case Some(x) => Q(x) }
-    val fill = f match { case None => Plain.fill; case Some(x) => Q(x) }
-  }
-  object Ornate {
-    def apply(font: String = "", o: Float = Float.NaN, w: Float = Float.NaN, s: Rgba = Rgba(0,0,0,0), f: Rgba = Rgba(0,0,0,0)) =
-      new Ornate(
-        if (font.isEmpty) None else Some(font),
-        if (o.finite) Some(o) else None,
-        if (w.finite) Some(w) else None,
-        if (s.a > 0 && s.a.finite) Some(s) else None,
-        if (f.a > 0 && f.a.finite) Some(f) else None
-      )
+  object Magnification {
+    val one = new Magnification(1f)
+    def from(mag: Option[Float], xf: Xform, v: Vc) =
+      mag match {
+        case None => one
+        case Some(x) => 
+          if (x.finite) new Magnification(x)
+          else new Magnification(xf mag v)
+      }
+    def from(mag: Option[Float], xf: Xform, va: Vc, vb: Vc) =
+      mag match {
+        case None => one
+        case Some(x) =>
+          if (x.finite) new Magnification(x)
+          else new Magnification(0.5f*((xf mag va) + (xf mag vb)))
+      }
+    def from(mag: Option[Float], xf: Xform, vs: Array[Long]) =
+      mag match {
+        case None => one
+        case Some(x) =>
+          if (x.finite) new Magnification(x)
+          else {
+            var m = 0.0
+            var i = 0
+            while (i < vs.length) { m += xf.mag(Vc from vs(i)); i += 1 }
+            new Magnification((m / math.max(1, vs.length)).toFloat)
+          }
+      }
+    def from(mag: Option[Float], x0: Float, x1: Float) =
+      mag match {
+        case None => one
+        case Some(x) =>
+          if (x.finite) new Magnification(x)
+          else new Magnification((x1/x0.toDouble).toFloat)
+      }
+    def from(mag: Option[Float], x0a: Float, x0b: Float, x1a: Float, x1b: Float) =
+      mag match {
+        case None => one
+        case Some(x) =>
+          if (x.finite) new Magnification(x)
+          else new Magnification(((x1a + x1b)/(x0a + x0b).toDouble).toFloat)
+      }
   }
 
-  final case class IndentedSvg(text: String, level: Int = 0) {
-    override def toString = if (level <= 0) text else " "*(2*level) + text
+  trait Displayed extends InSvg {
+    def mask: StyleTransformer
+    def style: Stylish
+    def show(implicit fm: Formatter, scale: Magnification = Magnification.one) =
+      if (scale.value closeTo 1) fm(mask(style))
+      else fm(mask(style).scaled(scale.value))
   }
-  trait InSvg { def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] }
 
-  final case class Circ(c: Q[Vc], r: Q[Float], appear: Q[Appearance])
-  extends ProxyAppear with InSvg {
-    override def turnOff = Set(FACE)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val vc = c.value
-      val vr = r.value
-      if (!vr.finite || vr == 0 || !vc.finite) return Vector.empty
-      val ctr = xform(vc)
-      val diaxSq = (xform(vc + Vc(vr, 0)) - xform(vc - Vc(vr, 0))).lenSq
-      val diaySq = (xform(vc + Vc(0, vr)) - xform(vc - Vc(0, vr))).lenSq
-      val rad = math.sqrt((diaxSq*diaySq)/(2*(diaxSq + diaySq))).toFloat
+  final case class Circ(c: Vc, r: Float, style: Stylish) extends Displayed {
+    val mask = StyleTransformer.onlyshape
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+      if (!r.finite || r <= 0 || !c.finite) return Vector.empty
+      val ctr = xform(c)
+      val rad = xform.radius(c, Vc(r, 0))
+      implicit val myMag = Magnification.from(mag, r, rad)
       if (!rad.finite || rad == 0 || !ctr.finite) return Vector.empty
-      Vector(IndentedSvg(
-        f"<circle cx=$q${nf fmt ctr.x}$q cy=$q${nf fmt ctr.y}$q r=$q${nf fmt rad}$q${af fmt this}/>"
-      ))
+      Indent.V(
+        f"<circle ${fm.vquote(ctr, "cx", "cy")} r=$q${fm(rad)}$q$show/>"
+      )
     }
   }
 
-  final case class Bar(c: Q[Vc], r: Q[Vc], appear: Q[Appearance])
-  extends ProxyAppear with InSvg {
-    override def turnOff = Set(FACE)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val vc = c.value
-      val vr = r.value
-      if (!vr.finite || vr.x == 0 || vr.y == 0) return Vector.empty
-      val ld = xform(vc - vr)
-      val lu = xform(vc + Vc(-vr.x, vr.y))
-      val rd = xform(vc + Vc(vr.x, -vr.y))
-      val ru = xform(vc + vr)
-      Vector(IndentedSvg({
+  final case class Bar(c: Vc, r: Vc, style: Stylish) extends Displayed {
+    val mask = StyleTransformer.onlyshape
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+      if (!r.finite || !c.finite) return Vector.empty
+      val s = Vc(r.x, -r.y)
+      val ld = xform(c - r)
+      val lu = xform(c - s)
+      val rd = xform(c + s)
+      val ru = xform(c + r)
+      Indent.V({
         if ((ld.x closeTo lu.x) && (rd.x closeTo ru.x) && (ld.y closeTo rd.y) && (lu.y closeTo ru.y)) {
-          val c = xform(vc)
+          val qc = xform(c)
           val rw = 0.25f*(rd.x - ld.x + ru.x - lu.x).abs
           val rh = 0.25f*(ru.y - rd.y + lu.y - ld.y).abs
-          f"<rect x=$q${nf fmt c.x-rw}$q y=$q${nf fmt c.y-rh}$q width=$q${nf fmt 2*rw}$q height=$q${nf fmt 2*rh}$q${af fmt this}/>"
+          val qr = Vc(rw, rh)
+          implicit val myMag = Magnification.from(mag, r.x, r.y, rw, rh)
+          f"<rect ${fm.vquote(qc - qr, "x", "y")} ${fm.vquote(qr*2, "width", "height")}$show/>"
         }
         else {
-          f"<polygon points=$q${nf comma ld} ${nf comma rd} ${nf comma ru} ${nf comma lu}$q${af fmt this}/>"
+          implicit val myMag = Magnification.from(mag, xform, c)
+          f"<polygon points=$q${fm comma ld} ${fm comma rd} ${fm comma ru} ${fm comma lu}$q$show/>"
         }
-      }))
+      })
     }
   }
 
-  final case class DataLine(pts: Q[Array[Long]], appear: Q[Appearance])
-  extends ProxyAppear with InSvg {
-    override def turnOff = Set(FACE, FILL)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val vps = pts.value
-      val v = new Array[Long](vps.length)
+  final case class DataLine(pts: Array[Long], style: Stylish) extends Displayed {
+    val mask = new StyleTransformer {
+      val off = StyleTransformer.Fields.all -- StyleTransformer.Fields.stroke
+      override def apply(s: Stylish): Stylish = {
+        val stroke = new StrokeProxy(s) { override def join: Option[Option[Float]] = Some(None) }
+        new StylishProxy(Font.empty, stroke, Fill.off, Opaque.empty)
+      }
+    }
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      val v = new Array[Long](pts.length)
       var i = 0;
-      while (i < v.length) { v(i) = xform(Vc from vps(i)).underlying; i += 1 }
+      while (i < v.length) { v(i) = xform(Vc from pts(i)).underlying; i += 1 }
       val sb = new StringBuilder
       sb ++= "<path d=\""
       i = 0;
-      while (i < math.min(v.length,1)) { sb ++= "M "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
-      while (i < math.min(v.length,2)) { sb ++= " L "; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
-      while (i < v.length) { sb += ' '; val vi = Vc from v(i); sb ++= nf fmt vi.x; sb += ' '; sb ++= nf fmt vi.y; i += 1 }
-      sb ++= "\" stroke-linejoin=\"round\""
-      sb ++= f"${af fmt this} fill=${q}none${q}/>"
-      Vector(IndentedSvg(sb.result))
+      while (i < math.min(v.length,1)) { sb ++= "M "; fm(Vc from v(i)); i += 1 }
+      while (i < math.min(v.length,2)) { sb ++= " L "; fm(Vc from v(i)); i += 1 }
+      while (i < v.length) { sb += ' '; fm(Vc from v(i)); i += 1 }
+      implicit val myMag = Magnification.from(mag, xform, pts)
+      sb ++= f"$show/>"
+      Indent.V(sb.result)
     }
   }
 
-  final case class DataRange(xs: Q[Array[Float]], los: Q[Array[Float]], his: Q[Array[Float]], appear: Q[Appearance])
-  extends ProxyAppear with InSvg {
-    override def turnOff = Set(FACE, WIDE, STRO)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val vxa = xs.value.clone
-      val vxb = vxa.clone
-      val vh = his.value.clone
-      val vl = los.value.clone
-      val L = math.min(vxa.length, math.min(vh.length, vl.length))
+  final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Stylish) extends Displayed {
+    val mask = StyleTransformer.onlyfill
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      val n = math.min(xs.length, math.min(ylos.length, yhis.length))
+      val vs = new Array[Long](2*n)
       var i = 0
-      while (i < L) {
-        val l = xform(Vc(vxa(i), vl(i)))
-        val h = xform(Vc(vxb(i), vh(i)))
-        vxa(i) = l.x
-        vl(i) = l.y
-        vxb(i) = h.x
-        vh(i) = h.y
+      while (i < n) {
+        vs(i) = Vc(xs(i), ylos(i)).underlying
+        vs(vs.length-1-i) = Vc(xs(i), yhis(i)).underlying
+        i += 1
+      }
+      implicit val myMag = Magnification.from(mag, xform, vs)
+      i = 0
+      while (i < vs.length) {
+        vs(i) = xform(Vc from vs(i)).underlying
         i += 1
       }
       val sb = new StringBuilder
       sb ++= "<path d=\""
       i = 0
-      while (i < math.min(1,L)) { sb ++= "M "; sb ++= nf fmt vxa(i); sb += ' '; sb ++= nf fmt vl(i); i += 1 }
-      while (i < math.min(2,L)) { sb ++= " L "; sb ++= nf fmt vxa(i); sb += ' '; sb ++= nf fmt vl(i); i += 1 }
-      while (i < L) { sb += ' '; sb ++= nf fmt vxa(i); sb += ' '; sb ++= nf fmt vl(i); i += 1 }
-      while (i > math.max(L,1)) { i -= 1; sb += ' '; sb ++= nf fmt vxb(i); sb += ' '; sb ++= nf fmt vh(i) }
-      while (i > 0) { i -= 1; if (vxa.length == 1) sb ++= " L " else sb += ' '; sb ++= nf fmt vxb(i); sb += ' '; sb ++= nf fmt vh(i) }
-      if (L > 0) sb ++= " Z"
-      sb ++= f"$q${af fmt this}/>"
-      Vector(IndentedSvg(sb.result))
+      if (i < vs.length) { sb += 'M'; sb ++= fm(Vc from vs(0)); i += 1 }
+      if (vs.length > 1) sb ++= " L"
+      while (i < vs.length) { sb ++= fm(Vc from vs(i)); i += 1 }
+      if (n > 0) sb ++= " Z"
+      sb ++= f"$q$show/>"
+      Indent.V(sb.result)
     }
   }
 
-  final case class ErrorBarYY(x: Q[Float], lo: Q[Float], hi: Q[Float], across: Q[Float], bias: Q[Float], appear: Q[Appearance])
-  extends ProxyAppear with InSvg { self =>
-    override def turnOff = Set(FACE, FILL)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val vx = x.value
-      val va = across.value
-      val vb = bias.value.clip(0f, 1f)
-      val rl = Vc(vx, lo.value)
-      val rh = Vc(vx, hi.value)
-      val cll = Vc(vx - va/2, rl.y)
-      val clr = Vc(vx + va/2, rl.y)
-      val chl = Vc(vx - va/2, rh.y)
-      val chr = Vc(vx + va/2, rh.y)
-      if (vb == 0) Vector(IndentedSvg(
-        f"<path d=${q}M ${nf space rl} L ${nf space rh}$q fill=${q}none${q}${af fmt this}/>"
-      ))
-      else if (vb == 1) Vector(IndentedSvg(
-        f"<path d=${q}M ${nf space cll} L ${nf space clr} M ${nf space chl} L ${nf space chr}$q fill=${q}none${q}${af fmt this}/>"
-      ))
-      else if (vb closeTo 0.5f) Vector(IndentedSvg(
-        f"<path d=${q}M ${nf space rl} L ${nf space rh}$q M ${nf space cll} L ${nf space clr} M ${nf space chl} L ${nf space chr}$q fill=${q}none${q}${af fmt this}/>"
-      ))
+  /** Note: `hvbias` is (horizontal bar width - vertical bar width)/(horz width + vert width).
+    * The wider of the two is drawn at the stroke width; the other, narrower.
+    */
+  final case class ErrorBarYY(x: Float, lo: Float, hi: Float, across: Float, hvbias: Float, style: Stylish) extends Displayed {
+    val mask = StyleTransformer.purestroke
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      implicit val myMag = Magnification.from(mag, xform, Vc(x,lo), Vc(x,hi))
+      val l = xform(Vc(x, lo))
+      val u = xform(Vc(x, hi))
+      if (hvbias >= 0.9995) {
+        // Entirely vertical
+        Indent.V(f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}$show/>")
+      }
       else {
-        val smaller = 2*math.min(vb, 1-vb);
-        val little = new ProxyAppear{ def appear = Q(self); override lazy val wide = self.wide.map(_ * smaller); override lazy val opacity = Plain.opacity; override lazy val stroke = self.stroke.map((r: Rgba) => r.aTo(1)) }
-        val big = new ProxyAppear { def appear = Q(self); override lazy val opacity = Plain.opacity; override lazy val stroke = self.stroke.map((r: Rgba) => r.aTo(1)) }
-        val ver = if (vb < 0.5) little else big
-        val hor = if (vb < 0.5) big else little
-        val opq = if (stroke.alive && stroke.value.a < 1) stroke.value.a else if (opacity.alive && opacity.value < 1) opacity.value else 1f
-        Vector(
-          IndentedSvg(if (opq < 1) f"<g opacity=$q$opq%.3f$q>" else "<g>"),
-          IndentedSvg(f"<path d=${q}M ${nf space rl} L ${nf space rh}$q fill=${q}none${q}${af fmt ver}/>", 1),
-          IndentedSvg(f"<path d=${q}M ${nf space cll} L ${nf space clr} M ${nf space chl} L ${nf space chr}$q fill=${q}none${q}${af fmt hor}/>",1),
-          IndentedSvg("</g>")
-        )
+        val ll = xform(Vc(x-across, lo))
+        val lr = xform(Vc(x+across, lo))
+        val ul = xform(Vc(x-across, hi))
+        val ur = xform(Vc(x+across, hi))
+        if (hvbias <= -0.9995) {
+          // Entirely horizontal
+          Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}$show/>")
+        }
+        else {
+          if (hvbias in (-0.005f, 0.005f)) {
+            // Lines all same thickness
+            Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)} M ${fm(l)} L ${fm(u)}${q}$show/>")
+          }
+          else {
+            // Lines of different thickness
+            val mcross = if (hvbias >= 0) myMag else myMag.scale(1+hvbias)
+            val mriser = if (hvbias <= 0) myMag else myMag.scale(hvbias)
+            val mformat = TransformFormatter(fm, StyleTransformer.onlyscale)
+            Indent.V(
+              f"<g${show(TransformFormatter(fm, StyleTransformer.noscale), myMag)}/>",
+              f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}${show(mformat, mcross)}/>",
+              f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}${show(mformat, mriser)}/>",
+              f"</g>"
+            )
+          }
+        }
       }
     }
   }
 
+  
+  /*
   trait Arrowhead {
     def setback: Float
     def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String)
@@ -528,15 +452,5 @@ object Chart {
     def apply(scaling: Q[Float], elements: InSvg*) = new ZoomLines(scaling, elements.toVector)
     def apply(scaling: Float, elements: InSvg*) = new ZoomLines(Q(scaling), elements.toVector)
   }
-
-  final class Axes(origin: Q[Vc], scaling: Q[Vc])
-
-  def quick(i: InSvg) {
-    val svg = 
-      Vector("<html>", "<body>", """<svg width="640" height="480">""").map(x => IndentedSvg(x)) ++
-      i.inSvg(Xform.flipy(480))(defaultNumberFormatter, defaultAppearanceFormatter).map(x => x.copy(level = x.level+1)) ++
-      Vector("</svg>", "</body>", "</html>").map(x => IndentedSvg(x))
-    println(svg.mkString("\n"))
-    svg.map(_.toString).toFile("test.html".file)
-  }
+  */
 }

@@ -107,13 +107,13 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
 }
 object Rgba {
   def apply(r: Float, g: Float, b: Float, a: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), clip(a))
-  def apply(r: Float, g: Float, b: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), Float.NaN)
+  def apply(r: Float, g: Float, b: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), 1)
 
   def web(r: Int, g: Int, b: Int, a: Int) = new Rgba(iclip(r), iclip(g), iclip(b), iclip(a))
-  def web(r: Int, g: Int, b: Int): Rgba = new Rgba(iclip(r), iclip(g), iclip(b), Float.NaN)
+  def web(r: Int, g: Int, b: Int): Rgba = new Rgba(iclip(r), iclip(g), iclip(b), 1)
 
   def rgba(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), iclip(i >>> 24))
-  def rgb(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), Float.NaN)
+  def rgb(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), 1)
 
   val White = apply(1, 1, 1, 1)
   val Black = apply(0, 0, 0, 1)
