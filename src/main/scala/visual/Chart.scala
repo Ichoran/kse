@@ -16,74 +16,21 @@ import kse.eio._
 package object chart {
   private[chart] val q = "\""
 
-  def quick(i: InSvg) {
+  def quick(i: InSvg*) {
     val svg = 
-      Vector("<html>", "<body>", """<svg width="640" height="480">""").map(x => Indent(x)) ++
-      i.inSvg(Xform.flipy(480), None)(DefaultFormatter).map(x => x.in) ++
-      Vector("</svg>", "</body>", "</html>").map(x => Indent(x))
+      Vector("<html>", "<body>", """<svg width="640" height="480">""", "<g>").map(x => Indent(x)) ++
+      i.flatMap(_.inSvg(Xform.flipy(480), None)(DefaultFormatter)).map(x => x.in) ++
+      Vector("</g>", "</svg>", "</body>", "</html>").map(x => Indent(x))
     println(svg.mkString("\n"))
     svg.map(_.toString).toFile("test.html".file)
   }
 }
 
 package chart {
-  case class Magnification(value: Float) {
-    def scale(factor: Float) = new Magnification(value*factor)
-  }
-  object Magnification {
-    val one = new Magnification(1f)
-    def from(mag: Option[Float], xf: Xform, v: Vc) =
-      mag match {
-        case None => one
-        case Some(x) => 
-          if (x.finite) new Magnification(x)
-          else new Magnification(xf mag v)
-      }
-    def from(mag: Option[Float], xf: Xform, va: Vc, vb: Vc) =
-      mag match {
-        case None => one
-        case Some(x) =>
-          if (x.finite) new Magnification(x)
-          else new Magnification(0.5f*((xf mag va) + (xf mag vb)))
-      }
-    def from(mag: Option[Float], xf: Xform, vs: Array[Long]) =
-      mag match {
-        case None => one
-        case Some(x) =>
-          if (x.finite) new Magnification(x)
-          else {
-            var m = 0.0
-            var i = 0
-            while (i < vs.length) { m += xf.mag(Vc from vs(i)); i += 1 }
-            new Magnification((m / math.max(1, vs.length)).toFloat)
-          }
-      }
-    def from(mag: Option[Float], x0: Float, x1: Float) =
-      mag match {
-        case None => one
-        case Some(x) =>
-          if (x.finite) new Magnification(x)
-          else new Magnification((x1/x0.toDouble).toFloat)
-      }
-    def from(mag: Option[Float], x0a: Float, x0b: Float, x1a: Float, x1b: Float) =
-      mag match {
-        case None => one
-        case Some(x) =>
-          if (x.finite) new Magnification(x)
-          else new Magnification(((x1a + x1b)/(x0a + x0b).toDouble).toFloat)
-      }
-  }
+  import SvgSelect._
 
-  trait Displayed extends InSvg {
-    def mask: StyleTransformer
-    def style: Stylish
-    def show(implicit fm: Formatter, scale: Magnification = Magnification.one) =
-      if (scale.value closeTo 1) fm(mask(style))
-      else fm(mask(style).scaled(scale.value))
-  }
-
-  final case class Circ(c: Vc, r: Float, style: Stylish) extends Displayed {
-    val mask = StyleTransformer.onlyshape
+  final case class Circ(c: Vc, r: Float, style: Style) extends SvgStyled {
+    override val mask = Masked.filly | Masked.stroky
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       if (!r.finite || r <= 0 || !c.finite) return Vector.empty
       val ctr = xform(c)
@@ -91,13 +38,13 @@ package chart {
       implicit val myMag = Magnification.from(mag, r, rad)
       if (!rad.finite || rad == 0 || !ctr.finite) return Vector.empty
       Indent.V(
-        f"<circle ${fm.vquote(ctr, "cx", "cy")} r=$q${fm(rad)}$q$show/>"
+        f"<circle${fm.vquote(ctr, "cx", "cy")}${fm.attribute("r", rad)}$show/>"
       )
     }
   }
 
-  final case class Bar(c: Vc, r: Vc, style: Stylish) extends Displayed {
-    val mask = StyleTransformer.onlyshape
+  final case class Bar(c: Vc, r: Vc, style: Style) extends SvgStyled {
+    override val mask = Masked.filly | Masked.stroky
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       if (!r.finite || !c.finite) return Vector.empty
       val s = Vc(r.x, -r.y)
@@ -122,14 +69,8 @@ package chart {
     }
   }
 
-  final case class DataLine(pts: Array[Long], style: Stylish) extends Displayed {
-    val mask = new StyleTransformer {
-      val off = StyleTransformer.Fields.all -- StyleTransformer.Fields.stroke
-      override def apply(s: Stylish): Stylish = {
-        val stroke = new StrokeProxy(s) { override def join: Option[Option[Float]] = Some(None) }
-        new StylishProxy(Font.empty, stroke, Fill.off, Opaque.empty)
-      }
-    }
+  final case class DataLine(pts: Array[Long], style: Style) extends SvgStyled {
+    override val mask = Masked.stroky | Unfilled
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       val v = new Array[Long](pts.length)
       var i = 0;
@@ -137,17 +78,18 @@ package chart {
       val sb = new StringBuilder
       sb ++= "<path d=\""
       i = 0;
-      while (i < math.min(v.length,1)) { sb ++= "M "; fm(Vc from v(i)); i += 1 }
-      while (i < math.min(v.length,2)) { sb ++= " L "; fm(Vc from v(i)); i += 1 }
-      while (i < v.length) { sb += ' '; fm(Vc from v(i)); i += 1 }
+      while (i < math.min(v.length,1)) { sb ++= "M "; sb ++= fm(Vc from v(i)); i += 1 }
+      while (i < math.min(v.length,2)) { sb ++= " L "; sb ++= fm(Vc from v(i)); i += 1 }
+      while (i < v.length) { sb += ' '; sb ++= fm(Vc from v(i)); i += 1 }
       implicit val myMag = Magnification.from(mag, xform, pts)
-      sb ++= f"$show/>"
+      val myStyle = if (style.join == StrokeJoin.Whatever) style.cased.copy(join = StrokeJoin.Round) else style
+      sb ++= f"$q${showing(myStyle)}/>"
       Indent.V(sb.result)
     }
   }
 
-  final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Stylish) extends Displayed {
-    val mask = StyleTransformer.onlyfill
+  final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Style) extends SvgStyled {
+    override val mask = Masked.filly
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       val n = math.min(xs.length, math.min(ylos.length, yhis.length))
       val vs = new Array[Long](2*n)
@@ -166,9 +108,9 @@ package chart {
       val sb = new StringBuilder
       sb ++= "<path d=\""
       i = 0
-      if (i < vs.length) { sb += 'M'; sb ++= fm(Vc from vs(0)); i += 1 }
+      if (i < vs.length) { sb ++= "M "; sb ++= fm(Vc from vs(0)); i += 1 }
       if (vs.length > 1) sb ++= " L"
-      while (i < vs.length) { sb ++= fm(Vc from vs(i)); i += 1 }
+      while (i < vs.length) { sb += ' '; sb ++= fm(Vc from vs(i)); i += 1 }
       if (n > 0) sb ++= " Z"
       sb ++= f"$q$show/>"
       Indent.V(sb.result)
@@ -178,48 +120,38 @@ package chart {
   /** Note: `hvbias` is (horizontal bar width - vertical bar width)/(horz width + vert width).
     * The wider of the two is drawn at the stroke width; the other, narrower.
     */
-  final case class ErrorBarYY(x: Float, lo: Float, hi: Float, across: Float, hvbias: Float, style: Stylish) extends Displayed {
-    val mask = StyleTransformer.purestroke
+  final case class ErrorBarYY(x: Float, lo: Float, hi: Float, across: Float, hvbias: Float, style: Style) extends SvgStyled {
+    override val mask = Masked.stroky | Unfilled
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, Vc(x,lo), Vc(x,hi))
       val l = xform(Vc(x, lo))
       val u = xform(Vc(x, hi))
-      if (hvbias >= 0.9995) {
-        // Entirely vertical
-        Indent.V(f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}$show/>")
-      }
+      val ll = xform(Vc(x-across, lo))
+      val lr = xform(Vc(x+across, lo))
+      val ul = xform(Vc(x-across, hi))
+      val ur = xform(Vc(x+across, hi))
+      if (hvbias >= 0.9995)
+        Indent.V(f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}$show/>") // Entirely vertical
+      else if (hvbias <= -0.9995) 
+        Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}$show/>")  // Entirely horizontal
+      else if (hvbias in (-0.005f, 0.005f))
+        Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)} M ${fm(l)} L ${fm(u)}${q}$show/>")  // All same thickness
       else {
-        val ll = xform(Vc(x-across, lo))
-        val lr = xform(Vc(x+across, lo))
-        val ul = xform(Vc(x-across, hi))
-        val ur = xform(Vc(x+across, hi))
-        if (hvbias <= -0.9995) {
-          // Entirely horizontal
-          Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}$show/>")
-        }
-        else {
-          if (hvbias in (-0.005f, 0.005f)) {
-            // Lines all same thickness
-            Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)} M ${fm(l)} L ${fm(u)}${q}$show/>")
-          }
-          else {
-            // Lines of different thickness
-            val mcross = if (hvbias >= 0) myMag else myMag.scale(1+hvbias)
-            val mriser = if (hvbias <= 0) myMag else myMag.scale(hvbias)
-            val mformat = TransformFormatter(fm, StyleTransformer.onlyscale)
-            Indent.V(
-              f"<g${show(TransformFormatter(fm, StyleTransformer.noscale), myMag)}/>",
-              f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}${show(mformat, mcross)}/>",
-              f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}${show(mformat, mriser)}/>",
-              f"</g>"
-            )
-          }
-        }
+        // Lines of different thickness
+        val mcross = if (hvbias >= 0) myMag else myMag.scale(1+hvbias)
+        val mriser = if (hvbias <= 0) myMag else myMag.scale(hvbias)
+        val overview = style.promoted
+        val sized = style.demoted
+        Indent.V(
+          f"<g${showing(overview)}>",
+          f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}${showing(sized.scaled(mcross.value))}/>",
+          f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}${showing(sized.scaled(mriser.value))}/>",
+          f"</g>"
+        )
       }
     }
   }
 
-  
   /*
   trait Arrowhead {
     def setback: Float
