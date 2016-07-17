@@ -314,6 +314,12 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
   def shapely: Style =
     new Style(elements.filter{ e => e match { case _: Strokish[_] | _: Fillish[_] | _: Opaque => !e.off; case _ => false } }, off)
 
+  def filly: Style =
+    new Style(elements.filter{ e => e match { case _: Fillish[_] | _: Opaque => !e.off; case _ => false } }, off)
+
+  def stroky: Style =
+    new Style(elements.filter{ e => e match { case _: Strokish[_] | _: Opaque => !e.off; case _ => false } } + FillNone(), off)
+
   def common(that: Style): Style =
     if (off != that.off) Style(Set())
     else new Style((listed ++ that.listed).groupBy(_.category).collect{ case (_, x :: y :: Nil) if (x == y) => x }.toSet, off)
@@ -330,6 +336,33 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
         new Style(that.elements.filterNot(e => shared(e.category) && e == sharethis(e.category)))
       )
     }
+
+  def generally: Style = {
+    val o = opacity
+    val es = elements.collect[Stylish, Set[Stylish]]{
+      case fn: FillNone => fn
+      case sj: StrokeJoin => sj
+      case sm: StrokeMiter => sm
+      case sc: StrokeCap => sc
+      case ff: FontFace => ff
+      case fv: FontVertical => fv
+      case fh: FontHorizontal => fh
+    }
+    new Style(es + Opaque(o), off)
+  }
+
+  def specifically: Style = {
+    val o = opacity
+    val es = elements.collect[Stylish, Set[Stylish]]{
+      case fc: FillColor => fc
+      case fo: FillOpacity if (fo.opacity < o && !(fo.opacity closeTo o)) => fo.luminize(_ / o)
+      case sc: StrokeColor => sc
+      case so: StrokeOpacity if (so.opacity < o && !(so.opacity closeTo o)) => so.luminize(_ / o)
+      case sw: StrokeWidth => sw
+      case fs: FontSize => fs
+    }
+    new Style(es, off)
+  }
 }
 
 

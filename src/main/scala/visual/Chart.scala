@@ -33,6 +33,8 @@ package chart {
     def styled: Style = style
     def show(implicit fm: Formatter, mag: Magnification) = 
       fm(if (mag.value closeTo 1) styled else styled.scale(mag.value))
+    def showWith(f: Style => Style)(implicit fm: Formatter, mag: Magnification) =
+      fm(f(if (mag.value closeTo 1) styled else styled.scale(mag.value)))
   }
 
 
@@ -77,12 +79,9 @@ package chart {
   }
 
   final case class DataLine(pts: Array[Long], style: Style) extends Shown {
-    override def styled = {
-      val joined =
-        if (style.elements.exists{ case sj: StrokeJoin => true; case _ => false }) style
-        else style + StrokeJoin(Join.Round)
-      joined + FillNone()
-    }
+    override def styled =
+      if (style.elements.exists{ case sj: StrokeJoin => true; case _ => false }) style.stroky
+      else style.stroky + StrokeJoin(Join.Round)
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       val v = new Array[Long](pts.length)
       var i = 0;
@@ -99,9 +98,8 @@ package chart {
     }
   }
 
-  /*
-  final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Style) extends SvgStyled {
-    override val mask = Masked.filly
+  final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Style) extends Shown {
+    override def styled = style.filly
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       val n = math.min(xs.length, math.min(ylos.length, yhis.length))
       val vs = new Array[Long](2*n)
@@ -129,11 +127,12 @@ package chart {
     }
   }
 
+
   /** Note: `hvbias` is (horizontal bar width - vertical bar width)/(horz width + vert width).
     * The wider of the two is drawn at the stroke width; the other, narrower.
     */
-  final case class ErrorBarYY(x: Float, lo: Float, hi: Float, across: Float, hvbias: Float, style: Style) extends SvgStyled {
-    override val mask = Masked.stroky | Unfilled
+  final case class ErrorBarYY(x: Float, lo: Float, hi: Float, across: Float, hvbias: Float, style: Style) extends Shown {
+    override def styled = style.stroky
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, Vc(x,lo), Vc(x,hi))
       val l = xform(Vc(x, lo))
@@ -150,20 +149,19 @@ package chart {
         Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)} M ${fm(l)} L ${fm(u)}${q}$show/>")  // All same thickness
       else {
         // Lines of different thickness
-        val mcross = if (hvbias >= 0) myMag else myMag.scale(1+hvbias)
-        val mriser = if (hvbias <= 0) myMag else myMag.scale(hvbias)
-        val overview = style.promoted
-        val sized = style.demoted
+        val mcross = if (hvbias >= 0) 1f else (1 + hvbias)/(1 - hvbias)
+        val mriser = if (hvbias <= 0) 1f else (1 - hvbias)/(1 + hvbias)
         Indent.V(
-          f"<g${showing(overview)}>",
-          f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}${showing(sized.scaled(mcross.value))}/>",
-          f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}${showing(sized.scaled(mriser.value))}/>",
+          f"<g${showWith(_.generally)}>",
+          f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}${showWith(_.specifically.scale(mcross))}/>",
+          f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}${showWith(_.specifically.scale(mriser))}/>",
           f"</g>"
         )
       }
     }
   }
 
+  /*
   trait Arrowhead {
     def setback: Float
     def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String)
