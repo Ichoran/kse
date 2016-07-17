@@ -239,8 +239,24 @@ object Font {
 final case class Style(elements: Set[Stylish], off: Boolean = false) extends Scalable[Style] with Colorful[Style] with Ghostly[Style] {
   def listed = elements.toList
 
-  def opacity = ???
-  def rgb = ???
+  def opacity = {
+    val relevant = elements.collect{ case e: Ghostly[_] if !e.off => e }
+    if (relevant.isEmpty) 1f
+    else if (relevant.size == 1) relevant.head.opacity
+    else {
+      val overall = relevant.collectFirst{ case o: Opaque => o.opacity } getOrElse 1f
+      val max = (0f /: relevant){ (x, r) => r match { case o: Opaque => x; case _ => math.max(x, r.opacity) } }
+      overall * max
+    }
+  }
+  def rgb = {
+    val relevant = elements.collect{ case c: Colorful[_] if !c.off => c.rgb }
+    if (relevant.isEmpty) Rgba.Black
+    else if (relevant.size == 1) relevant.head
+    else relevant.toArray.map(c => Array(c.r, c.g, c.b)).transpose.map(_.sum / relevant.size) match {
+      case Array(r, g, b) => Rgba(r, g, b, 1)
+    }
+  }
   def category = 0
   def toOff = if (off) this else new Style(elements, true)
   def toOn = if (off) new Style(elements, false) else this
@@ -269,8 +285,7 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
   )
 
   def +(s: Stylish) = 
-    if (!elements.exists(_.category == s.category)) this
-    else new Style(elements.filter(_.category != s.category) + s, off)
+    new Style((if (elements.exists(_.category == s.category)) elements.filter(_.category != s.category) else elements) + s, off)
   def -(s: Stylish) =
     if (!elements.exists(_.category == s.category)) this
     else new Style(elements.filter(_.category != s.category), off)
@@ -295,6 +310,9 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
   def foreach[U](f: Stylish => U) { elements.foreach(f) }
   def keep(p: Stylish => Boolean) = new Style(elements.map(e => if (p(e)) e else e.toOff), off)
   def enable(p: Stylish => Boolean) = new Style(elements.map(e => if (p(e)) e.toOn else e), off)
+
+  def shapely: Style =
+    new Style(elements.filter{ e => e match { case _: Strokish[_] | _: Fillish[_] | _: Opaque => !e.off; case _ => false } }, off)
 
   def common(that: Style): Style =
     if (off != that.off) Style(Set())

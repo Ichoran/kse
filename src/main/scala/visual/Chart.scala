@@ -35,9 +35,9 @@ package chart {
       fm(if (mag.value closeTo 1) styled else styled.scale(mag.value))
   }
 
-  /*
+
   final case class Circ(c: Vc, r: Float, style: Style) extends Shown {
-    override def styled = style.filter{ case _: Strokish => true; case _: Fillish => true; case _: Opaque => true; case _ => false }
+    override def styled = style.shapely
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       if (!r.finite || r <= 0 || !c.finite) return Vector.empty
       val ctr = xform(c)
@@ -50,8 +50,8 @@ package chart {
     }
   }
 
-  final case class Bar(c: Vc, r: Vc, style: Style) extends SvgStyled {
-    override val mask = Masked.filly | Masked.stroky
+  final case class Bar(c: Vc, r: Vc, style: Style) extends Shown {
+    override def styled = style.shapely
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       if (!r.finite || !c.finite) return Vector.empty
       val s = Vc(r.x, -r.y)
@@ -76,8 +76,13 @@ package chart {
     }
   }
 
-  final case class DataLine(pts: Array[Long], style: Style) extends SvgStyled {
-    override val mask = Masked.stroky | Unfilled
+  final case class DataLine(pts: Array[Long], style: Style) extends Shown {
+    override def styled = {
+      val joined =
+        if (style.elements.exists{ case sj: StrokeJoin => true; case _ => false }) style
+        else style + StrokeJoin(Join.Round)
+      joined + FillNone()
+    }
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       val v = new Array[Long](pts.length)
       var i = 0;
@@ -89,12 +94,12 @@ package chart {
       while (i < math.min(v.length,2)) { sb ++= " L "; sb ++= fm(Vc from v(i)); i += 1 }
       while (i < v.length) { sb += ' '; sb ++= fm(Vc from v(i)); i += 1 }
       implicit val myMag = Magnification.from(mag, xform, pts)
-      val myStyle = if (style.join == StrokeJoin.Whatever) style.cased.copy(join = StrokeJoin.Round) else style
-      sb ++= f"$q${showing(myStyle)}/>"
+      sb ++= f"$q$show}/>"
       Indent.V(sb.result)
     }
   }
 
+  /*
   final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Style) extends SvgStyled {
     override val mask = Masked.filly
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
