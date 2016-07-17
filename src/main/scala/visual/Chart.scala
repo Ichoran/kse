@@ -27,10 +27,17 @@ package object chart {
 }
 
 package chart {
-  import SvgSelect._
 
-  final case class Circ(c: Vc, r: Float, style: Style) extends SvgStyled {
-    override val mask = Masked.filly | Masked.stroky
+  trait Shown extends InSvg {
+    def style: Style
+    def styled: Style = style
+    def show(implicit fm: Formatter, mag: Magnification) = 
+      fm(if (mag.value closeTo 1) styled else styled.scale(mag.value))
+  }
+
+  /*
+  final case class Circ(c: Vc, r: Float, style: Style) extends Shown {
+    override def styled = style.filter{ case _: Strokish => true; case _: Fillish => true; case _: Opaque => true; case _ => false }
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       if (!r.finite || r <= 0 || !c.finite) return Vector.empty
       val ctr = xform(c)
@@ -38,7 +45,7 @@ package chart {
       implicit val myMag = Magnification.from(mag, r, rad)
       if (!rad.finite || rad == 0 || !ctr.finite) return Vector.empty
       Indent.V(
-        f"<circle${fm.vquote(ctr, "cx", "cy")}${fm.attribute("r", rad)}$show/>"
+        f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", rad)}$show/>"
       )
     }
   }
@@ -152,7 +159,6 @@ package chart {
     }
   }
 
-  /*
   trait Arrowhead {
     def setback: Float
     def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String)

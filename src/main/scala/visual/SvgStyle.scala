@@ -16,8 +16,6 @@ import kse.eio._
 
 
 class Formatter {
-  import SvgSelect._
-
   def apply(x: Float): String =
     if (x.toInt == x) x.toInt.toString
     else if (x*10 == (x*10).toInt) "%.1f".format(x)
@@ -30,529 +28,290 @@ class Formatter {
   def comma(v: Vc): String = apply(v, ',')
   def vquote(v: Vc, xname: String, yname: String): String = f" $xname=$q${apply(v.x)}$q $yname=$q${apply(v.y)}$q"
 
-  def attribute(tag: String, text: String) = if (text.isEmpty) "" else f" $tag=$q$text$q"
-  def attribute(tag: String, value: Float) = if (value.finite) f" $tag=$q${apply(value)}$q" else ""
+  def apply(color: Rgba) = "#" + color.rgbText
 
-  def apply(title: String, color: Rgba): String = f" $title=$q#${color.rgbText}$q"
-  def apply(title: String, color: Rgba, opacity: String => String): String =
-    f" $title=$q#${color.rgbText}$q ${opacity(title)}=$q${apply(color.a)}$q"
+  def apply(tag: String, text: String): String = if (text.isEmpty) "" else f" $tag=$q$text$q"
+  def apply(tag: String, value: Float): String = if (value.finite) f" $tag=$q${apply(value)}$q" else ""
+  def apply(tag: String, color: Rgba): String = f" $tag=$q${apply(color)}$q"
 
-  def opaquely(value: Float, mask: Masked) = if (mask has Opaqued) attribute("opacity",value) else ""
-  def apply(opaque: Opaque, mask: Masked): String = opaquely(opaque.opacity, mask)
-  final def apply(opaque: Opaque): String = apply(opaque, opaque.mask)
+  def apply(tx: Textual): String = if (tx.text.isEmpty) "" else f" ${tx.label}=$q${tx.text}$q"
 
-  def filling(color: Rgba, mask: Masked) =
-    if (mask has Unfilled) attribute("fill", "none")
-    else if (mask hasnt Filled) ""
-    else if (mask has FillColor+FillOpacity) apply("fill", color, _ + "-opacity")
-    else if (mask has FillOpacity) attribute("fill-opacity", color.a)
-    else if (mask has FillColor) apply("fill", color)
-    else ""
-  def apply(fill: Fill, mask: Masked): String = filling(fill.fillcolor, mask)
-  final def apply(fill: Fill): String = apply(fill, fill.mask)
-
-  def stroking(width: Float, color: Rgba, join: StrokeJoin, cap: StrokeCap, mask: Masked): String =
-    if ((mask hasnt Stroked) || (color.a == 0)) ""
-    else {
-      ( if (mask has StrokeWidth) attribute("stroke-width", width) else "" ) +
-      ( if (mask has StrokeColor) apply("stroke", color) else "" ) +
-      ( if (mask has StrokeOpacity) attribute("stroke-opacity", color.a) else "" ) +
-      ( if (mask has StrokeJoined) join match {
-          case StrokeJoin.Miter(limit) => attribute("stroke-miterlimit", limit)
-          case x if x.text.nonEmpty         => attribute("stroke-linejoin", join.text)
-          case _                            => ""
-        }
-        else ""
-      ) +
-      ( if ((mask has StrokeCapped) && cap.text.nonEmpty) attribute("stroke-linecap", cap.text) else "" )
+  def apply(stylish: Stylish): String =
+    if (stylish.off) ""
+    else stylish match {
+      case Opaque(o, _)         => apply("opacity", o)
+      case FillColor(c, _)      => apply("fill", c)
+      case FillOpacity(o, _)    => apply("fill-opacity", o)
+      case FillNone(_)          => apply("fill", "none")
+      case StrokeColor(c, _)    => apply("stroke", c)
+      case StrokeOpacity(o, _)  => apply("stroke-opacity", o)
+      case StrokeWidth(w, _)    => apply("stroke-width", w)
+      case StrokeJoin(j, _)     => apply(j)
+      case StrokeMiter(m, _)    => apply("stroke-miterlimit", m)
+      case StrokeCap(c, _)      => apply(c)
+      case FontFace(f, _)       => apply("font-family", f)
+      case FontSize(s, _)       => apply("font-size", s)
+      case FontVertical(v, _)   => apply(v)
+      case FontHorizontal(h, _) => apply(h)
+      case Style(es, _)         => es.map(e => apply(e)).mkString
     }
-  def apply(stroke: Stroke, mask: Masked): String = stroking(stroke.width, stroke.strokecolor, stroke.join, stroke.cap, mask)
-  final def apply(stroke: Stroke): String = apply(stroke, stroke.mask)
-
-  def fonting(face: String, size: Float, color: Rgba, valign: Font.Vertical, halign: Font.Horizontal, outline: Option[Stroke], mask: Masked): String = {
-    if (mask hasnt Fonted) ""
-    else {
-      ( if ((mask has FontFace) && face.nonEmpty) attribute("font-family", face) else "" ) +
-      ( if (mask has FontSize) attribute("font-size", size) else "" ) +
-      ( if (mask has FontColor) apply("fill", color) else "" ) +
-      ( if ((mask has FontVAlign) && valign.text.nonEmpty) attribute("dominant-baseline", valign.text) else "" ) +
-      ( if ((mask has FontHAlign) && halign.text.nonEmpty) attribute("text-anchor", halign.text) else "") +
-      ( if (mask has FontOpacity) attribute("opacity", color.a) else "" ) +
-      ( if ((mask has FontOutlined) && outline.isDefined) apply(outline.get, mask & (Stroked + StrokeWidth + StrokeColor)) else "" )
-    }
-  }
-  def apply(font: Font, mask: Masked): String = fonting(font.face, font.size, font.color, font.valign, font.halign, font.outline, mask)
-  final def apply (font: Font): String = apply(font, font.mask)
-
-  def styling(font: Font, stroke: Stroke, fill: Fill, opacity: Opaque, mask: Masked): String =
-    apply(
-      font, 
-      mask.
-        epistatic(Opaqued, FontOpacity + FontOutlineOpacity).
-        epistatic(Filled + FillColor, FontColor).
-        epistatic(Stroked+StrokeWidth, FontOutlined)
-    ) +
-    apply(stroke, mask.epistatic(Opaqued, StrokeOpacity)) +
-    apply(fill, mask.epistatic(Opaqued, FillOpacity)) +
-    apply(opacity, mask)
-  def apply(style: Style, mask: Masked): String = styling(style, style, style, style, mask)
-  final def apply(style: Style): String = apply(style, style.mask)
 }
 class ProxyFormatter(original: Formatter) extends Formatter {
-  import SvgSelect._
   override def apply(x: Float) = original(x)
+
   override def apply(v: Vc, c: Char) = original(v, c)
   override def apply(v: Vc) = original(v)
   override def comma(v: Vc) = original comma v
   override def vquote(v: Vc, xname: String, yname: String) = original.vquote(v, xname, yname)
 
-  override def attribute(tag: String, text: String) = original.attribute(tag, text)
-  override def attribute(tag: String, value: Float) = original.attribute(tag, value)
+  override def apply(color: Rgba) = original(color)
 
-  override def apply(title: String, color: Rgba): String = original.apply(title, color)
-  override def apply(title: String, color: Rgba, opacity: String => String) = original.apply(title, color, opacity)
+  override def apply(tag: String, text: String) = original(tag, text)
+  override def apply(tag: String, value: Float) = original(tag, value)
+  override def apply(tag: String, color: Rgba) = original(tag, color)
 
-  override def opaquely(value: Float, mask: Masked) = original.opaquely(value, mask)
-  override def apply(opaque: Opaque, mask: Masked) = original(opaque, mask)
+  override def apply(tx: Textual) = original(tx)
 
-  override def filling(color: Rgba, mask: Masked) = original.filling(color, mask)
-  override def apply(fill: Fill, mask: Masked) = original(fill, mask)
-
-  override def stroking(width: Float, color: Rgba, join: StrokeJoin, cap: StrokeCap, mask: Masked) =
-    original.stroking(width, color, join, cap, mask)
-  override def apply(stroke: Stroke, mask: Masked) = original(stroke, mask)
-
-  override def fonting(face: String, size: Float, color: Rgba, valign: Font.Vertical, halign: Font.Horizontal, outline: Option[Stroke], mask: Masked) =
-    original.fonting(face, size, color, valign, halign, outline, mask)
-  override def apply(font: Font, mask: Masked) = original(font, mask)
-
-  override def styling(font: Font, stroke: Stroke, fill: Fill, opacity: Opaque, mask: Masked) =
-    original.styling(font, stroke, fill, opacity, mask)
-  override def apply(style: Style, mask: Masked) = original(style, mask)
+  override def apply(stylish: Stylish): String = original(stylish)
 }
 object DefaultFormatter extends Formatter {}
 
-trait SvgSelect {
-  def mask: SvgSelect.Masked
-}
-object SvgSelect {
-  case class Masked(val bits: Long) extends AnyVal {
-    def has(bit: Long) = (bits & bit) == bit
-    def hasnt(bit: Long) = (bits | bit) != bits
-    def +(bit: Long) = new Masked(bits | bit)
-    def -(bit: Long) = new Masked(bits - (bits & bit))
-    def &(thoseBits: Long): Masked = new Masked(bits & thoseBits)
-    def &[L](those: Masked)(implicit ev: L =:= Long): Masked = new Masked(bits & those.bits)
-    def |(thoseBits: Long): Masked = new Masked(bits | thoseBits)
-    def |[L](those: Masked)(implicit ev: L =:= Long): Masked = new Masked(bits | those.bits)
 
-    def epistatic(a: Long, b: Long): Masked = if (has(a) && !hasnt(b)) this - (b - (b&a)) else this
-
-    override def toString = "0x" + bits.toHexString
-  }
-  object Masked {
-    val empty = new Masked(0L)
-    val fonty = new Masked(
-      Fonted + FontFace + FontSize + FontColor + FontVAlign + FontHAlign + FontOpacity +
-      FontOutlined + FontOutlineWidth + FontOutlineColor + FontOutlineOpacity
-    )
-    val stroky = new Masked(Stroked + StrokeWidth + StrokeColor + StrokeOpacity + StrokeJoined + StrokeCapped)
-    val filly = new Masked(Filled + FillColor + FillOpacity)
-    val opaquey = new Masked(Opaqued)
-    val full = new Masked(
-      Fonted + FontFace + FontSize + FontColor + FontVAlign + FontHAlign + FontOpacity +
-      FontOutlined + FontOutlineWidth + FontOutlineColor + FontOutlineOpacity +
-      Stroked + StrokeWidth + StrokeColor + StrokeOpacity + StrokeJoined + StrokeCapped +
-      Filled + FillColor + FillOpacity + Opaqued
-    )
-    val undetermined = new Masked(-1L | Undetermined)
-  }
-
-  val Fonted =       0x100000000L
-  val FontFace =             0x1L
-  val FontSize =             0x2L
-  val FontColor =            0x4L
-  val FontVAlign =           0x8L
-  val FontHAlign =          0x10L
-  val FontOpacity =         0x20L
-  val FontOutlined =   0x1000000L
-  val FontOutlineWidth =    0x40L
-  val FontOutlineColor =    0x80L
-  val FontOutlineOpacity = 0x100L
-  val Stroked =      0x200000000L
-  val StrokeWidth =        0x100L
-  val StrokeColor =        0x200L
-  val StrokeOpacity =      0x400L
-  val StrokeJoined =       0x800L
-  val StrokeCapped =      0x1000L
-  val Filled =       0x400000000L
-  val Unfilled =       0x2000000L
-  val FillColor =         0x2000L
-  val FillOpacity =       0x4000L
-  val Opaqued =      0x800000000L
-  val Undetermined =  0x10000000L   // Indicates that you shouldn't really trust this mask
+trait Textual { 
+  def text: String
+  def label: String
 }
 
-
-trait Opaque extends SvgSelect { 
-  def mask = Opaque.DefaultMask
-  def opacity: Float = 1f
-  def opaqueCase: OpaqueValue = new OpaqueValue(opacity, mask)
-  def fixed: Opaque = opaqueCase
-}
-object Opaque {
-  import SvgSelect._
-  val DefaultMask = Masked(Opaqued)
-
-  val empty: Opaque = new Opaque { override def mask = Masked.empty }
-  def apply(opaqueness: Float): Opaque = new Opaque { override def opacity = opaqueness }
-}
-class OpaqueProxy(original: Opaque) extends Opaque {
-  override def mask = original.mask
-  override def opacity = original.opacity
-}
-final case class OpaqueValue(override val opacity: Float = 1f, override val mask: SvgSelect.Masked = Opaque.DefaultMask)
-extends Opaque {
-  override def opaqueCase = this
+sealed trait Join extends Textual { def label = "stroke-linejoin" }
+object Join {
+  final case object Miter extends Join { def text = "miter" }
+  final case object Bevel extends Join { def text = "bevel" }
+  final case object Round extends Join { def text = "round" }
 }
 
-
-trait Fill extends SvgSelect {
-  def mask = if (fillcolor.a == 1) Fill.DefaultMask else Fill.TranslucentMask
-  def fillcolor: Rgba = Rgba.Black
-  def fillCase: FillValue = new FillValue(fillcolor, mask)
-  def fixed: Fill = fillCase
+sealed trait Cap extends Textual { def label = "stroke-linecap" }
+object Cap {
+  final case object Butt extends Cap { def text = "butt" }
+  final case object Round extends Cap { def text = "round" }
+  final case object Square extends Cap { def text = "square" }
 }
+
+sealed trait Vertical extends Textual { def label = "dominant-baseline" }
+object Vertical {
+  final case object Top extends Vertical { def text = "hanging" }
+  final case object Middle extends Vertical { def text = "middle" }
+  final case object Bottom extends Vertical { def text = "baseline" }
+}
+
+sealed trait Horizontal extends Textual { def label = "text-anchor"}
+object Horizontal {
+  final case object Left extends Horizontal { def text = "start" }
+  final case object Middle extends Horizontal { def text = "middle" }
+  final case object Right extends Horizontal { def text = "end" }
+}
+
+final case object Whatever extends Join with Cap with Vertical with Horizontal { 
+  override def label = ""
+  def text = ""
+}
+
+sealed trait Stylish {
+  def category: Int
+  def off: Boolean
+  def toggle: Stylish
+  def toOff: Stylish
+  def toOn: Stylish
+}
+sealed abstract class Stylized[+A <: Stylized[_]](val category: Int) extends Stylish {
+  def me: A
+  override def toggle: A
+  override def toOff: A = if (off) me else toggle
+  override def toOn: A = if (off) toggle else me
+}
+sealed trait Colorful[A <: Colorful[_]] extends Stylish { def rgb: Rgba; def colorize(f: Rgba => Rgba): A }
+sealed trait Ghostly[A <: Ghostly[_]] extends Stylish { def opacity: Float; def luminize(f: Float => Float): A }
+sealed trait Scalable[A <: Scalable[_]] extends Stylish { def scale(factor: Float): A }
+sealed abstract class Fillish[A <: Stylized[_]](category: Int) extends Stylized[A](category) {}
+sealed abstract class Strokish[A <: Stylized[_]](category: Int) extends Stylized[A](category) {}
+
+final case class Opaque(opacity: Float, off: Boolean = false)                 extends Stylized[Opaque](1)        with Ghostly[Opaque]        { def me = this; def toggle = new Opaque(opacity, !off);        def luminize(f: Float => Float) = new Opaque(f(opacity), off) }
+final case class FillColor(rgb: Rgba, off: Boolean = false)                   extends Fillish[FillColor](2)      with Colorful[FillColor]    { def me = this; def toggle = new FillColor(rgb, !off);         def colorize(f: Rgba => Rgba) = new FillColor(f(rgb), off) }
+final case class FillOpacity(opacity: Float, off: Boolean = false)            extends Fillish[FillOpacity](3)    with Ghostly[FillOpacity]   { def me = this; def toggle = new FillOpacity(opacity, !off);   def luminize(f: Float => Float) = new FillOpacity(f(opacity), off) }
+final case class FillNone(off: Boolean = false)                               extends Fillish[FillNone](2)                                   { def me = this; def toggle = new FillNone(!off) }
+final case class StrokeColor(rgb: Rgba, off: Boolean = false)                 extends Strokish[StrokeColor](4)   with Colorful[StrokeColor]  { def me = this; def toggle = new StrokeColor(rgb, !off);       def colorize(f: Rgba => Rgba) = new StrokeColor(f(rgb), off) }
+final case class StrokeOpacity(opacity: Float, off: Boolean = false)          extends Strokish[StrokeOpacity](5) with Ghostly[StrokeOpacity] { def me = this; def toggle = new StrokeOpacity(opacity, !off); def luminize(f: Float => Float) = new StrokeOpacity(f(opacity), off) }
+final case class StrokeWidth(width: Float, off: Boolean = false)              extends Strokish[StrokeWidth](6)   with Scalable[StrokeWidth]  { def me = this; def toggle = new StrokeWidth(width, !off);     def scale(factor: Float) = new StrokeWidth(width * factor, off) }
+final case class StrokeJoin(join: Join, off: Boolean = false)                 extends Strokish[StrokeJoin](7)                                { def me = this; def toggle = new StrokeJoin(join, !off) }
+final case class StrokeMiter(miter: Float, off: Boolean = false)              extends Strokish[StrokeMiter](8)                               { def me = this; def toggle = new StrokeMiter(miter, !off) }
+final case class StrokeCap(cap: Cap, off: Boolean = false)                    extends Strokish[StrokeCap](9)                                 { def me = this; def toggle = new StrokeCap(cap, !off) }
+final case class FontFace(face: String, off: Boolean = false)                 extends Stylized[FontFace](10)                                 { def me = this; def toggle = new FontFace(face, !off) }
+final case class FontSize(size: Float, off: Boolean = false)                  extends Stylized[FontSize](11)      with Scalable[FontSize]    { def me = this; def toggle = new FontSize(size, !off);         def scale(factor: Float) = new FontSize(factor * size, off) }
+final case class FontVertical(vertical: Vertical, off: Boolean = false)       extends Stylized[FontVertical](12)                             { def me = this; def toggle = new FontVertical(vertical, !off) }
+final case class FontHorizontal(horizontal: Horizontal, off: Boolean = false) extends Stylized[FontHorizontal](13)                           { def me = this; def toggle = new FontHorizontal(horizontal, !off) }
+
+object Opacity {
+  def apply(opacity: Float) = Style(Set(Opaque(opacity)))
+}
+
 object Fill {
-  import SvgSelect._
-  val DefaultMask = Masked(Filled + FillColor)
-  val TranslucentMask = Masked(Filled + FillColor + FillOpacity)
-  val UnfilledMask = Masked(Unfilled)
+  val off = Style(Set(FillNone()))
 
-  val empty: Fill = new Fill { override def mask = Masked.empty }
-  val off: Fill = new Fill { override def mask = UnfilledMask }
-  def apply(fillColor: Rgba): Fill = new Fill { override def fillcolor = fillColor }
-}
-class FillProxy(original: Fill) extends Fill {
-  override def mask = original.mask
-  override def fillcolor = original.fillcolor
-}
-final case class FillValue(override val fillcolor: Rgba = Rgba.Black, override val mask: SvgSelect.Masked = Fill.DefaultMask)
-extends Fill {
-  override def fillCase = this
+  def apply(color: Rgba) = Style(Set(FillColor(color)))
+  def alpha(color: Rgba) = Style(Set(FillColor(color), FillOpacity(color.a)))
 }
 
-
-sealed trait StrokeJoin { def text: String }
-object StrokeJoin {
-  final case class Miter(limit: Float = 4.0f) extends StrokeJoin { def text = "miter" }
-  final case object Bevel extends StrokeJoin { def text = "bevel" }
-  final case object Round extends StrokeJoin { def text = "round" }
-  final case object Whatever extends StrokeJoin { def text = "" }
-}
-
-sealed trait StrokeCap { def text: String }
-object StrokeCap {
-  final case object Butt extends StrokeCap { def text = "butt" }
-  final case object Round extends StrokeCap { def text = "round" }
-  final case object Square extends StrokeCap { def text = "square" }
-  final case object Whatever extends StrokeCap { def text = "" }
-}
-
-trait Stroke extends SvgSelect {
-  import SvgSelect._
-  def mask = Masked(
-    Stroked + 
-    (if (width.finite && width > 0) StrokeWidth else 0) +
-    (if (strokecolor.a > 0) StrokeColor else 0) +
-    (if (strokecolor.a > 0 && strokecolor.a < 1) StrokeOpacity else 0) +
-    (if (join != StrokeJoin.Whatever) StrokeJoined else 0) +
-    (if (cap != StrokeCap.Whatever) StrokeCapped else 0)
-  )
-  def width: Float = 0f
-  def strokecolor: Rgba = Rgba.Black
-  def join: StrokeJoin = StrokeJoin.Whatever
-  def cap: StrokeCap = StrokeCap.Whatever
-
-  def strokeCase: StrokeValue = new StrokeValue(width, strokecolor, join, cap, mask)
-  def fixed: Stroke = strokeCase
-  def scaled(scale: Float): Stroke = 
-    if (scale closeTo 1) this else new StrokeProxy(this) { override def width = scale * super.width }
-}
 object Stroke {
-  import SvgSelect._
+  def off = Style(Set(StrokeWidth(0)))
 
-  val empty: Stroke = new Stroke { override def mask = Masked.empty }
+  def apply(color: Rgba) = Style(Set(StrokeColor(color)))
+  def apply(width: Float) = Style(Set(StrokeWidth(width)))
+  def apply(join: Join) = Style(Set(StrokeJoin(join)))
+  def apply(cap: Cap) = Style(Set(StrokeCap(cap)))
 
-  def apply(width: Float) =                                                StrokeValue(width)
-  def apply(width: Float, color: Rgba) =                                   StrokeValue(width, color)
-  def apply(width: Float, color: Rgba, miterJoin: Float) =                 StrokeValue(width, color, StrokeJoin.Miter(miterJoin))
-  def apply(width: Float, join: StrokeJoin) =                              StrokeValue(width, join = join)
-  def apply(width: Float, color: Rgba, join: StrokeJoin) =                 StrokeValue(width, color, join)
-  def apply(width: Float, cap: StrokeCap) =                                StrokeValue(width, cap = cap)
-  def apply(width: Float, color: Rgba, cap: StrokeCap) =                   StrokeValue(width, color, cap = cap)
-  def apply(width: Float, join: StrokeJoin, cap: StrokeCap) =              StrokeValue(width, join = join, cap = cap)
-  def apply(width: Float, color: Rgba, join: StrokeJoin, cap: StrokeCap) = StrokeValue(width, color, join, cap)
+  def apply(color: Rgba, width: Float) = Style(Set(StrokeColor(color), StrokeWidth(width)))
+  def apply(color: Rgba, join: Join) = Style(Set(StrokeColor(color), StrokeJoin(join)))
+  def apply(color: Rgba, cap: Cap) = Style(Set(StrokeColor(color), StrokeCap(cap)))
+  def apply(width: Float, join: Join) = Style(Set(StrokeWidth(width), StrokeJoin(join)))
+  def apply(width: Float, cap: Cap) = Style(Set(StrokeWidth(width), StrokeCap(cap)))
+  def apply(join: Join, cap: Cap) = Style(Set(StrokeJoin(join), StrokeCap(cap)))
+
+  def apply(color: Rgba, width: Float, join: Join) = Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(join)))
+  def apply(color: Rgba, width: Float, cap: Cap) = Style(Set(StrokeColor(color), StrokeWidth(width), StrokeCap(cap)))
+  def apply(color: Rgba, join: Join, cap: Cap) = Style(Set(StrokeColor(color), StrokeJoin(join), StrokeCap(cap)))
+  def apply(width: Float, join: Join, cap: Cap) = Style(Set(StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
+
+  def apply(color: Rgba, width: Float, join: Join, cap: Cap) =
+    Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
+
+  def alpha(color: Rgba) = Style(Set(StrokeColor(color), StrokeOpacity(color.a)))
+  def alpha(color: Rgba, width: Float) = Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width)))
+  def alpha(color: Rgba, join: Join) = Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeJoin(join)))
+  def alpha(color: Rgba, cap: Cap) = Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeCap(cap)))
+  def alpha(color: Rgba, width: Float, join: Join) =
+    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeJoin(join)))
+  def alpha(color: Rgba, width: Float, cap: Cap) =
+    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeCap(cap)))
+  def alpha(color: Rgba, join: Join, cap: Cap) =
+    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeJoin(join), StrokeCap(cap)))
+  def alpha(color: Rgba, width: Float, join: Join, cap: Cap) =
+    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
+
+  def miter(limit: Float) = Style(Set(StrokeJoin(Join.Miter), StrokeMiter(limit)))
+  def miter(color: Rgba, limit: Float) = Style(Set(StrokeColor(color), StrokeJoin(Join.Miter), StrokeMiter(limit)))
+  def miter(width: Float, limit: Float) = Style(Set(StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit)))
+  def miter(limit: Float, cap: Cap) = Style(Set(StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
+  def miter(color: Rgba, width: Float, limit: Float) =
+    Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit)))
+  def miter(color: Rgba, limit: Float, cap: Cap) =
+    Style(Set(StrokeColor(color), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
+  def miter(width: Float, limit: Float, cap: Cap) =
+    Style(Set(StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
+  def miter(color: Rgba, width: Float, limit: Float, cap: Cap) =
+    Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
 }
-class StrokeProxy(original: Stroke) extends Stroke {
-  override def mask = original.mask
-  override def width = original.width
-  override def strokecolor = original.strokecolor
-  override def join = original.join
-  override def cap = original.cap
-}
-final case class StrokeValue(
-  override val width: Float,
-  override val strokecolor: Rgba = Rgba.Black,
-  override val join: StrokeJoin = StrokeJoin.Whatever,
-  override val cap: StrokeCap = StrokeCap.Whatever,
-  val theMask: SvgSelect.Masked = SvgSelect.Masked.undetermined
-) extends Stroke {
-  override def mask = if (theMask has SvgSelect.Undetermined) SvgSelect.Masked.stroky else theMask
-  override def strokeCase = this
-}
 
-
-trait Font extends SvgSelect {
-  def mask = Font.DefaultMask
-  def size: Float = 0f
-  def face: String = ""
-  def color: Rgba = Rgba.Black
-  def valign: Font.Vertical = Font.WHEREVER
-  def halign: Font.Horizontal = Font.WHEREVER
-  def outline: Option[Stroke] = None
-
-  def fontCase: FontValue = new FontValue(size, face, color, valign, halign, outline, mask)
-  def fixed: Font = fontCase
-  def scaled(scale: Float) = 
-    if (scale closeTo 1) this
-    else new FontProxy(this) {
-      override def size = super.size * scale
-      override def outline = super.outline.map(_.scaled(scale))
-    }
-}
 object Font {
-  import SvgSelect._
+  def apply(face: String) = Style(Set(FontFace(face)))
+  def apply(size: Float) = Style(Set(FontSize(size)))
+  def apply(vertical: Vertical) = Style(Set(FontVertical(vertical)))
+  def apply(horizontal: Horizontal) = Style(Set(FontHorizontal(horizontal)))
 
-  sealed trait Vertical { def text: String; override def toString = text }
-  object HANG extends Vertical { def text = "hanging" }
-  object VMID extends Vertical { def text = "middle" }
-  object BASE extends Vertical { def text = "baseline"}
+  def apply(face: String, size: Float) = Style(Set(FontFace(face), FontSize(size)))
+  def apply(face: String, vertical: Vertical) = Style(Set(FontFace(face), FontVertical(vertical)))
+  def apply(face: String, horizontal: Horizontal) = Style(Set(FontFace(face), FontHorizontal(horizontal)))
+  def apply(size: Float, vertical: Vertical) = Style(Set(FontSize(size), FontVertical(vertical)))
+  def apply(size: Float, horizontal: Horizontal) = Style(Set(FontSize(size), FontHorizontal(horizontal)))
+  def apply(vertical: Vertical, horizontal: Horizontal) = Style(Set(FontVertical(vertical), FontHorizontal(horizontal)))
 
-  sealed trait Horizontal { def text: String; override def toString = text }
-  object LEFT extends Horizontal { def text = "start" }
-  object HMID extends Horizontal { def text = "middle" }
-  object RIGHT extends Horizontal { def text = "end" }
+  def apply(face: String, size: Float, vertical: Vertical) =
+    Style(Set(FontFace(face), FontSize(size), FontVertical(vertical)))
+  def apply(face: String, size: Float, horizontal: Horizontal) =
+    Style(Set(FontFace(face), FontSize(size), FontHorizontal(horizontal)))
+  def apply(face: String, vertical: Vertical, horizontal: Horizontal) =
+    Style(Set(FontFace(face), FontVertical(vertical), FontHorizontal(horizontal)))
+  def apply(size: Float, vertical: Vertical, horizontal: Horizontal) =
+    Style(Set(FontSize(size), FontVertical(vertical), FontHorizontal(horizontal)))
 
-  object WHEREVER extends Vertical with Horizontal { def text = "" }
-
-  val DefaultMask = Masked.fonty
-
-  val empty: Font = new Font { override def mask = Masked.empty }
-
-  def apply(
-    size: Float, face: String = "", color: Rgba = Rgba.Black,
-    valign: Vertical = WHEREVER, halign: Horizontal = WHEREVER, outline: Option[Stroke] = None
-  ): Font = FontValue(size, face, color, valign, halign, outline)
-  def apply(size: Float, color: Rgba): Font = FontValue(size, color = color)
-}
-class FontProxy(original: Font) extends Font {
-  override def face = original.face
-  override def size = original.size
-  override def color = original.color
-  override def valign = original.valign
-  override def halign = original.halign
-  override def outline = original.outline
-  override def mask = original.mask
-}
-final case class FontValue(
-  override val size: Float,
-  override val face: String = "",
-  override val color: Rgba = Rgba.Black,
-  override val valign: Font.Vertical = Font.WHEREVER,
-  override val halign: Font.Horizontal = Font.WHEREVER,
-  override val outline: Option[Stroke] = None,
-  theMask: SvgSelect.Masked = SvgSelect.Masked.undetermined
-) extends Font {
-  override def mask = if (theMask has SvgSelect.Undetermined) Font.DefaultMask else theMask
-  override def fontCase = this
+  def apply(face: String, size: Float, vertical: Vertical, horizontal: Horizontal) =
+    Style(Set(FontFace(face), FontSize(size), FontVertical(vertical), FontHorizontal(horizontal)))
 }
 
+final case class Style(elements: Set[Stylish], off: Boolean = false) extends Scalable[Style] with Colorful[Style] with Ghostly[Style] {
+  def listed = elements.toList
 
-trait Style extends Font with Stroke with Fill with Opaque { self =>
-  override def mask = Style.DefaultMask
+  def opacity = ???
+  def rgb = ???
+  def category = 0
+  def toOff = if (off) this else new Style(elements, true)
+  def toOn = if (off) new Style(elements, false) else this
+  def toggle = if (off) toOn else toOff
 
-  def cased: StyleValue = StyleValue(
-    size, face, color, valign, halign, outline,
-    width, strokecolor, join, cap,
-    fillcolor, opacity, mask
+  def scale(factor: Float): Style = new Style(
+    elements.map{
+      case sc: Scalable[_] => sc.scale(factor)
+      case e               => e
+    },
+    off
   )
-  override def fixed: Style = cased
+  def colorize(f: Rgba => Rgba): Style = new Style(
+    elements.map{
+      case cf: Colorful[_] => cf.colorize(f)
+      case e               => e
+    },
+    off
+  )
+  def luminize(f: Float => Float): Style = new Style(
+    elements.map{
+      case gh: Ghostly[_] => gh.luminize(f)
+      case e              => e
+    },
+    off
+  )
 
-  def maskedOn(overmask: SvgSelect.Masked): Style = new StyleProxy(this) {
-    override def mask = super.mask | overmask
+  def +(s: Stylish) = 
+    if (!elements.exists(_.category == s.category)) this
+    else new Style(elements.filter(_.category != s.category) + s, off)
+  def -(s: Stylish) =
+    if (!elements.exists(_.category == s.category)) this
+    else new Style(elements.filter(_.category != s.category), off)
+  def ++(style: Style) = 
+    if (off != style.off) { if (off) style else this }
+    else new Style((listed ++ style.listed).groupBy(_.category).map(_._2.last).toSet, off)
+  def map(f: Stylish => Stylish) = {
+    val es = elements.map(f)
+    if (es.map(_.category).size == es.size) new Style(es, off)
+    else new Style(es.toList.groupBy(_.category).map{ case (_, vs) => vs.last }.toSet, off)
   }
-  def maskedOnly(overmask: SvgSelect.Masked): Style = new StyleProxy(this) {
-    override def mask = super.mask & overmask
+  def flatMap(f: Stylish => Style) = {
+    val es = elements.flatMap{ e => val x = f(e); if (x.off) Set.empty[Stylish] else x.elements }
+    if (es.map(_.category).size == es.size) new Style(es, off)
+    else new Style(es.toList.groupBy(_.category).map{ case (_, vs) => vs.last }.toSet, off)
   }
-  def maskedOff(overmask: SvgSelect.Masked): Style = new StyleProxy(this) {
-    override def mask = { val m = super.mask; m - (m.bits & overmask.bits) }
+  def filter(p: Stylish => Boolean) = {
+    val es = elements.filter(p)
+    if (es == elements) this else new Style(es, off)
   }
-  def colored(oneColor: Rgba): Style = new StyleProxy(this) {
-    private[this] val theColor = if (oneColor.a == 1) oneColor else oneColor.aTo(1)
-    override def color = theColor
-    override def outline = super.outline.map{ x => new StrokeProxy(x) { override def strokecolor = theColor } }
-    override def strokecolor = theColor
-    override def fillcolor = theColor
-    override def opacity = oneColor.a
-  }
-  override def scaled(scale: Float): Style = 
-    if (scale closeTo 1) this
-    else new StyleProxy(this) {
-      override def size = scale * super.size
-      override def width = scale * super.width
-      override def outline = super.outline.map(_.scaled(scale))
-    }
-  def promoted: Style = new StylePromotion(this)
-  def demoted: Style = new StyleDemotion(this)
-}
-object Style {
-  import SvgSelect._
+  def withFilter(p: Stylish => Boolean) = filter(p)
+  def foreach[U](f: Stylish => U) { elements.foreach(f) }
+  def keep(p: Stylish => Boolean) = new Style(elements.map(e => if (p(e)) e else e.toOff), off)
+  def enable(p: Stylish => Boolean) = new Style(elements.map(e => if (p(e)) e.toOn else e), off)
 
-  val DefaultMask = Masked.full
+  def common(that: Style): Style =
+    if (off != that.off) Style(Set())
+    else new Style((listed ++ that.listed).groupBy(_.category).collect{ case (_, x :: y :: Nil) if (x == y) => x }.toSet, off)
 
-  val empty: Style = new Style {}
-
-  def apply(font: Font): Style = new Stylish(font, Stroke.empty, Fill.empty, Opaque.empty)
-  def apply(stroke: Stroke): Style = new Stylish(Font.empty, stroke, Fill.off, Opaque.empty)
-  def apply(fill: Fill): Style = new Stylish(Font.empty, Stroke.empty, fill, Opaque.empty)
-  def apply(opaque: Opaque): Style = new Stylish(Font.empty, Stroke.empty, Fill.empty, opaque)
-  def apply(font: Font, stroke: Stroke): Style = new Stylish(font, stroke, Fill.empty, Opaque.empty)
-  def apply(font: Font, fill: Fill): Style = new Stylish(font, Stroke.empty, fill, Opaque.empty)
-  def apply(font: Font, opaque: Opaque): Style = new Stylish(font, Stroke.empty, Fill.empty, opaque)
-  def apply(stroke: Stroke, fill: Fill): Style = new Stylish(Font.empty, stroke, fill, Opaque.empty)
-  def apply(stroke: Stroke, opaque: Opaque): Style = new Stylish(Font.empty, stroke, Fill.off, opaque)
-  def apply(font: Font, stroke: Stroke, fill: Fill): Style = new Stylish(font, stroke, fill, Opaque.empty)
-  def apply(font: Font, stroke: Stroke, opaque: Opaque): Style = new Stylish(font, stroke, Fill.empty, opaque)
-  def apply(font: Font, fill: Fill, opaque: Opaque): Style = new Stylish(font, Stroke.empty, fill, opaque)
-  def apply(stroke: Stroke, fill: Fill, opaque: Opaque): Style = new Stylish(Font.empty, stroke, fill, opaque)
-  def apply(font: Font, stroke: Stroke, fill: Fill, opaque: Opaque): Style = new Stylish(font, stroke, fill, opaque)
-}
-class StyleProxy(original: Style) extends FontProxy(original) with Style {
-  override def mask = original.mask
-  override def width = original.width
-  override def strokecolor = original.strokecolor
-  override def join = original.join
-  override def cap = original.cap
-  override def fillcolor = original.fillcolor
-  override def opacity = original.opacity
-}
-class Stylish(val font: Font, val stroke: Stroke, val fill: Fill, val opaque: Opaque) extends FontProxy(font) with Style {
-  override def mask = {
-    import SvgSelect._
-    var bits = font.mask.bits | stroke.mask.bits | fill.mask.bits | opaque.mask.bits
-    if ((bits & Opaqued) != 0) bits -= (bits & (FontOutlineOpacity | StrokeOpacity | FillOpacity))
-    if ((bits & (Filled | Unfilled)) == (Filled | Unfilled)) bits -= Unfilled
-    Masked(bits)
-  }
-  override def width = stroke.width
-  override def strokecolor = stroke.strokecolor
-  override def join = stroke.join
-  override def cap = stroke.cap
-  override def fillcolor = fill.fillcolor
-  override def opacity = opaque.opacity
-}
-final case class StyleValue(
-  override val size: Float = 0f,
-  override val face: String = "",
-  override val color: Rgba = Rgba.Black,
-  override val valign: Font.Vertical = Font.WHEREVER,
-  override val halign: Font.Horizontal = Font.WHEREVER,
-  override val outline: Option[Stroke] = None,
-  override val width: Float = 0f,
-  override val strokecolor: Rgba = Rgba.Black,
-  override val join: StrokeJoin = StrokeJoin.Whatever,
-  override val cap: StrokeCap = StrokeCap.Whatever,
-  override val fillcolor: Rgba = Rgba.Black,
-  override val opacity: Float = 1f,
-  theMask: SvgSelect.Masked = SvgSelect.Masked.undetermined
-) extends Style {
-  override def mask = if (theMask has SvgSelect.Undetermined) Font.DefaultMask else theMask
-  override def cased = this
-}
-final class StylePromotion(original: Style) extends StyleProxy(original) {
-  import SvgSelect._
-  private[this] def transparency = {
-    val o = if (original.mask has Opaqued) original.opacity else 1f
-    val s = if (original.mask has Stroked + StrokeOpacity) original.strokecolor.a else 1f
-    val f = if (original.mask has Filled + FillOpacity) original.fillcolor.a else 1f
-    val c = if (original.mask has Fonted + FontOpacity) original.color.a else 1f
-    val x = if (original.mask has Fonted + FontOutlined + FontOutlineOpacity) original.outline.map(_.strokecolor.a).getOrElse(1f) else 1f
-    val sf = if (s > 0 && f > 0) math.min(s, f) else math.max(s, f)
-    val cx = if (c > 0 && x > 0) math.min(c, x) else math.max(c, x)
-    o * (if (sf > 0 && cx > 0) math.min(sf, cx) else if (sf <= 0 && cx <= 0) 1f else math.max(sf, cx))
-  }
-  override def mask = {
-    val t = transparency
-    if (t < 1) (original.mask - (FontSize + StrokeWidth)) + Opaqued
-    else original.mask - (FontSize + StrokeWidth)
-  }
-  override def strokecolor =
-    if (mask has Stroked + StrokeOpacity) {
-      val t = transparency;
-      val s = original.strokecolor.a
-      if (s < t && !(s closeTo t) && t > 0) original.strokecolor.aTo(s/t)
-      else original.strokecolor.aTo(1)
-    }
-    else original.strokecolor
-  override def fillcolor =
-    if (mask has Filled + FillOpacity) {
-      val t = transparency
-      val f = original.fillcolor.a
-      if (f < t && !(f closeTo t) && t > 0) original.fillcolor.aTo(f/t)
-      else original.fillcolor.aTo(1)
-    }
-    else original.fillcolor
-  override def color =
-    if (mask has Fonted + FontOpacity) {
-      val t = transparency
-      val c = original.color.a
-      if (c < t && !(c closeTo t) && t > 0) original.color.aTo(c/t)
-      else original.color.aTo(1)
-    }
-    else original.color
-  override def outline =
-    if ((mask has FontOutlined) && original.outline.isDefined) {
-      val t = transparency
-      val oo = original.outline.get
-      val x = oo.strokecolor.a
-      Some(new StrokeProxy(oo) {
-        override def strokecolor = oo.strokecolor.aTo(if (x < t && !(x closeTo t) && t > 0) x/t else 1f)
-      })
-    }
-    else original.outline
-}
-final class StyleDemotion(original: Style) extends StyleProxy(original) {
-  import SvgSelect._
-  override def mask = original.mask & Masked(Fonted + FontSize + Stroked + StrokeWidth)
-}
-
-
-final case class Indent(text: String, level: Int = 0) {
-  def in = new Indent(text, level+1)
-  override def toString = if (level <= 0) text else " "*(2*level) + text
-}
-object Indent {
-  def V(text: String*) = {
-    val N = text.length
-    if (N == 0) Vector.empty[Indent]
+  def unique(that: Style): (Style, Style) =
+    if (off != that.off) (this, that)
     else {
-      val vb = Vector.newBuilder[Indent]
-      var i = 0
-      text.foreach{ t => i += 1; vb += new Indent(t, if (i==1 || i==N) 0 else 1) }
-      vb.result
+      val thiscat = elements.map(_.category)
+      val thatcat = that.elements.map(_.category)
+      val shared = thiscat & thatcat
+      val sharethis = elements.filter(e => shared(e.category)).map(e => e.category -> e).toMap
+      val sharethat = that.elements.filter(e => shared(e.category)).map(e => e.category -> e).toMap
+      ( new Style(elements.filterNot(e => shared(e.category) && e == sharethat(e.category))),
+        new Style(that.elements.filterNot(e => shared(e.category) && e == sharethis(e.category)))
+      )
     }
-  }
 }
 
 
@@ -603,16 +362,29 @@ object Magnification {
     }
 }
 
-
-trait InSvg { 
-  def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent]
+sealed trait Indent {
+  def level: Int
+  def in: Indent
+}
+object Indent {
+  def apply(text: String) = InText(text)
+  def apply(text: String, level: Int) = InText(text, level)
+  def V(text: String*) = {
+    val N = text.length
+    if (N == 0) Vector.empty[Indent]
+    else {
+      val vb = Vector.newBuilder[Indent]
+      var i = 0
+      text.foreach{ t => i += 1; vb += new InText(t, if (i==1 || i==N) 0 else 1) }
+      vb.result
+    }
+  }
+}
+final case class InText(text: String, level: Int = 0) extends Indent {
+  def in = new InText(text, level+1)
+  override def toString = if (level <= 0) text else " "*(2*level) + text
 }
 
-trait SvgStyled extends InSvg with SvgSelect {
-  def mask: SvgSelect.Masked = SvgSelect.Masked.undetermined
-  def style: Style
-  def masked(s: Style) = if (mask has SvgSelect.Undetermined) s else s.maskedOnly(mask)
-  def showing(s: Style)(implicit fm: Formatter, scale: Magnification = Magnification.one): String =
-    fm(if (scale.value closeTo 1) masked(s) else masked(s).scaled(scale.value))
-  def show(implicit fm: Formatter, scale: Magnification = Magnification.one): String = showing(style)(fm, scale)
+trait InSvg {
+  def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent]
 }
