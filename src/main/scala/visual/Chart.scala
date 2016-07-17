@@ -78,6 +78,7 @@ package chart {
     }
   }
 
+
   final case class DataLine(pts: Array[Long], style: Style) extends Shown {
     override def styled =
       if (style.elements.exists{ case sj: StrokeJoin => true; case _ => false }) style.stroky
@@ -161,10 +162,10 @@ package chart {
     }
   }
 
-  /*
+
   trait Arrowhead {
     def setback: Float
-    def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String)
+    def stroked(tip: Vc, direction: Vc)(xform: Xform, style: Style)(implicit fm: Formatter): (Float, String)
   }
   final case class LineArrow(angle: Float, length: Float, thickness: Float) extends Arrowhead {
     val phi = angle.abs
@@ -192,13 +193,13 @@ package chart {
       else if (phi < theta) 0.5f + length*sinx + thickness*cosx*0.5f
       else if (underfilled) 0.5f + length*sinx - thickness*cosx*0.5f
       else length*sinx + thickness*cosx*0.5f
-    def stroked(tip: Vc, direction: Vc)(xform: Xform, appear: Appearance)(implicit nf: NumberFormatter, af: AppearanceFormatter): (Float, String) = {
+    def stroked(tip: Vc, direction: Vc)(xform: Xform, style: Style)(implicit fm: Formatter): (Float, String) = {
       val qt = xform(tip)
       val deltadir = if (direction.lenSq < 0.1f*tip.lenSq) direction else direction*(1f/(50*math.max(1e-3f, tip.len.toFloat)))
       val dirx = (xform(tip + deltadir) - qt).hat
       val diry = dirx.ccw
-      val w = (af adjust appear).wide.value
-      val ap = if (thickness closeTo 1) Plain else new Plainly { override def wide = Q.eval((af adjust appear).wide.value*thickness) }
+      val w = style.elements.collectFirst{ case StrokeWidth(x, _) => x } getOrElse 1f
+      val sizedStyle = if (thickness closeTo 1) style else style.scale(thickness)
       val s = w * setback
       val px = w * pointx
       val bx = w * barbx
@@ -206,52 +207,58 @@ package chart {
       val qA = qt - dirx*bx + diry*by
       val qB = qt - dirx*bx - diry*by
       val qC = qt - dirx*px
-      val miterfix = if (3.999*sinx < 1) " stroke-miterlimit=\"%d\"".format(math.ceil(1/sinx+1e-3).toInt) else ""
+      val miterStyle = {
+        val miter = math.ceil(1/sinx+1e-3).toInt
+        if (miter <= 4) sizedStyle
+        else if (style.elements.exists{ case StrokeMiter(m, _) => m >= miter || m.closeTo(miter); case _ => false }) sizedStyle
+        else sizedStyle + StrokeMiter(miter.toFloat)
+      }
+      val joinStyle =
+        if (flat || !style.elements.exists{ case StrokeJoin(j, _) => j != Join.Miter; case _ => false }) miterStyle
+        else miterStyle + StrokeJoin(Join.Miter)
       val ans = 
-        if (flat) f"<path d=${q}M ${nf space qA} L ${nf space qB}${q}${af fmt ap}/>"
-        else f"<path d=${q}M ${nf space qA} L ${nf space qC} ${nf space qB}${q} stroke-linejoin=${q}miter${q}$miterfix${af fmt ap}/>"
+        if (flat) f"<path d=${q}M ${fm(qA)} L ${fm(qB)}${q}${fm(joinStyle)}/>"
+        else f"<path d=${q}M ${fm(qA)} L ${fm(qC)} ${fm(qB)}${q}${fm(joinStyle)}/>"
       (s, ans)
     }
   }
 
-
-  final case class GoTo(from: Q[Vc], to: Q[Vc], indirection: Q[Float], arrow: Q[Arrowhead], appear: Q[Appearance])
-  extends ProxyAppear with InSvg {
-    override def turnOff = Set(FACE, FILL)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val vf = from.value
-      val vt = to.value
-      val vi = indirection.value
-      val v = vt - vf;
-      val ip = vf + v*0.5f - v.ccw*(2f*vi)
-      val uf = xform(vf)
-      val ut = xform(vt)
+  final case class Arrow(from: Vc, to: Vc, indirection: Float, head: Option[Arrowhead], style: Style) extends Shown {
+    override def styled = style.stroky
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      val vi = if (indirection.finite && !(indirection closeTo 0)) indirection else 0
+      val v = to - from;
+      val ip = from + v*0.5f - v.ccw*(2f*vi)
+      val uf = xform(from)
+      val ut = xform(to)
       val iq = xform(ip)
-      if (arrow.alive) {
-        val ar = arrow.value
-        val (setback, arrowline) = ar.stroked(vt, (vt - ip).hat)(xform, this)(nf, af)
+      implicit val myMag = Magnification.from(mag, xform, from, to)
+      if (head.nonEmpty) {
+        val ah = head.get
+        val (setback, arrowline) = ah.stroked(to, (to - ip).hat)(xform, style.specifically.scale(myMag.value))
         val wt = ut - setback*(ut - iq).hat
         val mainline =
-          if (indirection.alive)
-            f"<path d=${q}M ${nf space uf} Q ${nf space iq} ${nf space wt}${q} fill=${q}none${q}/>"      
+          if (indirection.finite && !(indirection closeTo 0))
+            f"<path d=${q}M ${fm(uf)} Q ${fm(iq)} ${fm(wt)}${q}${showWith(_.specifically)}/>"      
           else
-            f"<path d=${q}M ${nf space uf} L ${nf space wt}${q} fill=${q}none${q}/>"
-        Vector(
-          IndentedSvg(f"<g fill=${q}none${q} ${af fmt this}>"),
-          IndentedSvg(mainline, 1),
-          IndentedSvg(arrowline, 1),
-          IndentedSvg("</g>")
+            f"<path d=${q}M ${fm(uf)} L ${fm(wt)}${q}${showWith(_.specifically)}/>"
+        Indent.V(
+          f"<g${showWith(_.generally)}>",
+          mainline,
+          arrowline,
+          "</g>"
         )
       }
-      else Vector(IndentedSvg(
-        if (indirection.alive)
-          f"<path d=${q}M ${nf space uf} Q ${nf space iq} ${nf space ut}${q} fill=${q}none${q}${af fmt this}/>"      
+      else Indent.V(
+        if (indirection.finite && !(indirection closeTo 0))
+          f"<path d=${q}M ${fm(uf)} Q ${fm(iq)} ${fm(ut)}${q}$show/>"      
         else
-          f"<path d=${q}M ${nf space uf} L ${nf space ut}${q} fill=${q}none${q}${af fmt this}/>"
-      ))
+          f"<path d=${q}M ${fm(uf)} L ${fm(ut)}${q}$show/>"
+      )
     }
   }
 
+  /*
   final case class PolyGo(points: Q[Array[Long]], fwdarrow: Q[Arrowhead], bkwarrow: Q[Arrowhead], appear: Q[Appearance])
   extends ProxyAppear with InSvg {
     override def turnOff = Set(FACE, FILL)
