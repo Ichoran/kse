@@ -258,61 +258,69 @@ package chart {
     }
   }
 
-  /*
-  final case class PolyGo(points: Q[Array[Long]], fwdarrow: Q[Arrowhead], bkwarrow: Q[Arrowhead], appear: Q[Appearance])
-  extends ProxyAppear with InSvg {
-    override def turnOff = Set(FACE, FILL)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val vp = points.value
-      if (vp.length < 2) return Vector.empty
+
+  final case class PolyArrow(points: Array[Long], fwdarrow: Option[Arrowhead], bkwarrow: Option[Arrowhead], style: Style) extends Shown {
+    override def styled = style.stroky
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      if (points.length < 2) return Vector.empty
       val up = {
-        val ans = new Array[Long](vp.length)
+        val ans = new Array[Long](points.length)
         var i = 0
-        while (i < vp.length) { ans(i) = xform(Vc from vp(i)).underlying; i += 1 }
+        while (i < points.length) { ans(i) = xform(Vc from points(i)).underlying; i += 1 }
         ans
       }
-      val fwd = (Vc.from(vp(vp.length-1)) - Vc.from(vp(vp.length-2))).hat
-      val bkw = (Vc.from(vp(0)) - Vc.from(vp(1))).hat
+      implicit val myMag = Magnification.from(mag, xform, points)
+      val fwd = (Vc.from(points(points.length-1)) - Vc.from(points(points.length-2))).hat
+      val bkw = (Vc.from(points(0)) - Vc.from(points(1))).hat
       var arrows = List.empty[String]
-      if (bkwarrow.alive) {
-        val ar = bkwarrow.value
-        val (setback, arrowline) = ar.stroked(Vc from vp(0), bkw)(xform, this)(nf, af)
+      if (bkwarrow.isDefined) {
+        val ar = bkwarrow.get
+        val (setback, arrowline) = ar.stroked(Vc from points(0), bkw)(xform, style.specifically.scale(myMag.value))
         up(0) = (Vc.from(up(0)) - setback*(Vc.from(up(0)) - Vc.from(up(1))).hat).underlying
         arrows = arrowline :: arrows
       }
-      if (fwdarrow.alive) {
-        val ar = fwdarrow.value
-        val (setback, arrowline) = ar.stroked(Vc from vp(vp.length-1), fwd)(xform, this)(nf, af)
+      if (fwdarrow.isDefined) {
+        val ar = fwdarrow.get
+        val (setback, arrowline) = ar.stroked(Vc from points(points.length-1), fwd)(xform, style.specifically.scale(myMag.value))
         up(up.length-1) = (Vc.from(up(up.length-1)) - setback*(Vc.from(up(up.length-1)) - Vc.from(up(up.length-2))).hat).underlying
         arrows = arrowline :: arrows
       }
-      val line = f"d=${q}M ${nf space Vc.from(up(0))} L ${up.drop(1).map(l => nf space Vc.from(l)).mkString(" ")}${q}"
-
-      Vector(
-        IndentedSvg(f"<g fill=${q}none${q} ${af fmt this}>"),
-        IndentedSvg(f"<path fill=${q}none${q} $line/>", 1)
-      ) ++
-      arrows.map(s => IndentedSvg(s, 1)) ++
-      Vector(IndentedSvg("</g>"))
+      val line = f"<path d=${q}M ${fm(Vc from up(0))} L ${up.drop(1).map(l => fm(Vc from l)).mkString(" ")}${q}${showWith(_.specifically)}/>"
+      Indent.V({
+        Seq(f"<g${showWith(_.generally)}>", line) ++
+        arrows ++
+        Seq("</g>")
+      }: _*)
     }
   }
 
-  final case class Letters(pt: Q[Vc], text: Q[String], height: Q[Float], appear: Q[Appearance])
-  extends ProxyAppear with InSvg {
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val p = pt.value
-      val vl = xform(p - Vc(0, 0.5f*height.value))
-      val vh = xform(p + Vc(0, 0.5f*height.value))
-      if (vl.x closeTo vh.x) {
-        val size = (vh.y - vl.y).abs
-        Vector(IndentedSvg(
-          f"<text x=$q${nf fmt vl.x}$q y=$q${nf fmt vl.y}$q font-size=$q${nf fmt size}$q text-anchor=${"\"middle\""}${af fmt this}>${text.value}</text>"
-        ))        
+
+  final case class Ticky(from: Vc, to: Vc, locations: Seq[Float], left: Float, right: Float, style: Style) extends Shown {
+    override def styled = style.stroky
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      val e = (xform(to) - xform(from)).hat
+      val uf = xform(from)
+      val ud = (xform(to) - xform(from)).len.toFloat
+      implicit val myMag = Magnification.from(mag, xform, from, to)
+      val strokes = locations.map{ l => 
+        val p = uf + e*(ud*l.clip(0,1))
+        " M " + fm(p + e.ccw*left) + " L " + fm(p + e.ccw*right)
       }
-      else ???
+      Indent.V(f"<path d=${q}${strokes.mkString}$q$show/>")
     }
   }
 
+
+  final case class Letters(anchor: Vc, text: String, style: Style) extends Shown {
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      implicit val myMag = Magnification.from(mag, xform, anchor)
+      Indent.V(
+        f"<text${fm.vquote(xform(anchor),"x","y")}$show>$text</text>"
+      )
+    }
+  }
+
+  /*
   final case class TickMarks(
     origin: Q[Vc], axis: Q[Vc],
     left: Q[Float], right: Q[Float], values: Q[Array[Float]],
