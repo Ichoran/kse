@@ -117,6 +117,11 @@ object Est {
     new Est(n, mean, cuml)
   }
   def from(data: Array[Double]): Est = from(data, 0, data.length)
+
+  def bayes(i: Int, j: Int) = {
+    val n = i+j
+    new Est(n, (i+1.0)/(n+2.0), ((i+1.0)*(j+1.0)/(n+3.0))*(math.max(1, n-1)/(n+2.0).sq))
+  }
 }
 
 trait Extremal extends Estimate {
