@@ -364,6 +364,10 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
     new Style(es, off)
   }
 }
+object Style {
+  val empty = new Style(Set.empty)
+  val off = new Style(Set.empty, true)
+}
 
 
 case class Magnification(value: Float) {

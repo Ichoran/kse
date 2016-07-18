@@ -304,7 +304,7 @@ package chart {
       implicit val myMag = Magnification.from(mag, xform, from, to)
       val strokes = locations.map{ l => 
         val p = uf + e*(ud*l.clip(0,1))
-        " M " + fm(p + e.ccw*left) + " L " + fm(p + e.ccw*right)
+        " M " + fm(p + e.ccw*(left*myMag.value)) + " L " + fm(p + e.ccw*(right*myMag.value))
       }
       Indent.V(f"<path d=${q}${strokes.mkString}$q$show/>")
     }
@@ -320,93 +320,17 @@ package chart {
     }
   }
 
-  /*
-  final case class TickMarks(
-    origin: Q[Vc], axis: Q[Vc],
-    left: Q[Float], right: Q[Float], values: Q[Array[Float]],
-    labelSize: Q[Float], labelAt: Q[Float], labelRot: Q[Float], labels: Q[Array[String]],
-    mainSize: Q[Float], mainAt: Q[Float], mainRot: Q[Float], mainText: Q[String],
-    appear: Q[Appearance], textappear: Q[Appearance] = Q empty Plain
-  )
-  extends ProxyAppear with InSvg {
-    override def turnOff = Set(FILL)
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter): Vector[IndentedSvg] = {
-      val va = axis.value.hat
-      val vb = va.ccw
-      val w = (af adjust appear.value).wide.value
-      val ul = left.value * w
-      val ur = right.value * w
-      val vo = origin.value
-      val vv = values.value
-      val pts = vv.map{ x =>
-        val vc = vo + x*va
-        val uc = xform(vc)
-        val orth = (xform(vc+vb*1e-2f) - uc).hat
-        val l = uc + orth*ul
-        val r = uc + orth*ur
-        f"M ${nf space l} L ${nf space r}"
-      }
-      val uls = w * (if (labelSize.alive) labelSize.value else 10f)
-      val ula =
-        if (labelAt.alive) labelAt.value * w
-        else if ((va * Vc(1,0)).abs > (va * Vc(0,1)).abs) math.min(ul,ur) - (ul-ur).abs - uls/2
-        else math.max(ul, ur) + (ul-ur).abs + uls/2
-      val vlr = if (labelRot.alive) labelRot.value else 0
-      val lb =
-        if (labels.alive) {
-          val hanchor = " text-anchor=\"middle\""
-          val vanchor = " dominant-baseline=\"middle\""
-          val lines =
-            (vv zip labels.value).collect{ case (x, l) if l.nonEmpty =>
-              val vc = vo + x*va
-              val uc = xform(vc)
-              val orth = (xform(vc+vb*1e-2f) - uc).hat
-              val u = uc + orth * ula
-              // Need vanchor here to keep Firefox happy, sadly.
-              f"<text$vanchor x=$q${nf fmt u.x}$q y=$q${nf fmt u.y}$q>$l</text>"
-            }
-          if (lines.isEmpty) Vector.empty
-          else {
-            val app = if (textappear.alive) textappear.value else Filled(appear.value.stroke.value)
-            val common = f"font-size=$q${nf fmt uls}$q$hanchor$vanchor${af fmt app}"
-            IndentedSvg(f"<g $common>") +: lines.toVector.map(l => IndentedSvg(l, 1)) :+ IndentedSvg("</g>")
-          }
-        }
-        else Vector.empty
-      val tickpath = f"<path d=${q}${pts.mkString(" ")}${q} fill=${q}none${q}${af fmt this}/>"
-      if (lb.isEmpty) Vector(IndentedSvg(tickpath))
-      else Vector(IndentedSvg("<g>"), IndentedSvg(tickpath, 1)) ++ lb.map(x => x.copy(level = x.level+1)) :+ IndentedSvg("</g>")
+  final case class Assembly(origin: Vc, scale: Vc, style: Style, stuff: InSvg*) extends Shown {
+    def this(origin: Vc, scale: Vc, stuff: InSvg*) = this(origin, scale, Style.empty, stuff: _*)
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      implicit val myMag = Magnification.one
+      val yform = Xform.shiftscale(origin, scale).inverted andThen xform
+      Indent.V(f"<g$show>") ++
+      stuff.toVector.flatMap(_.inSvg(yform, Option(0.5f)).map(_.in)) ++
+      Indent.V("</g>")
     }
   }
 
-  sealed class MuGroup(var elements: Vector[InSvg]) extends InSvg {
-    def +=(i: InSvg): this.type = { elements = elements :+ i; this }
-    def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) = {
-      elements.flatMap(i => i.inSvg(xform)(nf, af)) match {
-        case vs => IndentedSvg("<g>") +: vs.map(x => x.copy(level = x.level + 1)) :+ IndentedSvg("</g>")
-      }
-    }
-  }
-  object MuGroup {
-    def apply(elements: InSvg*) = new MuGroup(elements.toVector)
-  }
-
-  final class Origin(origin: Q[Vc], scaling: Q[Vc], theElements: Vector[InSvg]) extends MuGroup(theElements) {
-    private[this] def undo: Xform = Xform.shiftscale(origin.value, scaling.value).inverted
-    override def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) =
-      super.inSvg(undo andThen xform)(nf, af)
-  }
-  object Origin {
-    def apply(origin: Q[Vc], scaling: Q[Vc], elements: InSvg*) = new Origin(origin, scaling, elements.toVector)
-  }
-
-  final class ZoomLines(scaling: Q[Float], theElements: Vector[InSvg]) extends MuGroup(theElements) {
-    override def inSvg(xform: Xform)(implicit nf: NumberFormatter, af: AppearanceFormatter) =
-      super.inSvg(xform)(nf, ZoomingFormatter(scaling.value, af))
-  }
-  object ZoomLines {
-    def apply(scaling: Q[Float], elements: InSvg*) = new ZoomLines(scaling, elements.toVector)
-    def apply(scaling: Float, elements: InSvg*) = new ZoomLines(Q(scaling), elements.toVector)
-  }
-  */
+  // This "one-liner" should work in the REPL after: import kse.maths._, kse.visual._, kse.coll._, chart._
+  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, Assembly(400 vc 100, 3 vc 3, Opacity(0.5f), c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf)) }
 }
