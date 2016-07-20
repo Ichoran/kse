@@ -32,7 +32,7 @@ pomExtra := (
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.11.7",
-  version := "0.4-SNAPSHOT",
+  version := "0.5-SNAPSHOT",
   scalacOptions += "-feature",
   scalacOptions += "-deprecation"
 )
