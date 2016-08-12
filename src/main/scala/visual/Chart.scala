@@ -310,6 +310,8 @@ package chart {
     }
   }
 
+  // final case class TickLabels
+
 
   final case class Letters(anchor: Vc, text: String, style: Style) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
