@@ -310,7 +310,41 @@ package chart {
     }
   }
 
-  // final case class TickLabels
+  final case class Tik(where: Float, what: String) {}
+
+  final case class TickLabels(from: Vc, to: Vc, ticks: Seq[Tik], left: Float, right: Float, anchor: Float, style: Style) extends Shown {
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+      val uf = xform(from)
+      val ut = xform(to)
+      val e = (ut - uf).hat
+      val ud = (xform(to) - xform(from)).len.toFloat
+      implicit val myMag = Magnification.from(mag, xform, from, to)
+      println(myMag.value)
+      val tkl = e.ccw * (left * myMag.value)
+      val tkr = e.ccw * (right * myMag.value)
+      val strokes = ticks.map{ case Tik(l,_) => 
+        val p = uf + e*(ud*l.clip(0,1))
+        " M " + fm(p + tkl) + " L " + fm(p + tkr)
+      }
+      val textalign =
+        if (e.x.abs >= NumericConstants.OverSqrtTwo) Font(Horizontal.Middle, if (e.x >= 0 == anchor >= 0) Vertical.Top else Vertical.Bottom)
+        else                                         Font(if (e.y > 0 == anchor > 0) Horizontal.Left else Horizontal.Right, Vertical.Middle)
+      val jump = e.ccw * (myMag.value * (if (anchor > 0) right + anchor else left - anchor))
+      val spectext = showWith(_.specifically.unstroked + textalign)
+      val labels = ticks.map{ case Tik(l,t) =>
+        val p = uf + e*(ud*l.clip(0,1))
+        f"<text${fm.vquote(p + jump, "x", "y")}$spectext>$t</text>"
+      }
+      Indent.V({
+        Seq(
+          f"<g${showWith(_.generally)}>",
+          f"<path d=${q}${strokes.mkString}$q${showWith(_.specifically.unfilled)}/>"
+        ) ++
+        labels ++
+        Seq("</g>")
+      }: _*)
+    }
+  }
 
 
   final case class Letters(anchor: Vc, text: String, style: Style) extends Shown {
@@ -322,13 +356,14 @@ package chart {
     }
   }
 
-  final case class Assembly(origin: Vc, scale: Vc, style: Style, stuff: InSvg*) extends Shown {
-    def this(origin: Vc, scale: Vc, stuff: InSvg*) = this(origin, scale, Style.empty, stuff: _*)
+  final case class Assembly(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, stuff: InSvg*) extends Shown {
+    def this(origin: Vc, scale: Vc, thicken: Option[Float], stuff: InSvg*) = this(origin, scale, thicken, Style.empty, stuff: _*)
+    def this(origin: Vc, scale: Vc, stuff: InSvg*) = this(origin, scale, None, Style.empty, stuff: _*)
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.one
       val yform = Xform.shiftscale(origin, scale).inverted andThen xform
       Indent.V(f"<g$show>") ++
-      stuff.toVector.flatMap(_.inSvg(yform, Option(0.5f)).map(_.in)) ++
+      stuff.toVector.flatMap(_.inSvg(yform, thicken).map(_.in)) ++
       Indent.V("</g>")
     }
   }

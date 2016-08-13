@@ -77,7 +77,7 @@ class ProxyFormatter(original: Formatter) extends Formatter {
 object DefaultFormatter extends Formatter {}
 
 
-trait Textual { 
+trait Textual extends Serializable with Product { 
   def text: String
   def label: String
 }
@@ -213,27 +213,27 @@ object Stroke {
 object Font {
   def apply(face: String) = Style(Set(FontFace(face)))
   def apply(size: Float) = Style(Set(FontSize(size)))
-  def apply(vertical: Vertical) = Style(Set(FontVertical(vertical)))
   def apply(horizontal: Horizontal) = Style(Set(FontHorizontal(horizontal)))
+  def apply(vertical: Vertical) = Style(Set(FontVertical(vertical)))
 
   def apply(face: String, size: Float) = Style(Set(FontFace(face), FontSize(size)))
-  def apply(face: String, vertical: Vertical) = Style(Set(FontFace(face), FontVertical(vertical)))
   def apply(face: String, horizontal: Horizontal) = Style(Set(FontFace(face), FontHorizontal(horizontal)))
-  def apply(size: Float, vertical: Vertical) = Style(Set(FontSize(size), FontVertical(vertical)))
+  def apply(face: String, vertical: Vertical) = Style(Set(FontFace(face), FontVertical(vertical)))
   def apply(size: Float, horizontal: Horizontal) = Style(Set(FontSize(size), FontHorizontal(horizontal)))
-  def apply(vertical: Vertical, horizontal: Horizontal) = Style(Set(FontVertical(vertical), FontHorizontal(horizontal)))
+  def apply(size: Float, vertical: Vertical) = Style(Set(FontSize(size), FontVertical(vertical)))
+  def apply(horizontal: Horizontal, vertical: Vertical) = Style(Set(FontHorizontal(horizontal), FontVertical(vertical)))
 
-  def apply(face: String, size: Float, vertical: Vertical) =
-    Style(Set(FontFace(face), FontSize(size), FontVertical(vertical)))
   def apply(face: String, size: Float, horizontal: Horizontal) =
     Style(Set(FontFace(face), FontSize(size), FontHorizontal(horizontal)))
-  def apply(face: String, vertical: Vertical, horizontal: Horizontal) =
-    Style(Set(FontFace(face), FontVertical(vertical), FontHorizontal(horizontal)))
-  def apply(size: Float, vertical: Vertical, horizontal: Horizontal) =
-    Style(Set(FontSize(size), FontVertical(vertical), FontHorizontal(horizontal)))
+  def apply(face: String, size: Float, vertical: Vertical) =
+    Style(Set(FontFace(face), FontSize(size), FontVertical(vertical)))
+  def apply(face: String, horizontal: Horizontal, vertical: Vertical) =
+    Style(Set(FontFace(face), FontHorizontal(horizontal), FontVertical(vertical)))
+  def apply(size: Float, horizontal: Horizontal, vertical: Vertical) =
+    Style(Set(FontSize(size), FontHorizontal(horizontal), FontVertical(vertical)))
 
-  def apply(face: String, size: Float, vertical: Vertical, horizontal: Horizontal) =
-    Style(Set(FontFace(face), FontSize(size), FontVertical(vertical), FontHorizontal(horizontal)))
+  def apply(face: String, size: Float, horizontal: Horizontal, vertical: Vertical) =
+    Style(Set(FontFace(face), FontSize(size), FontHorizontal(horizontal), FontVertical(vertical)))
 }
 
 final case class Style(elements: Set[Stylish], off: Boolean = false) extends Scalable[Style] with Colorful[Style] with Ghostly[Style] {
@@ -319,6 +319,12 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
 
   def stroky: Style =
     new Style(elements.filter{ e => e match { case _: Strokish[_] | _: Opaque => !e.off; case _ => false } } + FillNone(), off)
+
+  def unfilled: Style =
+    new Style(elements + FillNone(), off)
+
+  def unstroked: Style =
+    new Style(elements.filter{ e => e match { case _: Strokish[_] => false; case _ => !e.off } }, off)
 
   def common(that: Style): Style =
     if (off != that.off) Style(Set())
