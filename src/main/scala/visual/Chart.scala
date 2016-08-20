@@ -326,10 +326,11 @@ package chart {
         val p = uf + e*(ud*l.clip(0,1))
         " M " + fm(p + tkl) + " L " + fm(p + tkr)
       }
+      val xish = e.x.abs >= NumericConstants.OverSqrtTwo
       val textalign =
-        if (e.x.abs >= NumericConstants.OverSqrtTwo) Font(Horizontal.Middle, if (e.x >= 0 == anchor >= 0) Vertical.Top else Vertical.Bottom)
-        else                                         Font(if (e.y > 0 == anchor > 0) Horizontal.Left else Horizontal.Right, Vertical.Middle)
-      val jump = e.ccw * (myMag.value * (if (anchor > 0) right + anchor else left - anchor))
+        if (xish) Font(Horizontal.Middle, if (e.x >= 0 == anchor >= 0) Vertical.Top else Vertical.Bottom)
+        else      Font(if (e.y > 0 == anchor > 0) Horizontal.Left else Horizontal.Right, Vertical.Middle)
+      val jump = e.ccw * (myMag.value * (if (xish == anchor >= 0) right + anchor else left - anchor))
       val spectext = showWith(_.specifically.unstroked + textalign)
       val labels = ticks.map{ case Tik(l,t) =>
         val p = uf + e*(ud*l.clip(0,1))
@@ -346,6 +347,228 @@ package chart {
     }
   }
 
+  final case class AutoTick(from: Vc, to: Vc, number: Int, left: Float, right: Float, anchor: Float, style: Style, substyle: Option[Style] = None) extends Shown {
+    private[this] def firstDifference(a: String, dota: Int, b: String, dotb: Int): Int = {
+      if ((a.charAt(0) == '-') != (b.charAt(0) == '-')) {
+        var i, j = 0
+        if (a.charAt(0) == '-') i += 1
+        else j += 1
+        while (i < a.length && (a.charAt(i) match { case '0' | '.' => true; case _ => false })) i += 1
+        while (j < b.length && (b.charAt(j) match { case '0' | '.' => true; case _ => false })) j += 1
+        if (i >= a.length || j >= b.length) i - (dota min dotb)
+        else (i - dota) min (i - dotb)
+      }
+      else if (dota != dotb) -(dota max dotb) + (if (a.charAt(0) == '-') 1 else 0)
+      else {
+        var i = 0
+        while (i < a.length && i < b.length && a.charAt(i) == b.charAt(i)) i += 1
+        if (i >= a.length || i >= b.length) i - (dota min dotb)
+        else (i - dota) min (i - dotb)
+      }
+    }
+    private[this] def saveDifference(s: String, dot: Int, i0: Int, diff: Int, cs: Array[Char], n: Int) {
+      cs(n) = '-'
+      var m = 1
+      var i = dot + diff
+      while (m < 4) {
+        if (i == dot) i += 1
+        cs(n+m) = if (i < i0 || i >= s.length) '0' else s.charAt(i)
+        m += 1
+        i += 1
+      }
+    }
+    private[this] def clipDifference(a: String, dota: Int, b: String, dotb: Int, diff: Int): (String, String, String) = {
+      val cs = new Array[Char](8)
+      val ai0 = if (a.charAt(0) == '-') 1 else 0
+      val bi0 = if (b.charAt(0) == '-') 1 else 0
+      saveDifference(a, dota, ai0, diff, cs, 0)
+      saveDifference(b, dotb, bi0, diff, cs, 4)
+      (
+        if (diff+dota > ai0) a.substring(ai0, diff+dota) else "",
+        new String(cs, 1 - ai0, 3 + ai0),
+        new String(cs, 5 - bi0, 3+ bi0)
+      )
+    }
+    private[this] def modScore(n: Int): Int = 
+      if ((n % 5) == 0) 2
+      else if ((n % 2) == 0) 1
+      else 0
+    private[this] def findScores(na: Int, nb: Int): Array[Int] = {
+      val scores = new Array[Int](1 + (na - nb).abs)
+      val inc = if (na > nb) 1 else -1
+      var i = 0
+      var n = na
+      while (i < scores.length) {
+        // This is a pretty dumb brute-force way to do this.
+        // Even having the array is pretty dumb, but it's easy and this
+        // code _probably_ won't be a serious bottleneck.
+        scores(i) =
+          if ((n % 10) == 0) { 
+            val nn = n / 10
+            if ((nn % 10) == 0) {
+              val nnn = nn / 10
+              if (nnn == 0) 9
+              else 6 + modScore(nnn)
+            }
+            else 3 + modScore(nn)
+          }
+          else modScore(n)
+        i += 1
+        n += inc
+      }
+      scores
+    }
+    private[this] def findBestIndices(scores: Array[Int], goal: Int): (Int, Int, Int) = {
+      println(goal)
+      println(scores.mkString(" "))
+      val alphi = {  // Index with the largest score (first, if there are duplicates)
+        var i = 0
+        var best = -1
+        var besti = 0
+        while (i < scores.length) {
+          if (best < scores(i)) {
+            best = scores(i)
+            besti = i
+          }
+          i += 1
+        }
+        besti
+      }
+      val beti = {  // Index with the second-largest score (closest to / after alphi, if there are ties)
+        var i = alphi+1
+        var best = -1
+        var besti = 0
+        while (i < scores.length) {
+          if (best < scores(i)) {
+            best = scores(i)
+            besti = i
+          }
+          i += 1
+        }
+        i = alphi - 1
+        while (i >= 0) {
+          if (best < scores(i)) {
+            best = scores(i)
+            besti = i
+          }
+          i -= 1
+        }
+        besti
+      }
+      println(s"$alphi $beti")
+      var anchor = alphi
+      var gap = (alphi - beti).abs // Sane default
+      var best = -1.0
+      var bestn = 0
+      var g = 2*gap                // Twice is probably too much, but it will never hurt given algorithm below
+      while (g >= 1 && scores.length/g < 2*goal) {
+        println(s"Trying $g")
+        var firstpass = true
+        var gotbeti = false
+        while (!gotbeti) {
+          val i0 = if (firstpass) alphi else beti
+          gotbeti = i0 == beti
+          firstpass = false
+          var s = (1 << scores(i0)).toDouble
+          var i = i0 + g
+          var n = 1
+          while (i < scores.length) { s += (1 << scores(i)); i += g; n += 1 }
+          i = i0 - g
+          while (i >= 0) { s += (1 << scores(i)); i -= g; n += 1 }
+          val quality = 1 - (n - goal).abs/goal.toDouble
+          s = if (quality < 0) 0 else s * quality * quality
+          if (s > best) {
+            best = s
+            bestn = n
+            anchor = i0
+            gap = g
+          }
+          println(s"Score was $s at $i0 spaced $g (found $n)")
+        }
+        var tenthless = g
+        while ((tenthless % 10) == 0 && tenthless > 10) tenthless = tenthless / 10
+        g = if ((tenthless % 10) == 5 && (g % 5) == 0) (g/5)*4 else g/2
+      }
+      (anchor, gap, bestn)
+    }
+    private[this] def removePointlessZeros(s: String): String = {
+      val i0 = if (s.charAt(0) == '-') 1 else 0
+      val nLeading = {
+        var i = i0
+        while (i < s.length && s.charAt(i) == '0') i += 1
+        if (i == s.length || s.charAt(i) == '.') i -= 1
+        i
+      }
+      val nTrailing = {
+        val ip = s.indexOf('.')
+        if (ip < 0) 0
+        else {
+          var i = s.length-1
+          while (i > ip && s.charAt(i) == '0') i -= 1
+          if (i == ip) s.length - ip
+          else s.length-1-i
+        }
+      }
+      if (nLeading == 0 && nTrailing == 0) s
+      else if (nLeading == 0) s.dropRight(nTrailing)
+      else if (s.charAt('0') != '-') s.slice(nLeading, s.length-nTrailing)
+      else "-" + s.slice(1+nLeading, s.length-nTrailing) 
+    }
+
+    lazy val theTicks: TickLabels = {
+      val delta = to - from
+      if (delta.lenSq == 0 || !delta.finite) TickLabels(from, to, Nil, left, right, anchor, style)
+      else {
+        val (fa, fb) = if (delta.x.abs >= delta.y.abs) (from.x, to.x) else (from.y, to.y)
+        val f = fa.abs max fb.abs
+        var points = 0
+        if ("%.0f".format(f).length < 3) {
+          points += 10
+          while (s"%.${points}f".format(f).drop(points-10).dropWhile(c => c == '0' || c == '.').length < 3 && points < 30) points += 10;
+        }
+        var stra = s"%.${points}f".format(fa)
+        var strb = s"%.${points}f".format(fb)
+        var dota = stra.indexOf('.') match { case -1 => stra.length; case x => x }
+        var dotb = strb.indexOf('.') match { case -1 => strb.length; case x => x }
+        var fdif = firstDifference(stra, dota, strb, dotb)
+        while (dota + fdif + 3 >= stra.length && dotb + fdif + 3 >= strb.length && points < 45) {
+          points += 5
+          stra = s"%.${points}f".format(fa)
+          strb = s"%.${points}f".format(fb)
+          dota = stra.indexOf('.') match { case -1 => stra.length; case x => x }
+          dotb = strb.indexOf('.') match { case -1 => strb.length; case x => x }
+          fdif = firstDifference(stra, dota, strb, dotb)
+        }
+        val (prefix, bita, bitb) = clipDifference(stra, dota, strb, dotb, fdif)
+        val na = bita.toInt
+        val nb = bitb.toInt
+        val scores = findScores(na, nb)
+        val (i0, di, len) = findBestIndices(scores, number)
+        printf(s"'$prefix' '$bita' $na '$bitb' $nb $i0 $di ${scores.length} $number $len $fdif '$stra'")
+        val labels = (new Array[Tik](len)): collection.mutable.WrappedArray[Tik]
+        var i = i0%di
+        var j = 0
+        while (i < scores.length) {
+          val ni = na + i
+          val frac = i/(1+nb-na).toDouble;
+          val text = removePointlessZeros("%s%s%s".format(
+            if (ni<0) "-" else "",
+            prefix,
+            if (fdif == -2)      "%02d.%d".format(ni.abs/10, ni.abs%10)
+            else if (fdif == -1) "%d.%02d".format(ni.abs/100, ni.abs%100)
+            else                 "%03d".format(ni.abs)
+          ))
+          labels(j) = Tik(frac.toFloat, text)
+          i += di
+          j += 1
+        }
+        TickLabels(from, to, labels, left, right, anchor, style)
+      }
+    }
+
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = theTicks.inSvg(xform, mag)(fm)
+  }
+
 
   final case class Letters(anchor: Vc, text: String, style: Style) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
@@ -356,9 +579,11 @@ package chart {
     }
   }
 
-  final case class Assembly(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, stuff: InSvg*) extends Shown {
-    def this(origin: Vc, scale: Vc, thicken: Option[Float], stuff: InSvg*) = this(origin, scale, thicken, Style.empty, stuff: _*)
-    def this(origin: Vc, scale: Vc, stuff: InSvg*) = this(origin, scale, None, Style.empty, stuff: _*)
+  final case class Assembly(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, stuff: Seq[InSvg]) extends Shown {
+    def this(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
+      this(origin, scale, thicken, style, thing +: morestuff)
+    def this(origin: Vc, scale: Vc, thicken: Option[Float], stuff: InSvg*) = this(origin, scale, thicken, Style.empty, stuff)
+    def this(origin: Vc, scale: Vc, stuff: InSvg*) = this(origin, scale, None, Style.empty, stuff)
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.one
       val yform = Xform.shiftscale(origin, scale).inverted andThen xform
@@ -367,7 +592,15 @@ package chart {
       Indent.V("</g>")
     }
   }
+  object Assembly{
+    def apply(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
+      new Assembly(origin, scale, thicken, style, thing +: morestuff)
+    def apply(origin: Vc, scale: Vc, thicken: Option[Float], stuff: InSvg*) =
+      new Assembly(origin, scale, thicken, Style.empty, stuff)
+    def apply(origin: Vc, scale: Vc, stuff: InSvg*) = 
+      new Assembly(origin, scale, None, Style.empty, stuff)
+  }
 
-  // This "one-liner" should work in the REPL after: import kse.maths._, kse.visual._, kse.coll._, chart._
-  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, Assembly(400 vc 100, 3 vc 3, Opacity(0.5f), c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf)) }
+  // This "one-liner" should work in the REPL after: import kse.flow._, kse.coll._, kse.maths._, kse.maths.stats._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
+  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(400 vc 100, 3 vc 3, Option(0.3333f), Opacity(0.5f), c, b, dl, dr, ea, eb, aa, ab, pa, tk, tl, qbf)) }
 }
