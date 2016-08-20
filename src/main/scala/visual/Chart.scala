@@ -395,7 +395,7 @@ package chart {
       else 0
     private[this] def findScores(na: Int, nb: Int): Array[Int] = {
       val scores = new Array[Int](1 + (na - nb).abs)
-      val inc = if (na > nb) 1 else -1
+      val inc = if (na > nb) -1 else 1
       var i = 0
       var n = na
       while (i < scores.length) {
