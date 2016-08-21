@@ -70,7 +70,7 @@ object Xform {
   }
   def origin(there: Vc): Xform = new Xform {
     def apply(v: Vc) = v - there
-    def revert(v: Vc) = there - v
+    def revert(v: Vc) = v + there
     override def inverted = origin(-there)
   }
   def scale(factor: Vc): Xform = new Xform {
@@ -86,8 +86,16 @@ object Xform {
     def revert(v: Vc) = Vc(v.x, about - v.y)
   }
   def shiftscale(shifted: Vc, scaled: Vc): Xform = new Xform {
-    def apply(v: Vc) = { val u = v - shifted; Vc(u.x * scaled.x, u.y * scaled.y) }
-    def revert(v: Vc) = { val u = Vc(v.x / scaled.x, v.y / scaled.y); u + shifted }
+    def apply(v: Vc) = { val u = v + shifted; Vc(u.x * scaled.x, u.y * scaled.y) }
+    def revert(v: Vc) = { val u = Vc(v.x / scaled.x, v.y / scaled.y); u - shifted }
+  }
+  def scaleshift(shifted: Vc, scaled: Vc): Xform = new Xform {
+    def apply(v: Vc) = { Vc(v.x * scaled.x, v.y * scaled.y) + shifted }
+    def revert(v: Vc) = { val u = v - shifted; Vc(u.x * scaled.x, u.y * scaled.y) }
+  }
+  def reorigin(oldori: Vc, newscale: Vc, newori: Vc) = new Xform {
+    def apply(v: Vc) = { val u = v - oldori; Vc(u.x * newscale.x, u.y * newscale.y) + newori }
+    def revert(v: Vc) = { val u = v - newori; Vc(u.x / newscale.x, u.y / newscale.y) + oldori }
   }
   def rotate(theta: Float): Xform = new Xform {
     private[this] val xaxis = Vc(math.cos(theta).toFloat, math.sin(theta).toFloat)

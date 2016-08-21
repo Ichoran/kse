@@ -550,14 +550,15 @@ package chart {
         var j = 0
         while (i < scores.length) {
           val ni = na + i
-          val frac = i/(1+nb-na).toDouble;
-          val text = removePointlessZeros("%s%s%s".format(
-            if (ni<0) "-" else "",
+          val text = removePointlessZeros("%s%s%s" . format(
+            if (ni < 0) "-" else "",
             prefix,
             if (fdif == -2)      "%02d.%d".format(ni.abs/10, ni.abs%10)
             else if (fdif == -1) "%d.%02d".format(ni.abs/100, ni.abs%100)
             else                 "%03d".format(ni.abs)
           ))
+          val value = text.toDouble
+          val frac = (value - fa)/(fb - fa)
           labels(j) = Tik(frac.toFloat, text)
           i += di
           j += 1
@@ -579,28 +580,41 @@ package chart {
     }
   }
 
-  final case class Assembly(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, stuff: Seq[InSvg]) extends Shown {
-    def this(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
-      this(origin, scale, thicken, style, thing +: morestuff)
-    def this(origin: Vc, scale: Vc, thicken: Option[Float], stuff: InSvg*) = this(origin, scale, thicken, Style.empty, stuff)
-    def this(origin: Vc, scale: Vc, stuff: InSvg*) = this(origin, scale, None, Style.empty, stuff)
+  final case class Assembly(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], style: Style, stuff: Seq[InSvg]) extends Shown {
+    def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
+      this(oldOrigin, scale, newOrigin, thicken, style, thing +: morestuff)
+    def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], stuff: InSvg*) = 
+      this(oldOrigin, scale, newOrigin, thicken, Style.empty, stuff)
+    def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, stuff: InSvg*) =
+      this(oldOrigin, scale, newOrigin, None, Style.empty, stuff)
+    def this(translate: Vc, stuff: InSvg*) =
+      this(translate, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
+    def this(stuff: InSvg*) =
+      this(0 vc 0, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.one
-      val yform = Xform.shiftscale(origin, scale).inverted andThen xform
+      val yform =
+        if (oldOrigin == Vc(0,0) && scale == Vc(1,1) && newOrigin == Vc(0,0)) xform
+        else if (scale == Vc(1,1)) Xform.origin(oldOrigin - newOrigin) andThen xform
+        else Xform.reorigin(oldOrigin, scale, newOrigin) andThen xform
       Indent.V(f"<g$show>") ++
       stuff.toVector.flatMap(_.inSvg(yform, thicken).map(_.in)) ++
       Indent.V("</g>")
     }
   }
   object Assembly{
-    def apply(origin: Vc, scale: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
-      new Assembly(origin, scale, thicken, style, thing +: morestuff)
-    def apply(origin: Vc, scale: Vc, thicken: Option[Float], stuff: InSvg*) =
-      new Assembly(origin, scale, thicken, Style.empty, stuff)
-    def apply(origin: Vc, scale: Vc, stuff: InSvg*) = 
-      new Assembly(origin, scale, None, Style.empty, stuff)
+    def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
+      new Assembly(oldOrigin, scale, newOrigin, thicken, style, thing +: morestuff)
+    def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], stuff: InSvg*) =
+      new Assembly(oldOrigin, scale, newOrigin, thicken, Style.empty, stuff)
+    def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, stuff: InSvg*) = 
+      new Assembly(oldOrigin, scale, newOrigin, None, Style.empty, stuff)
+    def apply(translate: Vc, stuff: InSvg*) =
+      new Assembly(translate, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
+    def apply(stuff: InSvg*) =
+      new Assembly(0 vc 0, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
   }
 
   // This "one-liner" should work in the REPL after: import kse.flow._, kse.coll._, kse.maths._, kse.maths.stats._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
-  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(400 vc 100, 3 vc 3, Option(0.3333f), Opacity(0.5f), c, b, dl, dr, ea, eb, aa, ab, pa, tk, tl, qbf)) }
+  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, Option(1f), Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((1/3.sqrt).toFloat), Opacity(0.5f), c, pa)) }
 }
