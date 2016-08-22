@@ -347,7 +347,7 @@ package chart {
     }
   }
 
-  final case class AutoTick(from: Vc, to: Vc, number: Int, left: Float, right: Float, anchor: Float, style: Style, substyle: Option[Style] = None) extends Shown {
+  final case class AutoTick(from: Vc, to: Vc, number: Int, left: Float, right: Float, anchor: Float, style: Style, sub: Option[(Int,Style)] = None) extends Shown {
     private[this] def firstDifference(a: String, dota: Int, b: String, dotb: Int): Int = {
       if ((a.charAt(0) == '-') != (b.charAt(0) == '-')) {
         var i, j = 0
@@ -511,13 +511,13 @@ package chart {
       }
       if (nLeading == 0 && nTrailing == 0) s
       else if (nLeading == 0) s.dropRight(nTrailing)
-      else if (s.charAt('0') != '-') s.slice(nLeading, s.length-nTrailing)
+      else if (s.charAt(0) != '-') s.slice(nLeading, s.length-nTrailing)
       else "-" + s.slice(1+nLeading, s.length-nTrailing) 
     }
 
-    lazy val theTicks: TickLabels = {
+    private[this] lazy val tickInfo: (TickLabels, Option[Ticky]) = {
       val delta = to - from
-      if (delta.lenSq == 0 || !delta.finite) TickLabels(from, to, Nil, left, right, anchor, style)
+      if (delta.lenSq == 0 || !delta.finite) (TickLabels(from, to, Nil, left, right, anchor, style), None)
       else {
         val (fa, fb) = if (delta.x.abs >= delta.y.abs) (from.x, to.x) else (from.y, to.y)
         val f = fa.abs max fb.abs
@@ -563,9 +563,12 @@ package chart {
           i += di
           j += 1
         }
-        TickLabels(from, to, labels, left, right, anchor, style)
+        (TickLabels(from, to, labels, left, right, anchor, style), None)
       }
     }
+    def theTicks = tickInfo._1
+    def subTicks = tickInfo._2
+
 
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = theTicks.inSvg(xform, mag)(fm)
   }
@@ -613,6 +616,58 @@ package chart {
       new Assembly(translate, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
     def apply(stuff: InSvg*) =
       new Assembly(0 vc 0, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
+  }
+
+  final case class Space(dataOrigin: Vc, dataExtent: Vc, viewOrigin: Vc, viewExtent: Vc, ticknum: Int, ticklen: Float, arrow: Option[Arrowhead], linestyle: Style, stuff: Seq[InSvg]) extends Shown {
+    lazy val dataAssembly = Assembly(
+      dataOrigin,
+      Vc(viewExtent.x / dataExtent.x, viewExtent.y / dataExtent.y),
+      viewOrigin,
+      None,
+      Style.empty,
+      stuff
+    )
+
+    lazy val axisLine = PolyArrow(
+      Array(
+        (dataOrigin + Vc(0, dataExtent.y)).underlying,
+        dataOrigin.underlying,
+        (dataOrigin + Vc(viewExtent.x, 0)).underlying
+      ),
+      arrow,
+      arrow,
+      linestyle
+    )
+
+    lazy val xTicks = AutoTick(
+      dataOrigin,
+      dataOrigin + Vc(dataExtent.x, 0),
+      ticknum,
+      if (ticklen < 0) ticklen else 0,
+      if (ticklen < 0) 0 else ticklen,
+      ticklen.abs / 2,
+      linestyle,
+      None
+    )
+
+    lazy val yTicks = AutoTick(
+      dataOrigin,
+      dataOrigin + Vc(0, dataExtent.y),
+      ticknum,
+      if (ticklen < 0) ticklen else 0,
+      if (ticklen < 0) 0 else ticklen,
+      ticklen.abs / 2,
+      linestyle,
+      None
+    )
+
+    lazy val lineAssembly = dataAssembly.copy(stuff = Vector(axisLine, xTicks, yTicks))
+
+    lazy val fullAssembly = Assembly(dataAssembly, lineAssembly)
+
+    def style = linestyle
+
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = fullAssembly.inSvg(xform, mag)(fm)
   }
 
   // This "one-liner" should work in the REPL after: import kse.flow._, kse.coll._, kse.maths._, kse.maths.stats._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
