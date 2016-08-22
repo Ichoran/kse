@@ -37,6 +37,22 @@ package chart {
       fm(f(if (mag.value closeTo 1) styled else styled.scale(mag.value)))
   }
 
+  object Marker {
+    final case class C(c: Vc, r: Float, style: Style) extends Shown {
+      override def styled = style.collect{
+        case StrokeColor(c,off) => FillColor(c,off)
+        case StrokeOpacity(o,off) => FillOpacity(o,off)
+        case x if !x.isInstanceOf[Fillish[_]] => x
+      }
+      private[this] val stylesize = style.elements.collectFirst{ case StrokeWidth(w, _) => w }.getOrElse(1f)
+      def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+        val ctr = xform(c)
+        implicit val myMag = Magnification.one
+        Indent.V(f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", r*mag.getOrElse(1f))}$show/>")
+      }
+    }
+  }
+
 
   final case class Circ(c: Vc, r: Float, style: Style) extends Shown {
     override def styled = style.shapely

@@ -302,6 +302,12 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
     if (es.map(_.category).size == es.size) new Style(es, off)
     else new Style(es.toList.groupBy(_.category).map{ case (_, vs) => vs.last }.toSet, off)
   }
+  def collect(pf: PartialFunction[Stylish, Stylish]) = {
+    val es = elements.collect(pf)
+    if (es == elements) this
+    else if (es.map(_.category).size == es.size) new Style(es, off)
+    else new Style(es.toList.groupBy(_.category).map{ case (_, vs) => vs.last }.toSet, off)
+  }
   def filter(p: Stylish => Boolean) = {
     val es = elements.filter(p)
     if (es == elements) this else new Style(es, off)
