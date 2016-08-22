@@ -619,6 +619,8 @@ package chart {
   }
 
   final case class Space(dataOrigin: Vc, dataExtent: Vc, viewOrigin: Vc, viewExtent: Vc, ticknum: Int, ticklen: Float, arrow: Option[Arrowhead], linestyle: Style, stuff: Seq[InSvg]) extends Shown {
+    private[this] val extrascale = if (arrow.isDefined) 1.3f else 1.1f;
+
     lazy val dataAssembly = Assembly(
       dataOrigin,
       Vc(viewExtent.x / dataExtent.x, viewExtent.y / dataExtent.y),
@@ -630,9 +632,9 @@ package chart {
 
     lazy val axisLine = PolyArrow(
       Array(
-        (dataOrigin + Vc(0, dataExtent.y)).underlying,
+        (dataOrigin + Vc(0, dataExtent.y * extrascale)).underlying,
         dataOrigin.underlying,
-        (dataOrigin + Vc(viewExtent.x, 0)).underlying
+        (dataOrigin + Vc(dataExtent.x * extrascale, 0)).underlying
       ),
       arrow,
       arrow,
@@ -643,10 +645,10 @@ package chart {
       dataOrigin,
       dataOrigin + Vc(dataExtent.x, 0),
       ticknum,
-      if (ticklen < 0) ticklen else 0,
-      if (ticklen < 0) 0 else ticklen,
+      (if (ticklen < 0) ticklen else 0) / dataAssembly.scale.x,
+      (if (ticklen < 0) 0 else ticklen) / dataAssembly.scale.y,
       ticklen.abs / 2,
-      linestyle,
+      linestyle.scale(0.71f),
       None
     )
 
@@ -654,14 +656,14 @@ package chart {
       dataOrigin,
       dataOrigin + Vc(0, dataExtent.y),
       ticknum,
-      if (ticklen < 0) ticklen else 0,
-      if (ticklen < 0) 0 else ticklen,
+      (if (ticklen < 0) 0 else -ticklen) / dataAssembly.scale.x,
+      (if (ticklen < 0) -ticklen else 0) / dataAssembly.scale.y,
       ticklen.abs / 2,
-      linestyle,
+      linestyle.scale(0.71f),
       None
     )
 
-    lazy val lineAssembly = dataAssembly.copy(stuff = Vector(axisLine, xTicks, yTicks))
+    lazy val lineAssembly = dataAssembly.copy(thicken = Some(1f), stuff = Vector(axisLine, xTicks, yTicks))
 
     lazy val fullAssembly = Assembly(dataAssembly, lineAssembly)
 
