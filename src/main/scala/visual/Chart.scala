@@ -16,6 +16,17 @@ import kse.eio._
 package object chart {
   private[chart] val q = "\""
 
+  def svg(size: Vc, stuff: InSvg*): Vector[Indent] =
+    Vector("""<svg width="%.2f" height="%.2f">""".format(size.x, size.y), "<g>").map(x => Indent(x)) ++
+    stuff.flatMap(_.inSvg(Xform.flipy(480), None)(DefaultFormatter)).map(x => x.in) ++
+    Vector("</g>", "</svg>").map(x => Indent(x))
+
+  def svgHtml(size: Vc, stuff: InSvg*): Vector[String] = (
+    Vector(Indent("<html>"), Indent("<body>")) ++
+    svg(size, stuff: _*).map(x => x.in) ++
+    Vector(Indent("</body>"), Indent("</html>"))
+  ).map(_.toString)
+
   def quick(i: InSvg*) {
     val svg = 
       Vector("<html>", "<body>", """<svg width="640" height="480">""", "<g>").map(x => Indent(x)) ++
@@ -335,7 +346,6 @@ package chart {
       val e = (ut - uf).hat
       val ud = (xform(to) - xform(from)).len.toFloat
       implicit val myMag = Magnification.from(mag, xform, from, to)
-      println(myMag.value)
       val tkl = e.ccw * (left * myMag.value)
       val tkr = e.ccw * (right * myMag.value)
       val strokes = ticks.map{ case Tik(l,_) => 
@@ -435,8 +445,6 @@ package chart {
       scores
     }
     private[this] def findBestIndices(scores: Array[Int], goal: Int): (Int, Int, Int) = {
-      println(goal)
-      println(scores.mkString(" "))
       val alphi = {  // Index with the largest score (first, if there are duplicates)
         var i = 0
         var best = -1
@@ -471,14 +479,12 @@ package chart {
         }
         besti
       }
-      println(s"$alphi $beti")
       var anchor = alphi
       var gap = (alphi - beti).abs // Sane default
       var best = -1.0
       var bestn = 0
       var g = 2*gap                // Twice is probably too much, but it will never hurt given algorithm below
       while (g >= 1 && scores.length/g < 2*goal) {
-        println(s"Trying $g")
         var firstpass = true
         var gotbeti = false
         while (!gotbeti) {
@@ -499,7 +505,6 @@ package chart {
             anchor = i0
             gap = g
           }
-          println(s"Score was $s at $i0 spaced $g (found $n)")
         }
         var tenthless = g
         while ((tenthless % 10) == 0 && tenthless > 10) tenthless = tenthless / 10
