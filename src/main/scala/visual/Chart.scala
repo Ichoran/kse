@@ -50,16 +50,10 @@ package chart {
 
   object Marker {
     final case class C(c: Vc, r: Float, style: Style) extends Shown {
-      override def styled = style.collect{
-        case StrokeColor(c,off) => FillColor(c,off)
-        case StrokeOpacity(o,off) => FillOpacity(o,off)
-        case x if !x.isInstanceOf[Fillish[_]] => x
-      }
-      private[this] val stylesize = style.elements.collectFirst{ case StrokeWidth(w, _) => w }.getOrElse(1f)
       def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
         val ctr = xform(c)
-        implicit val myMag = Magnification.one
-        Indent.V(f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", r*mag.getOrElse(1f))}$show/>")
+        implicit val myMag = Magnification.from(mag, r, xform.radius(c, Vc(r, 0)))
+        Indent.V(f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", r * myMag.value)}$show/>")
       }
     }
   }
@@ -565,7 +559,6 @@ package chart {
         val nb = bitb.toInt
         val scores = findScores(na, nb)
         val (i0, di, len) = findBestIndices(scores, number)
-        printf(s"'$prefix' '$bita' $na '$bitb' $nb $i0 $di ${scores.length} $number $len $fdif '$stra'")
         val labels = (new Array[Tik](len)): collection.mutable.WrappedArray[Tik]
         var i = i0%di
         var j = 0
@@ -576,6 +569,9 @@ package chart {
             prefix,
             if (fdif == -2)      "%02d.%d".format(ni.abs/10, ni.abs%10)
             else if (fdif == -1) "%d.%02d".format(ni.abs/100, ni.abs%100)
+            else if (fdif < -3)
+              if (ni != 0)       "%03d%s".format(ni.abs, "0"*(-fdif-3))
+              else               "0"
             else                 "%03d".format(ni.abs)
           ))
           val value = text.toDouble
@@ -666,8 +662,8 @@ package chart {
       dataOrigin,
       dataOrigin + Vc(dataExtent.x, 0),
       ticknum,
-      (if (ticklen < 0) ticklen else 0) / dataAssembly.scale.x,
-      (if (ticklen < 0) 0 else ticklen) / dataAssembly.scale.y,
+      (if (ticklen < 0) ticklen else 0),
+      (if (ticklen < 0) 0 else ticklen),
       ticklen.abs / 2,
       linestyle.scale(0.71f),
       None
@@ -677,8 +673,8 @@ package chart {
       dataOrigin,
       dataOrigin + Vc(0, dataExtent.y),
       ticknum,
-      (if (ticklen < 0) 0 else -ticklen) / dataAssembly.scale.x,
-      (if (ticklen < 0) -ticklen else 0) / dataAssembly.scale.y,
+      (if (ticklen < 0) 0 else -ticklen),
+      (if (ticklen < 0) -ticklen else 0),
       ticklen.abs / 2,
       linestyle.scale(0.71f),
       None
