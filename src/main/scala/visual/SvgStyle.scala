@@ -283,6 +283,9 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
     },
     off
   )
+  def fade(f: Float => Float): Style =
+    if (elements.count{ case g: Ghostly[_] => true; case _ => false } == 1) luminize(f)
+    else this + elements.collectFirst{ case o: Opaque => o.luminize(f) }.getOrElse(Opaque(f(1)))
 
   def +(s: Stylish) = 
     new Style((if (elements.exists(_.category == s.category)) elements.filter(_.category != s.category) else elements) + s, off)

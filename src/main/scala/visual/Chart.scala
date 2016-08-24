@@ -100,6 +100,40 @@ package chart {
   }
 
 
+  final case class Spread(c: Vc, axis: Vc, major: Deviable, minor: Deviable, dense: Vc, p: Float, style: Style) extends Shown {
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+      val sigmas = 
+        if (p < 1e-6) NumericConstants.SqrtTwo * 1e-3
+        else if (p > 1-1e-6) 5.2565217697569319786   // Value from Wolfram Alpha (20 digits)
+        else (-2*math.log(1-p)).sqrt
+      val a = axis.hat
+      val uc = xform(c)
+      val uM = xform(c + a * (sigmas * major.error).toFloat) - uc
+      val um = xform(c + a.ccw * (sigmas * minor.error).toFloat) - uc
+      val uMl = uM.len
+      val uml = um.len
+      val rectarea = uMl * uml
+      val ux = xform(c + Vc(dense.x, 0)) - uc
+      val uy = xform(c + Vc(0, dense.y)) - uc
+      val darkrect = (ux.lenSq * uy.lenSq).sqrt
+      val scaleup = if (rectarea < darkrect) darkrect/rectarea else 1
+      val fade = if (rectarea > darkrect) (darkrect/rectarea).toFloat else 1
+      val fader = (already: Float) => math.max(math.min(already, 0.01f), already*fade)
+      val er = Vc.from(uMl * scaleup, uml * scaleup)
+      val etheta = math.atan2(uM.y, uM.x) * 180 / math.Pi
+      implicit val myMag = Magnification.from(mag, xform, c)
+      if (uM.y closeTo 0)
+        Indent.V(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(er, "rx", "ry")}${showWith(_.fade(fader))}/>")
+      else if (uM.x closeTo 0)
+        Indent.V(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(Vc(er.y, er.x), "rx", "ry")}${showWith(_.fade(fader))}/>")
+      else {
+        val rotation = f" transform=${q}rotate(${fm(etheta.toFloat)} ${fm comma uc})${q}"
+        Indent.V(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(er, "rx", "ry")}$rotation${showWith(_.fade(fader))}/>")
+      }
+    }
+  }
+
+
   final case class DataLine(pts: Array[Long], style: Style) extends Shown {
     override def styled =
       if (style.elements.exists{ case sj: StrokeJoin => true; case _ => false }) style.stroky
@@ -591,11 +625,16 @@ package chart {
   }
 
 
-  final case class Letters(anchor: Vc, text: String, style: Style) extends Shown {
+  final case class Letters(anchor: Vc, text: String, rotate: Float, style: Style) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, anchor)
+      val u = xform(anchor)
+      val rot = (rotate*180/math.Pi).toFloat
       Indent.V(
-        f"<text${fm.vquote(xform(anchor),"x","y")}$show>$text</text>"
+        if (rotate closeTo 0)
+          f"<text${fm.vquote(u,"x","y")}$show>$text</text>"
+        else 
+          f"<text${fm.vquote(u,"x","y")} transform=${q}rotate(${fm(rot)} ${fm comma u})${q}$show>$text</text>"
       )
     }
   }
@@ -690,5 +729,5 @@ package chart {
   }
 
   // This "one-liner" should work in the REPL after: import kse.flow._, kse.coll._, kse.maths._, kse.maths.stats._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
-  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, Option(1f), Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((1/3.sqrt).toFloat), Opacity(0.5f), c, pa)) }
+  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone()), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1))))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, Option(1f), Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((1/3.sqrt).toFloat), Opacity(0.5f), c, pa), gr) }
 }
