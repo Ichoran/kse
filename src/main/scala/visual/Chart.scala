@@ -697,6 +697,8 @@ package chart {
       linestyle
     )
 
+    lazy val tickstyle = linestyle.map{ case StrokeWidth(w, off) => StrokeWidth(w*0.71f, off); case x => x }
+
     lazy val xTicks = AutoTick(
       dataOrigin,
       dataOrigin + Vc(dataExtent.x, 0),
@@ -704,7 +706,7 @@ package chart {
       (if (ticklen < 0) ticklen else 0),
       (if (ticklen < 0) 0 else ticklen),
       ticklen.abs / 2,
-      linestyle.scale(0.71f),
+      tickstyle,
       None
     )
 
@@ -715,7 +717,7 @@ package chart {
       (if (ticklen < 0) 0 else -ticklen),
       (if (ticklen < 0) -ticklen else 0),
       ticklen.abs / 2,
-      linestyle.scale(0.71f),
+      tickstyle,
       None
     )
 
