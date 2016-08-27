@@ -708,7 +708,7 @@ package chart {
       val m = Magnification.from(mag, xform, line.points)
       line.style.elements.collectFirst{
         case StrokeWidth(w, false) =>
-          line.copy(points = line.points.map(l => ((Vc from l) - Vc(w, w)*m.value).underlying))
+          line.copy(points = line.points.map(l => (xform.revert(xform(Vc from l) - Vc(w/2, -w/2)*m.value)).underlying))
       }.getOrElse(line)
     }
 
