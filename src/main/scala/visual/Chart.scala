@@ -48,6 +48,15 @@ package chart {
       fm(f(if (mag.value closeTo 1) styled else styled.scale(mag.value)))
   }
 
+  final case class Dynamic[S <: Shown, T <: Shown](static: S, react: (S, Xform, Option[Float], Formatter) => T) extends Shown {
+    def style = static.style
+    def inSvg(xform:Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] =
+      react(static, xform, mag, fm).inSvg(xform, mag)(fm)
+  }
+  object Dynamic {
+    def apply[S <: Shown, T <: Shown](static: S)(react: (S, Xform, Option[Float], Formatter) => T)(implicit ev: S <:< T) = new Dynamic(static, react)
+  }
+
   object Marker {
     final case class C(c: Vc, r: Float, style: Style) extends Shown {
       def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
@@ -686,7 +695,7 @@ package chart {
       stuff
     )
 
-    lazy val axisLine = PolyArrow(
+    lazy val axisLine = Dynamic(PolyArrow(
       Array(
         (dataOrigin + Vc(0, dataExtent.y * extrascale)).underlying,
         dataOrigin.underlying,
@@ -695,7 +704,14 @@ package chart {
       arrow,
       arrow,
       linestyle
-    )
+    )){ (line, xform, mag, fm) =>
+      val m = Magnification.from(mag, xform, line.points)
+      line.style.elements.collectFirst{
+        case StrokeWidth(w, false) =>
+          line.copy(points = line.points.map(l => ((Vc from l) - Vc(w, w)*m.value).underlying))
+      }.getOrElse(line)
+    }
+
 
     lazy val tickstyle = linestyle.map{ case StrokeWidth(w, off) => StrokeWidth(w*0.71f, off); case x => x }
 
