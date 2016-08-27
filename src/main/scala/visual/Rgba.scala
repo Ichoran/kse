@@ -115,8 +115,186 @@ object Rgba {
   def rgba(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), iclip(i >>> 24))
   def rgb(i: Int): Rgba = new Rgba(iclip(i & 0xFF), iclip((i >>> 8) & 0xFF), iclip((i >>> 16) & 0xFF), 1)
 
-  val White = apply(1, 1, 1, 1)
-  val Black = apply(0, 0, 0, 1)
+  def abgr(i: Int): Rgba = new Rgba(iclip(i >>> 24), iclip((i >>> 16) & 0xFF), iclip((i >>> 8) & 0xFF), iclip(i & 0xFF))
+  def bgr(i: Int): Rgba = new Rgba(iclip((i >>> 16) & 0xFF), iclip((i >>> 8) & 0xFF), iclip(i & 0xFF), 1)
+
+  /////////////////////////////
+  // Named colors begin here //
+  /////////////////////////////
+
+  // These are not visible colors.
+  val Empty         = apply(0, 0, 0, 0)
+  val InvisiblePink = apply(1, 0.7529412f, 0.79607844f, 0)   // Some unicorns are this color
+
+  // Standard monochromatic colors
+  val White   = apply(1, 1, 1)
+  val Silver  = bgr(0xC0C0C0)
+  val Gray    = bgr(0x808080);   @inline def Grey = Gray
+  val Black   = apply(0, 0, 0)
+
+  // Standard chromatic colors (standard 16)
+  val Red     = bgr(0xFF0000)
+  val Maroon  = bgr(0x800000)
+  val Yellow  = bgr(0xFFFF00)
+  val Olive   = bgr(0x808000)
+  val Lime    = bgr(0x00FF00)
+  val Green   = bgr(0x008000)
+  val Cyan    = bgr(0x00FFFF);   @inline def Aqua = Cyan
+  val Teal    = bgr(0x008080)
+  val Blue    = bgr(0x0000FF)
+  val Navy    = bgr(0x000080)
+  val Magenta = bgr(0xFF00FF);   @inline def Fuchsia = Magenta
+  val Purple  = bgr(0x800080)
+
+  // SVG / X11 colors.  Names and values from Wikipedia Web Colors page on 2016-08-27T14:36:00.000-07:00
+
+  // Pinks
+  val Pink            = bgr(0xFFC0CB)
+  val LightPink       = bgr(0xFFB6C1)
+  val HotPink         = bgr(0xFF69B4)
+  val DeepPink        = bgr(0xFF1493)
+  val PaleVioletRed   = bgr(0xDB7093)
+  val MediumVioletRed = bgr(0xC71585)
+
+  // Reds
+  val LightSalmon = bgr(0xFFA07A)
+  val Salmon      = bgr(0xFA8072)
+  val DarkSalmon  = bgr(0xE9967A)
+  val LightCoral  = bgr(0xF08080)
+  val IndianRed   = bgr(0xCD5C5C)
+  val Crimson     = bgr(0xDC143C)
+  val FireBrick   = bgr(0xB22222)
+  val DarkRed     = bgr(0x8B0000)
+
+  // Oranges
+  val OrangeRed  = bgr(0xFF4500)
+  val Tomato     = bgr(0xFF6347)
+  val Coral      = bgr(0xFF7F50)
+  val DarkOrange = bgr(0xFF8C00)
+  val Orange     = bgr(0xFFA500)
+
+  // Yellows
+  val LightYellow           = bgr(0xFFFFE0)
+  val LemonChiffon          = bgr(0xFFFACD)
+  val LightGoldenrodYellow  = bgr(0xFAFAD2)
+  val PapayaWhip            = bgr(0xFFEFD5)
+  val Moccasin              = bgr(0xFFE4B5)
+  val PeachPuff             = bgr(0xFFDAB9)
+  val PaleGoldenrod         = bgr(0xEEE8AA)
+  val Khaki                 = bgr(0xF0E68C)
+  val DarkKhaki             = bgr(0xBDB76B)
+  val Gold                  = bgr(0xFFD700)
+
+  // Browns
+  val Cornsilk       = bgr(0xFFF8DC)
+  val BlanchedAlmond = bgr(0xFFEBCD)
+  val Bisque         = bgr(0xFFE4C4)
+  val NavajoWhite    = bgr(0xFFDEAD)
+  val Wheat          = bgr(0xF5DEB3)
+  val BurlyWood      = bgr(0xDEB887)
+  val Tan            = bgr(0xD2B48C)
+  val RosyBrown      = bgr(0xBC8F8F)
+  val SandyBrown     = bgr(0xF4A460)
+  val Goldenrod      = bgr(0xDAA520)
+  val DarkGoldenrod  = bgr(0xB8860B)
+  val Peru           = bgr(0xCD853F)
+  val Chocolate      = bgr(0xD2691E)
+  val SaddleBrown    = bgr(0x8B4513)
+  val Sienna         = bgr(0xA0522D)
+  val Brown          = bgr(0xA52A2A)
+
+  // Greens
+  val DarkOliveGreen    = bgr(0x556B2F)
+  val OliveDrab         = bgr(0x6B8E23)
+  val YellowGreen       = bgr(0x9ACD32)
+  val LimeGreen         = bgr(0x32CD32)
+  val LawnGreen         = bgr(0x7CFC00)
+  val Chartreuse        = bgr(0x7FFF00)
+  val GreenYellow       = bgr(0xADFF2F)
+  val SpringGreen       = bgr(0x00FF7F)
+  val MediumSpringGreen = bgr(0x00FA9A)
+  val LightGreen        = bgr(0x90EE90)
+  val PaleGreen         = bgr(0x98FB98)
+  val DarkSeaGreen      = bgr(0x8FBC8F)
+  val MediumAquamarine  = bgr(0x66CDAA)
+  val MediumSeaGreen    = bgr(0x3CB371)
+  val SeaGreen          = bgr(0x2E8B57)
+  val ForestGreen       = bgr(0x228B22)
+  val DarkGreen         = bgr(0x006400)
+
+  // Cyans
+  val LightCyan       = bgr(0xE0FFFF)
+  val PaleTurquoise   = bgr(0xAFEEEE)
+  val Aquamarine      = bgr(0x7FFFD4)
+  val Turquoise       = bgr(0x40E0D0)
+  val MediumTurquoise = bgr(0x48D1CC)
+  val DarkTurquoise   = bgr(0x00CED1)
+  val LightSeaGreen   = bgr(0x20B2AA)
+  val CadetBlue       = bgr(0x5F9EA0)
+  val DarkCyan        = bgr(0x008B8B)
+
+  // Blues
+  val LightSteelBlue = bgr(0xB0C4DE)
+  val PowderBlue     = bgr(0xB0E0E6)
+  val LightBlue      = bgr(0xADD8E6)
+  val SkyBlue        = bgr(0x87CEEB)
+  val LightSkyBlue   = bgr(0x87CEFA)
+  val DeepSkyBlue    = bgr(0x00BFFF)
+  val DodgerBlue     = bgr(0x1E90FF)
+  val CornflowerBlue = bgr(0x6495ED)
+  val SteelBlue      = bgr(0x4682B4)
+  val RoyalBlue      = bgr(0x4169E1)
+  val MediumBlue     = bgr(0x0000CD)
+  val DarkBlue       = bgr(0x00008B)
+  val MidnightBlue   = bgr(0x191970)
+
+  // Purples
+  val Lavender        = bgr(0xE6E6FA)
+  val Thistle         = bgr(0xD8BFD8)
+  val Plum            = bgr(0xDDA0DD)
+  val Violet          = bgr(0xEE82EE)
+  val Orchid          = bgr(0xDA70D6)
+  val MediumOrchid    = bgr(0xBA55D3)
+  val MediumPurple    = bgr(0x9370DB)
+  val BlueViolet      = bgr(0x8A2BE2)
+  val DarkViolet      = bgr(0x9400D3)
+  val DarkOrchid      = bgr(0x9932CC)
+  val DarkMagenta     = bgr(0x8B008B)
+  val Indigo          = bgr(0x4B0082)
+  val DarkSlateBlue   = bgr(0x483D8B)
+  val SlateBlue       = bgr(0x6A5ACD)
+  val MediumSlateBlue = bgr(0x7B68EE)
+
+  // Whites
+  val Snow          = bgr(0xFFFAFA)
+  val Honeydew      = bgr(0xF0FFF0)
+  val MintCream     = bgr(0xF5FFFA)
+  val Azure         = bgr(0xF0FFFF)
+  val AliceBlue     = bgr(0xF0F8FF)
+  val GhostWhite    = bgr(0xF8F8FF)
+  val WhiteSmoke    = bgr(0xF5F5F5)
+  val Seashell      = bgr(0xFFF5EE)
+  val Beige         = bgr(0xF5F5DC)
+  val OldLace       = bgr(0xFDF5E6)
+  val FloralWhite   = bgr(0xFFFAF0)
+  val Ivory         = bgr(0xFFFFF0)
+  val AntiqueWhite  = bgr(0xFAEBD7)
+  val Linen         = bgr(0xFAF0E6)
+  val LavenderBlush = bgr(0xFFF0F5)
+  val MistyRose     = bgr(0xFFE4E1)
+
+  // Grays
+  val Gainsboro      = bgr(0xDCDCDC)
+  val LightGray      = bgr(0xD3D3D3);  @inline def LightGrey      = LightGray   
+  val DarkGray       = bgr(0xA9A9A9);  @inline def DarkGrey       = DarkGray
+  val DimGray        = bgr(0x696969);  @inline def DimGrey        = DimGray
+  val LightSlateGray = bgr(0x778899);  @inline def LightSlateGrey = LightSlateGray
+  val SlateGray      = bgr(0x708090);  @inline def SlateGrey      = SlateGray
+  val DarkSlateGray  = bgr(0x2F4F4F);  @inline def DarkSlateGrey  = DarkSlateGray
+
+  ///////////////////////////
+  // Named colors end here //
+  ///////////////////////////
 
   private val greenvector = IVec3F(-0.7f, 0.3f, -0.7f)
   private val cyanvector = IVec3F(-0.9f, 0.1f, 0.1f)
@@ -132,7 +310,7 @@ object Rgba {
       val r0 = g.input(s,i,i+2).xI
       val g0 = g.input(s,i+2,i+4).xI
       val b0 = g.input(s,i+4,i+6).xI
-      if (s.length < i + 6) web(r0, g0, b0)
+      if (s.length <= i + 6) web(r0, g0, b0)
       else web(r0, g0, b0, g.input(s, i+6, s.length).delimit(true).xI)
     }.mapNo(n => n.toString)
   }

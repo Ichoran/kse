@@ -18,14 +18,16 @@ package object chart {
 
   def svg(size: Vc, stuff: InSvg*): Vector[Indent] =
     Vector("""<svg width="%.2f" height="%.2f">""".format(size.x, size.y), "<g>").map(x => Indent(x)) ++
-    stuff.flatMap(_.inSvg(Xform.flipy(480), None)(DefaultFormatter)).map(x => x.in) ++
+    stuff.flatMap(_.inSvg(Xform.flipy(size.y), None)(DefaultFormatter)).map(x => x.in) ++
     Vector("</g>", "</svg>").map(x => Indent(x))
 
-  def svgHtml(size: Vc, stuff: InSvg*): Vector[String] = (
-    Vector(Indent("<html>"), Indent("<body>")) ++
+  def svgHtml(size: Vc, bg: Rgba, stuff: InSvg*): Vector[String] = (
+    Vector(Indent("<html>"), Indent(f"<body${if (!(bg.a closeTo 0)) f" bgcolor=$q${DefaultFormatter(bg)}$q" else ""}>")) ++
     svg(size, stuff: _*).map(x => x.in) ++
     Vector(Indent("</body>"), Indent("</html>"))
   ).map(_.toString)
+
+  def svgHtml(size: Vc, stuff: InSvg*): Vector[String] = svgHtml(size, Rgba.Empty, stuff: _*)
 
   def quick(i: InSvg*) {
     val svg = 
