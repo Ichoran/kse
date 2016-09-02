@@ -37,6 +37,12 @@ package object chart {
     println(svg.mkString("\n"))
     svg.map(_.toString).toFile("test.html".file)
   }
+
+  private[chart] def pSigma2D(p: Float): Float = (
+    if (p < 1e-6) NumericConstants.SqrtTwo * 1e-3
+    else if (p > 1-1e-6) 5.2565217697569319786   // Value from Wolfram Alpha (20 digits)
+    else (-2*math.log(1-p)).sqrt
+  ).toFloat
 }
 
 package chart {
@@ -110,13 +116,9 @@ package chart {
     }
   }
 
-
   final case class Spread(c: Vc, axis: Vc, major: Deviable, minor: Deviable, dense: Vc, p: Float, style: Style) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
-      val sigmas = 
-        if (p < 1e-6) NumericConstants.SqrtTwo * 1e-3
-        else if (p > 1-1e-6) 5.2565217697569319786   // Value from Wolfram Alpha (20 digits)
-        else (-2*math.log(1-p)).sqrt
+      val sigmas = pSigma2D(p)
       val a = axis.hat
       val uc = xform(c)
       val uM = xform(c + a * (sigmas * major.error).toFloat) - uc
@@ -131,16 +133,61 @@ package chart {
       val fade = if (rectarea > darkrect) (darkrect/rectarea).toFloat else 1
       val fader = (already: Float) => math.max(math.min(already, 0.01f), already*fade)
       val er = Vc.from(uMl * scaleup, uml * scaleup)
-      val etheta = math.atan2(uM.y, uM.x) * 180 / math.Pi
       implicit val myMag = Magnification.from(mag, xform, c)
       if (uM.y closeTo 0)
         Indent.V(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(er, "rx", "ry")}${showWith(_.fade(fader))}/>")
       else if (uM.x closeTo 0)
         Indent.V(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(Vc(er.y, er.x), "rx", "ry")}${showWith(_.fade(fader))}/>")
       else {
-        val rotation = f" transform=${q}rotate(${fm(etheta.toFloat)} ${fm comma uc})${q}"
+        val rotation = f" transform=${q}rotate(${fm((math.atan2(uM.y, uM.x) * 180 / math.Pi).toFloat)} ${fm comma uc})${q}"
         Indent.V(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(er, "rx", "ry")}$rotation${showWith(_.fade(fader))}/>")
       }
+    }
+  }
+
+  final case class Spider(samples: Array[(Est, Est)], p: Float, style: Style) extends Shown {
+    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+      val sigmas = pSigma2D(p)
+      val centers = samples.map{ case (ex, ey) => Vc.from(ex.mean, ey.mean).underlying }
+      val extents = samples.map{ case (ex, ey) => Vc.from(ex.error, ey.error).underlying }
+      implicit val myMag = Magnification.from(mag, xform, centers)
+      var tex, tey, mex, mey = EstM()
+      var totalA = 0.0
+      var qex, qey = 0.0
+      var i = 0
+      while (i < samples.length) {
+        val (ex, ey) = samples(i)
+        tex ++= ex
+        tey ++= ey
+        mex += ex.value
+        mey += ey.value
+        qex += ex.errorSq
+        qey += ey.errorSq
+        totalA += ex.error * ey.error
+        i += 1
+      }
+      val totalN = (tex.n + tey.n)/2
+      val solidDensity = totalN / (tex.error * tey.error)
+      val densities = samples.map{ case (ex, ey) => (((ex.n + ey.n)/(2 * ex.error * ey.error))/solidDensity).clip(0.01, 1) }
+      Vector(Indent(s"<g${showWith(_.generally)}>")) ++
+      centers.indices.map{ i =>
+        val c = Vc from centers(i)
+        val e = Vc from extents(i)
+        val uc = xform(c)
+        val uM = xform(c + (sigmas * Vc(e.x, 0))) - uc
+        val um = xform(c + (sigmas * Vc(0, e.y))) - uc
+        val er = Vc.from(uM.len, um.len)
+        val fader = (already: Float) => math.max(math.min(already, 0.01), already * densities(i)).toFloat
+        if (uM.y closeTo 0)
+          Indent(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(er, "rx", "ry")}${showWith(_.fade(fader))}/>", 1)
+        else if (uM.x closeTo 0)
+          Indent(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(Vc(er.y, er.x), "rx", "ry")}${showWith(_.fade(fader))}/>", 1)
+        else {
+          val rotation = f" transform=${q}rotate(${fm((math.atan2(uM.y, uM.x) * 180 / math.Pi).toFloat)} ${fm comma uc})${q}"
+          Indent(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(er, "rx", "ry")}$rotation${showWith(_.fade(fader))}/>", 1)
+        }
+      }.toVector ++
+      Vector(Indent("</g>"))
     }
   }
 
