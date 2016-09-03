@@ -353,45 +353,35 @@ case class Magnification(value: Float) {
 }
 object Magnification {
   val one = new Magnification(1f)
-  def from(mag: Option[Float], xf: Xform, v: Vc) =
+
+  def from(mag: Option[Float => Float], xf: Xform, v: Vc) =
     mag match {
       case None => one
-      case Some(x) => 
-        if (x.finite) new Magnification(x)
-        else new Magnification(xf mag v)
+      case Some(f) => new Magnification(f(xf mag v))
     }
-  def from(mag: Option[Float], xf: Xform, va: Vc, vb: Vc) =
+  def from(mag: Option[Float => Float], xf: Xform, va: Vc, vb: Vc) =
     mag match {
       case None => one
-      case Some(x) =>
-        if (x.finite) new Magnification(x)
-        else new Magnification(0.5f*((xf mag va) + (xf mag vb)))
+      case Some(f) => new Magnification(f(0.5f*((xf mag va) + (xf mag vb))))
     }
-  def from(mag: Option[Float], xf: Xform, vs: Array[Long]) =
+  def from(mag: Option[Float => Float], xf: Xform, vs: Array[Long]) =
     mag match {
       case None => one
-      case Some(x) =>
-        if (x.finite) new Magnification(x)
-        else {
-          var m = 0.0
-          var i = 0
-          while (i < vs.length) { m += xf.mag(Vc from vs(i)); i += 1 }
-          new Magnification((m / math.max(1, vs.length)).toFloat)
-        }
+      case Some(f) =>
+        var m = 0.0
+        var i = 0
+        while (i < vs.length) { m += xf.mag(Vc from vs(i)); i += 1 }
+        new Magnification(f((m / math.max(1, vs.length)).toFloat))
     }
-  def from(mag: Option[Float], x0: Float, x1: Float) =
+  def from(mag: Option[Float => Float], x0: Float, x1: Float) =
     mag match {
       case None => one
-      case Some(x) =>
-        if (x.finite) new Magnification(x)
-        else new Magnification((x1/x0.toDouble).toFloat)
+      case Some(f) => new Magnification(f((x1/x0.toDouble).toFloat))
     }
-  def from(mag: Option[Float], x0a: Float, x0b: Float, x1a: Float, x1b: Float) =
+  def from(mag: Option[Float => Float], x0a: Float, x0b: Float, x1a: Float, x1b: Float) =
     mag match {
       case None => one
-      case Some(x) =>
-        if (x.finite) new Magnification(x)
-        else new Magnification(((x1a + x1b)/(x0a + x0b).toDouble).toFloat)
+      case Some(f) => new Magnification(f(((x1a + x1b)/(x0a + x0b).toDouble).toFloat))
     }
 }
 
@@ -419,5 +409,5 @@ final case class InText(text: String, level: Int = 0) extends Indent {
 }
 
 trait InSvg {
-  def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent]
+  def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent]
 }

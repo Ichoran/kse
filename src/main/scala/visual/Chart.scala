@@ -56,18 +56,18 @@ package chart {
       fm(f(if (mag.value closeTo 1) styled else styled.scale(mag.value)))
   }
 
-  final case class Dynamic[S <: Shown, T <: Shown](static: S, react: (S, Xform, Option[Float], Formatter) => T) extends Shown {
+  final case class Dynamic[S <: Shown, T <: Shown](static: S, react: (S, Xform, Option[Float => Float], Formatter) => T) extends Shown {
     def style = static.style
-    def inSvg(xform:Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] =
+    def inSvg(xform:Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] =
       react(static, xform, mag, fm).inSvg(xform, mag)(fm)
   }
   object Dynamic {
-    def apply[S <: Shown, T <: Shown](static: S)(react: (S, Xform, Option[Float], Formatter) => T)(implicit ev: S <:< T) = new Dynamic(static, react)
+    def apply[S <: Shown, T <: Shown](static: S)(react: (S, Xform, Option[Float => Float], Formatter) => T)(implicit ev: S <:< T) = new Dynamic(static, react)
   }
 
   object Marker {
     final case class C(c: Vc, r: Float, style: Style) extends Shown {
-      def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+      def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
         val ctr = xform(c)
         implicit val myMag = Magnification.from(mag, r, xform.radius(c, Vc(r, 0)))
         Indent.V(f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", r * myMag.value)}$show/>")
@@ -78,7 +78,7 @@ package chart {
 
   final case class Circ(c: Vc, r: Float, style: Style) extends Shown {
     override def styled = style.shapely
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       if (!r.finite || r <= 0 || !c.finite) return Vector.empty
       val ctr = xform(c)
       val rad = xform.radius(c, Vc(r, 0))
@@ -92,7 +92,7 @@ package chart {
 
   final case class Bar(c: Vc, r: Vc, style: Style) extends Shown {
     override def styled = style.shapely
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       if (!r.finite || !c.finite) return Vector.empty
       val s = Vc(r.x, -r.y)
       val ld = xform(c - r)
@@ -117,7 +117,7 @@ package chart {
   }
 
   final case class Spread(c: Vc, axis: Vc, major: Deviable, minor: Deviable, dense: Vc, p: Float, style: Style) extends Shown {
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       val sigmas = pSigma2D(p)
       val a = axis.hat
       val uc = xform(c)
@@ -146,7 +146,7 @@ package chart {
   }
 
   final case class Spider(samples: Array[(Est, Est)], p: Float, style: Style, legs: Option[Style] = None, body: Option[Style] = None) extends Shown {
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       val sigmas = pSigma2D(p)
       val centers = samples.map{ case (ex, ey) => Vc.from(ex.mean, ey.mean).underlying }
       val extents = samples.map{ case (ex, ey) => Vc.from(ex.error, ey.error).underlying }
@@ -223,7 +223,7 @@ package chart {
     override def styled =
       if (style.elements.exists{ case sj: StrokeJoin => true; case _ => false }) style.stroky
       else style.stroky + StrokeJoin(Join.Round)
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val v = new Array[Long](pts.length)
       var i = 0;
       while (i < v.length) { v(i) = xform(Vc from pts(i)).underlying; i += 1 }
@@ -241,7 +241,7 @@ package chart {
 
   final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Style) extends Shown {
     override def styled = style.filly
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val n = math.min(xs.length, math.min(ylos.length, yhis.length))
       val vs = new Array[Long](2*n)
       var i = 0
@@ -274,7 +274,7 @@ package chart {
     */
   final case class ErrorBarYY(x: Float, lo: Float, hi: Float, across: Float, hvbias: Float, style: Style) extends Shown {
     override def styled = style.stroky
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, Vc(x,lo), Vc(x,hi))
       val l = xform(Vc(x, lo))
       val u = xform(Vc(x, hi))
@@ -365,7 +365,7 @@ package chart {
 
   final case class Arrow(from: Vc, to: Vc, indirection: Float, head: Option[Arrowhead], style: Style) extends Shown {
     override def styled = style.stroky
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val vi = if (indirection.finite && !(indirection closeTo 0)) indirection else 0
       val v = to - from;
       val ip = from + v*0.5f - v.ccw*(2f*vi)
@@ -401,7 +401,7 @@ package chart {
 
   final case class PolyArrow(points: Array[Long], fwdarrow: Option[Arrowhead], bkwarrow: Option[Arrowhead], style: Style) extends Shown {
     override def styled = style.stroky
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       if (points.length < 2) return Vector.empty
       val up = {
         val ans = new Array[Long](points.length)
@@ -437,7 +437,7 @@ package chart {
 
   final case class Ticky(from: Vc, to: Vc, locations: Seq[Float], left: Float, right: Float, style: Style) extends Shown {
     override def styled = style.stroky
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val e = (xform(to) - xform(from)).hat
       val uf = xform(from)
       val ud = (xform(to) - xform(from)).len.toFloat
@@ -453,7 +453,7 @@ package chart {
   final case class Tik(where: Float, what: String) {}
 
   final case class TickLabels(from: Vc, to: Vc, ticks: Seq[Tik], left: Float, right: Float, anchor: Float, style: Style) extends Shown {
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val uf = xform(from)
       val ut = xform(to)
       val e = (ut - uf).hat
@@ -706,12 +706,12 @@ package chart {
     def subTicks = tickInfo._2
 
 
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = theTicks.inSvg(xform, mag)(fm)
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = theTicks.inSvg(xform, mag)(fm)
   }
 
 
   final case class Letters(anchor: Vc, text: String, rotate: Float, style: Style) extends Shown {
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, anchor)
       val u = xform(anchor)
       val rot = (rotate*180/math.Pi).toFloat
@@ -724,10 +724,10 @@ package chart {
     }
   }
 
-  final case class Assembly(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], style: Style, stuff: Seq[InSvg]) extends Shown {
-    def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
+  final case class Assembly(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], style: Style, stuff: Seq[InSvg]) extends Shown {
+    def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], style: Style, thing: InSvg, morestuff: InSvg*) =
       this(oldOrigin, scale, newOrigin, thicken, style, thing +: morestuff)
-    def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], stuff: InSvg*) = 
+    def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], stuff: InSvg*) = 
       this(oldOrigin, scale, newOrigin, thicken, Style.empty, stuff)
     def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, stuff: InSvg*) =
       this(oldOrigin, scale, newOrigin, None, Style.empty, stuff)
@@ -735,7 +735,7 @@ package chart {
       this(translate, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
     def this(stuff: InSvg*) =
       this(0 vc 0, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.one
       val yform =
         if (oldOrigin == Vc(0,0) && scale == Vc(1,1) && newOrigin == Vc(0,0)) xform
@@ -747,9 +747,9 @@ package chart {
     }
   }
   object Assembly{
-    def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], style: Style, thing: InSvg, morestuff: InSvg*) =
+    def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], style: Style, thing: InSvg, morestuff: InSvg*) =
       new Assembly(oldOrigin, scale, newOrigin, thicken, style, thing +: morestuff)
-    def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float], stuff: InSvg*) =
+    def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], stuff: InSvg*) =
       new Assembly(oldOrigin, scale, newOrigin, thicken, Style.empty, stuff)
     def apply(oldOrigin: Vc, scale: Vc, newOrigin: Vc, stuff: InSvg*) = 
       new Assembly(oldOrigin, scale, newOrigin, None, Style.empty, stuff)
@@ -813,15 +813,15 @@ package chart {
       None
     )
 
-    lazy val lineAssembly = dataAssembly.copy(thicken = Some(1f), stuff = Vector(axisLine, xTicks, yTicks))
+    lazy val lineAssembly = dataAssembly.copy(thicken = None, stuff = Vector(axisLine, xTicks, yTicks))
 
     lazy val fullAssembly = Assembly(dataAssembly, lineAssembly)
 
     def style = linestyle
 
-    def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter): Vector[Indent] = fullAssembly.inSvg(xform, mag)(fm)
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = fullAssembly.inSvg(xform, mag)(fm)
   }
 
   // This "one-liner" should work in the REPL after: import kse.flow._, kse.coll._, kse.maths._, kse.maths.stats._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
-  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1))))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, Option(1f), Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((1/3.sqrt).toFloat), Opacity(0.5f), c, pa), gr) }
+  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1))))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, None, Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => (1/3f)), Opacity(0.5f), c, pa), gr) }
 }
