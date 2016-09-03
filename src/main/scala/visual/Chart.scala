@@ -173,17 +173,17 @@ package chart {
         style.elements.collect{ case sw: StrokeWidth => sw; case sc: StrokeColor => sc }.toVector.fn{ es =>
           if (es.length == 2) style
           else {
-            val fc: Option[Stylish] = style.elements.collectFirst{ case FillColor(c, false) => StrokeColor(c) }
-            val fo: Option[Stylish] = style.elements.collectFirst{ case FillOpacity(o, false) => StrokeOpacity(o) }
+            val fc: Option[Stylish] = style.elements.collectFirst{ case FillColor(c) => StrokeColor(c) }
+            val fo: Option[Stylish] = style.elements.collectFirst{ case FillOpacity(o) => StrokeOpacity(o) }
             val sw: Option[Stylish] = es.collectFirst{ case x: StrokeWidth => x }
             val sc: Option[Stylish] = es.collectFirst{ case x: StrokeColor => x }
             val so: Option[Stylish] = style.elements.collectFirst{ case x: StrokeOpacity => x }
-            println(sc)
-            println(fc)
-            style ++ 
-            Style((sw.getOrElse(StrokeWidth(1/myMag.value)) :: sc.orElse(fc).toList ::: so.orElse(fo).toList).toSet)
+            Style(Stylish.unique(
+              style.elements,
+              FillNone :: sw.getOrElse(StrokeWidth(1/myMag.value)) :: sc.orElse(fc).toList ::: so.orElse(fo).toList
+            ))
           }
-        }.stroky
+        }
       }
       val centerstyle = body.map(_.explicitFillOnly).getOrElse(linestyle)
       Vector(Indent(s"<g${showWith(_.generally)}>")) ++
@@ -338,7 +338,7 @@ package chart {
       val deltadir = if (direction.lenSq < 0.1f*tip.lenSq) direction else direction*(1f/(50*math.max(1e-3f, tip.len.toFloat)))
       val dirx = (xform(tip + deltadir) - qt).hat
       val diry = dirx.ccw
-      val w = style.elements.collectFirst{ case StrokeWidth(x, _) => x } getOrElse 1f
+      val w = style.elements.collectFirst{ case StrokeWidth(x) => x } getOrElse 1f
       val sizedStyle = if (thickness closeTo 1) style else style.scale(thickness)
       val s = w * setback
       val px = w * pointx
@@ -350,11 +350,11 @@ package chart {
       val miterStyle = {
         val miter = math.ceil(1/sinx+1e-3).toInt
         if (miter <= 4) sizedStyle
-        else if (style.elements.exists{ case StrokeMiter(m, _) => m >= miter || m.closeTo(miter); case _ => false }) sizedStyle
+        else if (style.elements.exists{ case StrokeMiter(m) => m >= miter || m.closeTo(miter); case _ => false }) sizedStyle
         else sizedStyle + StrokeMiter(miter.toFloat)
       }
       val joinStyle =
-        if (flat || !style.elements.exists{ case StrokeJoin(j, _) => j != Join.Miter; case _ => false }) miterStyle
+        if (flat || !style.elements.exists{ case StrokeJoin(j) => j != Join.Miter; case _ => false }) miterStyle
         else miterStyle + StrokeJoin(Join.Miter)
       val ans = 
         if (flat) f"<path d=${q}M ${fm(qA)} L ${fm(qB)}${q}${fm(joinStyle)}/>"
@@ -783,13 +783,13 @@ package chart {
     )){ (line, xform, mag, fm) =>
       val m = Magnification.from(mag, xform, line.points)
       line.style.elements.collectFirst{
-        case StrokeWidth(w, false) =>
+        case StrokeWidth(w) =>
           line.copy(points = line.points.map(l => (xform.revert(xform(Vc from l) - Vc(w/2, -w/2)*m.value)).underlying))
       }.getOrElse(line)
     }
 
 
-    lazy val tickstyle = linestyle.map{ case StrokeWidth(w, off) => StrokeWidth(w*0.71f, off); case x => x }
+    lazy val tickstyle = linestyle.map{ case StrokeWidth(w) => StrokeWidth(w*0.71f); case x => x }
 
     lazy val xTicks = AutoTick(
       dataOrigin,
@@ -823,5 +823,5 @@ package chart {
   }
 
   // This "one-liner" should work in the REPL after: import kse.flow._, kse.coll._, kse.maths._, kse.maths.stats._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
-  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone()), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1))))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, Option(1f), Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((1/3.sqrt).toFloat), Opacity(0.5f), c, pa), gr) }
+  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1))))); quick(c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, Option(1f), Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((1/3.sqrt).toFloat), Opacity(0.5f), c, pa), gr) }
 }

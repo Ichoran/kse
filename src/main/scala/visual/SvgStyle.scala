@@ -36,25 +36,23 @@ class Formatter {
 
   def apply(tx: Textual): String = if (tx.text.isEmpty) "" else f" ${tx.label}=$q${tx.text}$q"
 
-  def apply(stylish: Stylish): String =
-    if (stylish.off) ""
-    else stylish match {
-      case Opaque(o, _)         => apply("opacity", o)
-      case FillColor(c, _)      => apply("fill", c)
-      case FillOpacity(o, _)    => apply("fill-opacity", o)
-      case FillNone(_)          => apply("fill", "none")
-      case StrokeColor(c, _)    => apply("stroke", c)
-      case StrokeOpacity(o, _)  => apply("stroke-opacity", o)
-      case StrokeWidth(w, _)    => apply("stroke-width", w)
-      case StrokeJoin(j, _)     => apply(j)
-      case StrokeMiter(m, _)    => apply("stroke-miterlimit", m)
-      case StrokeCap(c, _)      => apply(c)
-      case FontFace(f, _)       => apply("font-family", f)
-      case FontSize(s, _)       => apply("font-size", s)
-      case FontVertical(v, _)   => apply(v)
-      case FontHorizontal(h, _) => apply(h)
-      case Style(es, _)         => es.map(e => apply(e)).mkString
-    }
+  def apply(stylish: Stylish): String = stylish match {
+    case Opaque(o)         => apply("opacity", o)
+    case FillColor(c)      => apply("fill", c)
+    case FillOpacity(o)    => apply("fill-opacity", o)
+    case FillNone          => apply("fill", "none")
+    case StrokeColor(c)    => apply("stroke", c)
+    case StrokeOpacity(o)  => apply("stroke-opacity", o)
+    case StrokeWidth(w)    => apply("stroke-width", w)
+    case StrokeJoin(j)     => apply(j)
+    case StrokeMiter(m)    => apply("stroke-miterlimit", m)
+    case StrokeCap(c)      => apply(c)
+    case FontFace(f)       => apply("font-family", f)
+    case FontSize(s)       => apply("font-size", s)
+    case FontVertical(v)   => apply(v)
+    case FontHorizontal(h) => apply(h)
+    case Style(es)         => es.map(e => apply(e)).mkString
+  }
 }
 class ProxyFormatter(original: Formatter) extends Formatter {
   override def apply(x: Float) = original(x)
@@ -115,132 +113,144 @@ final case object Whatever extends Join with Cap with Vertical with Horizontal {
   def text = ""
 }
 
-sealed trait Stylish {
-  def category: Int
-  def off: Boolean
-  def toggle: Stylish
-  def toOff: Stylish
-  def toOn: Stylish
+sealed trait Stylish {}
+object Stylish {
+  def unique(elements: Iterable[Stylish], more: Iterable[Stylish] = List.empty[Stylish]): List[Stylish] = {
+    var o, f, fo, sc, so, sw, sj, sm, sp, tf, ts, tv, th, s = true
+    val eb = List.newBuilder[Stylish]
+    val i = if (more.nonEmpty) elements.iterator ++ more.iterator else elements.iterator
+    while (i.hasNext) i.next match {
+      case x: Opaque         => if (o ) { o  = false; eb += x }
+      case x: FillIndicator  => if (f ) { f  = false; eb += x }
+      case x: FillOpacity    => if (fo) { fo = false; eb += x }
+      case x: StrokeColor    => if (sc) { sc = false; eb += x }
+      case x: StrokeOpacity  => if (so) { so = false; eb += x }
+      case x: StrokeWidth    => if (sw) { sw = false; eb += x }
+      case x: StrokeJoin     => if (sj) { sj = false; eb += x }
+      case x: StrokeMiter    => if (sm) { sm = false; eb += x }
+      case x: StrokeCap      => if (sp) { sp = false; eb += x }
+      case x: FontFace       => if (tf) { tf = false; eb += x }
+      case x: FontSize       => if (ts) { ts = false; eb += x }
+      case x: FontVertical   => if (tv) { tv = false; eb += x }
+      case x: FontHorizontal => if (th) { th = false; eb += x }
+      case x: Style          => if (s ) {  s = false; eb += x }
+    }
+    eb.result
+  }
 }
-sealed abstract class Stylized[+A <: Stylized[_]](val category: Int) extends Stylish {
-  def me: A
-  override def toggle: A
-  override def toOff: A = if (off) me else toggle
-  override def toOn: A = if (off) toggle else me
-}
-sealed trait Colorful[A <: Colorful[_]] extends Stylish { def rgb: Rgba; def colorize(f: Rgba => Rgba): A }
-sealed trait Ghostly[A <: Ghostly[_]] extends Stylish { def opacity: Float; def luminize(f: Float => Float): A }
-sealed trait Scalable[A <: Scalable[_]] extends Stylish { def scale(factor: Float): A }
-sealed abstract class Fillish[A <: Stylized[_]](category: Int) extends Stylized[A](category) {}
-sealed abstract class Strokish[A <: Stylized[_]](category: Int) extends Stylized[A](category) {}
 
-final case class Opaque(opacity: Float, off: Boolean = false)                 extends Stylized[Opaque](1)        with Ghostly[Opaque]        { def me = this; def toggle = new Opaque(opacity, !off);        def luminize(f: Float => Float) = new Opaque(f(opacity), off) }
-final case class FillColor(rgb: Rgba, off: Boolean = false)                   extends Fillish[FillColor](2)      with Colorful[FillColor]    { def me = this; def toggle = new FillColor(rgb, !off);         def colorize(f: Rgba => Rgba) = new FillColor(f(rgb), off) }
-final case class FillOpacity(opacity: Float, off: Boolean = false)            extends Fillish[FillOpacity](3)    with Ghostly[FillOpacity]   { def me = this; def toggle = new FillOpacity(opacity, !off);   def luminize(f: Float => Float) = new FillOpacity(f(opacity), off) }
-final case class FillNone(off: Boolean = false)                               extends Fillish[FillNone](2)                                   { def me = this; def toggle = new FillNone(!off) }
-final case class StrokeColor(rgb: Rgba, off: Boolean = false)                 extends Strokish[StrokeColor](4)   with Colorful[StrokeColor]  { def me = this; def toggle = new StrokeColor(rgb, !off);       def colorize(f: Rgba => Rgba) = new StrokeColor(f(rgb), off) }
-final case class StrokeOpacity(opacity: Float, off: Boolean = false)          extends Strokish[StrokeOpacity](5) with Ghostly[StrokeOpacity] { def me = this; def toggle = new StrokeOpacity(opacity, !off); def luminize(f: Float => Float) = new StrokeOpacity(f(opacity), off) }
-final case class StrokeWidth(width: Float, off: Boolean = false)              extends Strokish[StrokeWidth](6)   with Scalable[StrokeWidth]  { def me = this; def toggle = new StrokeWidth(width, !off);     def scale(factor: Float) = new StrokeWidth(width * factor, off) }
-final case class StrokeJoin(join: Join, off: Boolean = false)                 extends Strokish[StrokeJoin](7)                                { def me = this; def toggle = new StrokeJoin(join, !off) }
-final case class StrokeMiter(miter: Float, off: Boolean = false)              extends Strokish[StrokeMiter](8)                               { def me = this; def toggle = new StrokeMiter(miter, !off) }
-final case class StrokeCap(cap: Cap, off: Boolean = false)                    extends Strokish[StrokeCap](9)                                 { def me = this; def toggle = new StrokeCap(cap, !off) }
-final case class FontFace(face: String, off: Boolean = false)                 extends Stylized[FontFace](10)                                 { def me = this; def toggle = new FontFace(face, !off) }
-final case class FontSize(size: Float, off: Boolean = false)                  extends Stylized[FontSize](11)      with Scalable[FontSize]    { def me = this; def toggle = new FontSize(size, !off);         def scale(factor: Float) = new FontSize(factor * size, off) }
-final case class FontVertical(vertical: Vertical, off: Boolean = false)       extends Stylized[FontVertical](12)                             { def me = this; def toggle = new FontVertical(vertical, !off) }
-final case class FontHorizontal(horizontal: Horizontal, off: Boolean = false) extends Stylized[FontHorizontal](13)                           { def me = this; def toggle = new FontHorizontal(horizontal, !off) }
+sealed trait Colorful[A <: Colorful[A]] extends Stylish { def rgb: Rgba; def color(f: Rgba => Rgba): A }
+sealed trait Ghostly[A <: Ghostly[A]] extends Stylish { def opacity: Float; def solidify(f: Float => Float): A }
+sealed trait Scalable[A <: Scalable[A]] extends Stylish { def scale(factor: Float): A }
+sealed trait Fillish extends Stylish {}
+sealed trait Strokish extends Stylish {}
+sealed trait FillIndicator extends Fillish {}
+
+final case class Opaque(opacity: Float)                 extends                    Ghostly[Opaque]        { def solidify(f: Float => Float) = new Opaque(f(opacity)) }
+final case class FillColor(rgb: Rgba)                   extends FillIndicator with Colorful[FillColor]    { def color(f: Rgba => Rgba) = new FillColor(f(rgb)) }
+final case class FillOpacity(opacity: Float)            extends Fillish       with Ghostly[FillOpacity]   { def solidify(f: Float => Float) = new FillOpacity(f(opacity)) }
+final case object FillNone                              extends FillIndicator                             {}      
+final case class StrokeColor(rgb: Rgba)                 extends Strokish      with Colorful[StrokeColor]  { def color(f: Rgba => Rgba) = new StrokeColor(f(rgb)) }
+final case class StrokeOpacity(opacity: Float)          extends Strokish      with Ghostly[StrokeOpacity] { def solidify(f: Float => Float) = new StrokeOpacity(f(opacity)) }
+final case class StrokeWidth(width: Float)              extends Strokish      with Scalable[StrokeWidth]  { def scale(factor: Float) = new StrokeWidth(width * factor) }
+final case class StrokeJoin(join: Join)                 extends Strokish                                  {}
+final case class StrokeMiter(miter: Float)              extends Strokish                                  {}
+final case class StrokeCap(cap: Cap)                    extends Strokish                                  {}
+final case class FontFace(face: String)                 extends Stylish                                   {}
+final case class FontSize(size: Float)                  extends                    Scalable[FontSize]     { def scale(factor: Float) = new FontSize(factor * size) }
+final case class FontVertical(vertical: Vertical)       extends Stylish                                   {}
+final case class FontHorizontal(horizontal: Horizontal) extends Stylish                                   {}
 
 object Opacity {
-  def apply(opacity: Float) = Style(Set(Opaque(opacity)))
+  def apply(opacity: Float) = Style(List(Opaque(opacity)))
 }
 
 object Fill {
-  val off = Style(Set(FillNone()))
+  val off = Style(List(FillNone))
 
-  def apply(color: Rgba) = Style(Set(FillColor(color)))
-  def alpha(color: Rgba) = Style(Set(FillColor(color), FillOpacity(color.a)))
+  def apply(color: Rgba) = Style(List(FillColor(color)))
+  def alpha(color: Rgba) = Style(List(FillColor(color), FillOpacity(color.a)))
 }
 
 object Stroke {
-  def off = Style(Set(StrokeWidth(0)))
+  def off = Style(List(StrokeWidth(0)))
 
-  def apply(color: Rgba) = Style(Set(StrokeColor(color)))
-  def apply(width: Float) = Style(Set(StrokeWidth(width)))
-  def apply(join: Join) = Style(Set(StrokeJoin(join)))
-  def apply(cap: Cap) = Style(Set(StrokeCap(cap)))
+  def apply(color: Rgba) = Style(List(StrokeColor(color)))
+  def apply(width: Float) = Style(List(StrokeWidth(width)))
+  def apply(join: Join) = Style(List(StrokeJoin(join)))
+  def apply(cap: Cap) = Style(List(StrokeCap(cap)))
 
-  def apply(color: Rgba, width: Float) = Style(Set(StrokeColor(color), StrokeWidth(width)))
-  def apply(color: Rgba, join: Join) = Style(Set(StrokeColor(color), StrokeJoin(join)))
-  def apply(color: Rgba, cap: Cap) = Style(Set(StrokeColor(color), StrokeCap(cap)))
-  def apply(width: Float, join: Join) = Style(Set(StrokeWidth(width), StrokeJoin(join)))
-  def apply(width: Float, cap: Cap) = Style(Set(StrokeWidth(width), StrokeCap(cap)))
-  def apply(join: Join, cap: Cap) = Style(Set(StrokeJoin(join), StrokeCap(cap)))
+  def apply(color: Rgba, width: Float) = Style(List(StrokeColor(color), StrokeWidth(width)))
+  def apply(color: Rgba, join: Join) = Style(List(StrokeColor(color), StrokeJoin(join)))
+  def apply(color: Rgba, cap: Cap) = Style(List(StrokeColor(color), StrokeCap(cap)))
+  def apply(width: Float, join: Join) = Style(List(StrokeWidth(width), StrokeJoin(join)))
+  def apply(width: Float, cap: Cap) = Style(List(StrokeWidth(width), StrokeCap(cap)))
+  def apply(join: Join, cap: Cap) = Style(List(StrokeJoin(join), StrokeCap(cap)))
 
-  def apply(color: Rgba, width: Float, join: Join) = Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(join)))
-  def apply(color: Rgba, width: Float, cap: Cap) = Style(Set(StrokeColor(color), StrokeWidth(width), StrokeCap(cap)))
-  def apply(color: Rgba, join: Join, cap: Cap) = Style(Set(StrokeColor(color), StrokeJoin(join), StrokeCap(cap)))
-  def apply(width: Float, join: Join, cap: Cap) = Style(Set(StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
+  def apply(color: Rgba, width: Float, join: Join) = Style(List(StrokeColor(color), StrokeWidth(width), StrokeJoin(join)))
+  def apply(color: Rgba, width: Float, cap: Cap) = Style(List(StrokeColor(color), StrokeWidth(width), StrokeCap(cap)))
+  def apply(color: Rgba, join: Join, cap: Cap) = Style(List(StrokeColor(color), StrokeJoin(join), StrokeCap(cap)))
+  def apply(width: Float, join: Join, cap: Cap) = Style(List(StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
 
   def apply(color: Rgba, width: Float, join: Join, cap: Cap) =
-    Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
+    Style(List(StrokeColor(color), StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
 
-  def alpha(color: Rgba) = Style(Set(StrokeColor(color), StrokeOpacity(color.a)))
-  def alpha(color: Rgba, width: Float) = Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width)))
-  def alpha(color: Rgba, join: Join) = Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeJoin(join)))
-  def alpha(color: Rgba, cap: Cap) = Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeCap(cap)))
+  def alpha(color: Rgba) = Style(List(StrokeColor(color), StrokeOpacity(color.a)))
+  def alpha(color: Rgba, width: Float) = Style(List(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width)))
+  def alpha(color: Rgba, join: Join) = Style(List(StrokeColor(color), StrokeOpacity(color.a), StrokeJoin(join)))
+  def alpha(color: Rgba, cap: Cap) = Style(List(StrokeColor(color), StrokeOpacity(color.a), StrokeCap(cap)))
   def alpha(color: Rgba, width: Float, join: Join) =
-    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeJoin(join)))
+    Style(List(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeJoin(join)))
   def alpha(color: Rgba, width: Float, cap: Cap) =
-    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeCap(cap)))
+    Style(List(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeCap(cap)))
   def alpha(color: Rgba, join: Join, cap: Cap) =
-    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeJoin(join), StrokeCap(cap)))
+    Style(List(StrokeColor(color), StrokeOpacity(color.a), StrokeJoin(join), StrokeCap(cap)))
   def alpha(color: Rgba, width: Float, join: Join, cap: Cap) =
-    Style(Set(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
+    Style(List(StrokeColor(color), StrokeOpacity(color.a), StrokeWidth(width), StrokeJoin(join), StrokeCap(cap)))
 
-  def miter(limit: Float) = Style(Set(StrokeJoin(Join.Miter), StrokeMiter(limit)))
-  def miter(color: Rgba, limit: Float) = Style(Set(StrokeColor(color), StrokeJoin(Join.Miter), StrokeMiter(limit)))
-  def miter(width: Float, limit: Float) = Style(Set(StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit)))
-  def miter(limit: Float, cap: Cap) = Style(Set(StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
+  def miter(limit: Float) = Style(List(StrokeJoin(Join.Miter), StrokeMiter(limit)))
+  def miter(color: Rgba, limit: Float) = Style(List(StrokeColor(color), StrokeJoin(Join.Miter), StrokeMiter(limit)))
+  def miter(width: Float, limit: Float) = Style(List(StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit)))
+  def miter(limit: Float, cap: Cap) = Style(List(StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
   def miter(color: Rgba, width: Float, limit: Float) =
-    Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit)))
+    Style(List(StrokeColor(color), StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit)))
   def miter(color: Rgba, limit: Float, cap: Cap) =
-    Style(Set(StrokeColor(color), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
+    Style(List(StrokeColor(color), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
   def miter(width: Float, limit: Float, cap: Cap) =
-    Style(Set(StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
+    Style(List(StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
   def miter(color: Rgba, width: Float, limit: Float, cap: Cap) =
-    Style(Set(StrokeColor(color), StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
+    Style(List(StrokeColor(color), StrokeWidth(width), StrokeJoin(Join.Miter), StrokeMiter(limit), StrokeCap(cap)))
 }
 
 object Font {
-  def apply(face: String) = Style(Set(FontFace(face)))
-  def apply(size: Float) = Style(Set(FontSize(size)))
-  def apply(horizontal: Horizontal) = Style(Set(FontHorizontal(horizontal)))
-  def apply(vertical: Vertical) = Style(Set(FontVertical(vertical)))
+  def apply(face: String) = Style(List(FontFace(face)))
+  def apply(size: Float) = Style(List(FontSize(size)))
+  def apply(horizontal: Horizontal) = Style(List(FontHorizontal(horizontal)))
+  def apply(vertical: Vertical) = Style(List(FontVertical(vertical)))
 
-  def apply(face: String, size: Float) = Style(Set(FontFace(face), FontSize(size)))
-  def apply(face: String, horizontal: Horizontal) = Style(Set(FontFace(face), FontHorizontal(horizontal)))
-  def apply(face: String, vertical: Vertical) = Style(Set(FontFace(face), FontVertical(vertical)))
-  def apply(size: Float, horizontal: Horizontal) = Style(Set(FontSize(size), FontHorizontal(horizontal)))
-  def apply(size: Float, vertical: Vertical) = Style(Set(FontSize(size), FontVertical(vertical)))
-  def apply(horizontal: Horizontal, vertical: Vertical) = Style(Set(FontHorizontal(horizontal), FontVertical(vertical)))
+  def apply(face: String, size: Float) = Style(List(FontFace(face), FontSize(size)))
+  def apply(face: String, horizontal: Horizontal) = Style(List(FontFace(face), FontHorizontal(horizontal)))
+  def apply(face: String, vertical: Vertical) = Style(List(FontFace(face), FontVertical(vertical)))
+  def apply(size: Float, horizontal: Horizontal) = Style(List(FontSize(size), FontHorizontal(horizontal)))
+  def apply(size: Float, vertical: Vertical) = Style(List(FontSize(size), FontVertical(vertical)))
+  def apply(horizontal: Horizontal, vertical: Vertical) = Style(List(FontHorizontal(horizontal), FontVertical(vertical)))
 
   def apply(face: String, size: Float, horizontal: Horizontal) =
-    Style(Set(FontFace(face), FontSize(size), FontHorizontal(horizontal)))
+    Style(List(FontFace(face), FontSize(size), FontHorizontal(horizontal)))
   def apply(face: String, size: Float, vertical: Vertical) =
-    Style(Set(FontFace(face), FontSize(size), FontVertical(vertical)))
+    Style(List(FontFace(face), FontSize(size), FontVertical(vertical)))
   def apply(face: String, horizontal: Horizontal, vertical: Vertical) =
-    Style(Set(FontFace(face), FontHorizontal(horizontal), FontVertical(vertical)))
+    Style(List(FontFace(face), FontHorizontal(horizontal), FontVertical(vertical)))
   def apply(size: Float, horizontal: Horizontal, vertical: Vertical) =
-    Style(Set(FontSize(size), FontHorizontal(horizontal), FontVertical(vertical)))
+    Style(List(FontSize(size), FontHorizontal(horizontal), FontVertical(vertical)))
 
   def apply(face: String, size: Float, horizontal: Horizontal, vertical: Vertical) =
-    Style(Set(FontFace(face), FontSize(size), FontHorizontal(horizontal), FontVertical(vertical)))
+    Style(List(FontFace(face), FontSize(size), FontHorizontal(horizontal), FontVertical(vertical)))
 }
 
-final case class Style(elements: Set[Stylish], off: Boolean = false) extends Scalable[Style] with Colorful[Style] with Ghostly[Style] {
-  def listed = elements.toList
-
+final case class Style(elements: List[Stylish]) extends Scalable[Style] with Colorful[Style] with Ghostly[Style] {
   def opacity = {
-    val relevant = elements.collect{ case e: Ghostly[_] if !e.off => e }
+    val relevant = elements.collect{ case e: Ghostly[_] => e }
     if (relevant.isEmpty) 1f
     else if (relevant.size == 1) relevant.head.opacity
     else {
@@ -250,116 +260,66 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
     }
   }
   def rgb = {
-    val relevant = elements.collect{ case c: Colorful[_] if !c.off => c.rgb }
+    val relevant = elements.collect{ case c: Colorful[_] => c.rgb }
     if (relevant.isEmpty) Rgba.Black
     else if (relevant.size == 1) relevant.head
     else relevant.toArray.map(c => Array(c.r, c.g, c.b)).transpose.map(_.sum / relevant.size) match {
       case Array(r, g, b) => Rgba(r, g, b, 1)
     }
   }
-  def category = 0
-  def toOff = if (off) this else new Style(elements, true)
-  def toOn = if (off) new Style(elements, false) else this
-  def toggle = if (off) toOn else toOff
 
-  def scale(factor: Float): Style = new Style(
-    elements.map{
-      case sc: Scalable[_] => sc.scale(factor)
-      case e               => e
-    },
-    off
-  )
-  def colorize(f: Rgba => Rgba): Style = new Style(
-    elements.map{
-      case cf: Colorful[_] => cf.colorize(f)
-      case e               => e
-    },
-    off
-  )
-  def luminize(f: Float => Float): Style = new Style(
-    elements.map{
-      case gh: Ghostly[_] => gh.luminize(f)
-      case e              => e
-    },
-    off
-  )
+  def scale(factor: Float): Style = new Style(elements.map{ case sc: Scalable[_] => sc.scale(factor); case e => e })
+
+  def color(f: Rgba => Rgba): Style = new Style(elements.map{ case cf: Colorful[_] => cf.color(f); case e => e })
+
+  def solidify(f: Float => Float): Style = new Style(elements.map{ case gh: Ghostly[_] => gh.solidify(f); case e => e })
+
   def fade(f: Float => Float): Style =
-    if (elements.count{ case g: Ghostly[_] => true; case _ => false } == 1) luminize(f)
-    else this + elements.collectFirst{ case o: Opaque => o.luminize(f) }.getOrElse(Opaque(f(1)))
+    if (elements.count{ case g: Ghostly[_] => true; case _ => false } == 1) solidify(f)
+    else this + elements.collectFirst{ case o: Opaque => o.solidify(f) }.getOrElse(Opaque(f(1)))
 
   def +(s: Stylish) = 
-    new Style((if (elements.exists(_.category == s.category)) elements.filter(_.category != s.category) else elements) + s, off)
-  def -(s: Stylish) =
-    if (!elements.exists(_.category == s.category)) this
-    else new Style(elements.filter(_.category != s.category), off)
-  def ++(style: Style) = 
-    if (off != style.off) { if (off) style else this }
-    else new Style((listed ++ style.listed).groupBy(_.category).map(_._2.last).toSet, off)
-  def map(f: Stylish => Stylish) = {
-    val es = elements.map(f)
-    if (es.map(_.category).size == es.size) new Style(es, off)
-    else new Style(es.toList.groupBy(_.category).map{ case (_, vs) => vs.last }.toSet, off)
-  }
-  def flatMap(f: Stylish => Style) = {
-    val es = elements.flatMap{ e => val x = f(e); if (x.off) Set.empty[Stylish] else x.elements }
-    if (es.map(_.category).size == es.size) new Style(es, off)
-    else new Style(es.toList.groupBy(_.category).map{ case (_, vs) => vs.last }.toSet, off)
-  }
-  def collect(pf: PartialFunction[Stylish, Stylish]) = {
-    val es = elements.collect(pf)
-    if (es == elements) this
-    else if (es.map(_.category).size == es.size) new Style(es, off)
-    else new Style(es.toList.groupBy(_.category).map{ case (_, vs) => vs.last }.toSet, off)
-  }
+    new Style(Stylish.unique(s :: elements))
+
+  def ++(style: Style) = new Style(Stylish.unique(style.elements, elements))
+
+  def map(f: Stylish => Stylish) = new Style(Stylish.unique(elements.map(f)))
+
+  def flatMap(f: Stylish => Style) = new Style(Stylish.unique(elements.flatMap{ e => f(e).elements }))
+
+  def collect(pf: PartialFunction[Stylish, Stylish]) = new Style(Stylish.unique(elements.collect(pf)))
+
   def filter(p: Stylish => Boolean) = {
     val es = elements.filter(p)
-    if (es == elements) this else new Style(es, off)
+    if (es == elements) this else new Style(es)
   }
+
   def withFilter(p: Stylish => Boolean) = filter(p)
+
   def foreach[U](f: Stylish => U) { elements.foreach(f) }
-  def keep(p: Stylish => Boolean) = new Style(elements.map(e => if (p(e)) e else e.toOff), off)
-  def enable(p: Stylish => Boolean) = new Style(elements.map(e => if (p(e)) e.toOn else e), off)
 
   def shapely: Style =
-    new Style(elements.filter{ e => e match { case _: Strokish[_] | _: Fillish[_] | _: Opaque => !e.off; case _ => false } }, off)
+    new Style(elements.filter{ e => e match { case _: Strokish | _: Fillish | _: Opaque => true; case _ => false } })
 
   def filly: Style =
-    new Style(elements.filter{ e => e match { case _: Fillish[_] | _: Opaque => !e.off; case _ => false } }, off)
+    new Style(elements.filter{ e => e match { case _: Fillish | _: Opaque => true; case _ => false } })
 
   def stroky: Style =
-    new Style(elements.filter{ e => e match { case _: Strokish[_] | _: Opaque => !e.off; case _ => false } } + FillNone(), off)
+    new Style(Stylish.unique(FillNone :: elements.filter{ e => e match { case _: Strokish | _: Opaque => true; case _ => false } }))
 
-  def unfilled: Style =
-    new Style(elements + FillNone(), off)
+  def unfilled: Style = this + FillNone
 
   def explicitFillOnly = 
-    if (elements.exists{ case f: Fillish[_] if !f.off => true; case _ => false }) this
-    else new Style(elements + FillNone(), off)
+    if (elements.exists{ case f: Fillish => true; case _ => false }) this
+    else this + FillNone
 
   def unstroked: Style =
-    new Style(elements.filter{ e => e match { case _: Strokish[_] => false; case _ => !e.off } }, off)
-
-  def common(that: Style): Style =
-    if (off != that.off) Style(Set())
-    else new Style((listed ++ that.listed).groupBy(_.category).collect{ case (_, x :: y :: Nil) if (x == y) => x }.toSet, off)
-
-  def unique(that: Style): (Style, Style) =
-    if (off != that.off) (this, that)
-    else {
-      val thiscat = elements.map(_.category)
-      val thatcat = that.elements.map(_.category)
-      val shared = thiscat & thatcat
-      val sharethis = elements.filter(e => shared(e.category)).map(e => e.category -> e).toMap
-      val sharethat = that.elements.filter(e => shared(e.category)).map(e => e.category -> e).toMap
-      ( new Style(elements.filterNot(e => shared(e.category) && e == sharethat(e.category))),
-        new Style(that.elements.filterNot(e => shared(e.category) && e == sharethis(e.category)))
-      )
-    }
+    new Style(elements.filter{ e => e match { case _: Strokish => false; case _ => true } })
 
   def generally: Style = {
     val o = opacity
-    val es = elements.collect[Stylish, Set[Stylish]]{
-      case fn: FillNone => fn
+    val es = elements.collect[Stylish, List[Stylish]]{
+      case FillNone => FillNone
       case sj: StrokeJoin => sj
       case sm: StrokeMiter => sm
       case sc: StrokeCap => sc
@@ -367,25 +327,24 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
       case fv: FontVertical => fv
       case fh: FontHorizontal => fh
     }
-    new Style(es + Opaque(o), off)
+    new Style(Stylish.unique(Opaque(o) :: es))
   }
 
   def specifically: Style = {
     val o = opacity
-    val es = elements.collect[Stylish, Set[Stylish]]{
+    val es = elements.collect[Stylish, List[Stylish]]{
       case fc: FillColor => fc
-      case fo: FillOpacity if (fo.opacity < o && !(fo.opacity closeTo o)) => fo.luminize(_ / o)
+      case fo: FillOpacity if (fo.opacity < o && !(fo.opacity closeTo o)) => fo.solidify(_ / o)
       case sc: StrokeColor => sc
-      case so: StrokeOpacity if (so.opacity < o && !(so.opacity closeTo o)) => so.luminize(_ / o)
+      case so: StrokeOpacity if (so.opacity < o && !(so.opacity closeTo o)) => so.solidify(_ / o)
       case sw: StrokeWidth => sw
       case fs: FontSize => fs
     }
-    new Style(es, off)
+    new Style(es)
   }
 }
 object Style {
-  val empty = new Style(Set.empty)
-  val off = new Style(Set.empty, true)
+  val empty = new Style(Nil)
 }
 
 
