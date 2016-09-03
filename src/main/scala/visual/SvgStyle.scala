@@ -371,7 +371,7 @@ object Magnification {
         var m = 0.0
         var i = 0
         while (i < vs.length) { m += xf.mag(Vc from vs(i)); i += 1 }
-        new Magnification(f((m / math.max(1, vs.length)).toFloat))
+        new Magnification(f((m / math.max(1, i)).toFloat))
     }
   def from(mag: Option[Float => Float], x0: Float, x1: Float) =
     mag match {
