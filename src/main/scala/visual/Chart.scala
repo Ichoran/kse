@@ -145,7 +145,7 @@ package chart {
     }
   }
 
-  final case class Spider(samples: Array[(Est, Est)], p: Float, style: Style) extends Shown {
+  final case class Spider(samples: Array[(Est, Est)], p: Float, style: Style, legs: Option[Style] = None, body: Option[Style] = None) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
       val sigmas = pSigma2D(p)
       val centers = samples.map{ case (ex, ey) => Vc.from(ex.mean, ey.mean).underlying }
@@ -168,7 +168,24 @@ package chart {
       }
       val totalN = (tex.n + tey.n)/2
       val solidDensity = totalN / (tex.error * tey.error)
-      val densities = samples.map{ case (ex, ey) => (((ex.n + ey.n)/(2 * ex.error * ey.error))/solidDensity).clip(0.01, 1) }
+      val densities = samples.map{ case (ex, ey) => (((ex.n + ey.n)/(2 * ex.error * ey.error))/solidDensity).clip(0.01, 0.7) }
+      val linestyle = legs.getOrElse{
+        style.elements.collect{ case sw: StrokeWidth => sw; case sc: StrokeColor => sc }.toVector.fn{ es =>
+          if (es.length == 2) style
+          else {
+            val fc: Option[Stylish] = style.elements.collectFirst{ case FillColor(c, false) => StrokeColor(c) }
+            val fo: Option[Stylish] = style.elements.collectFirst{ case FillOpacity(o, false) => StrokeOpacity(o) }
+            val sw: Option[Stylish] = es.collectFirst{ case x: StrokeWidth => x }
+            val sc: Option[Stylish] = es.collectFirst{ case x: StrokeColor => x }
+            val so: Option[Stylish] = style.elements.collectFirst{ case x: StrokeOpacity => x }
+            println(sc)
+            println(fc)
+            style ++ 
+            Style((sw.getOrElse(StrokeWidth(1/myMag.value)) :: sc.orElse(fc).toList ::: so.orElse(fo).toList).toSet)
+          }
+        }.stroky
+      }
+      val centerstyle = body.map(_.explicitFillOnly).getOrElse(linestyle)
       Vector(Indent(s"<g${showWith(_.generally)}>")) ++
       centers.indices.map{ i =>
         val c = Vc from centers(i)
@@ -187,7 +204,17 @@ package chart {
           Indent(f"<ellipse${fm.vquote(uc, "cx", "cy")}${fm.vquote(er, "rx", "ry")}$rotation${showWith(_.fade(fader))}/>", 1)
         }
       }.toVector ++
-      Vector(Indent("</g>"))
+      {
+        val ut = xform(Vc.from(tex.value, tey.value))
+        centers.indices.map{ i =>
+          val c = Vc from centers(i)
+          Indent(f"<path d=${q}M${fm(xform(c))} L${fm(ut)}${q}${showWith(_ => linestyle)}/>", 1)
+        }.toVector
+      } ++
+      Vector(
+        Indent(f"<ellipse${fm.vquote(xform(Vc.from(tex.value, tey.value)), "cx", "cy")}${fm.vquote(Vc.from(tex.error, tey.error)*sigmas, "rx", "ry")}${showWith(_ => centerstyle)}/>", 1),
+        Indent("</g>")
+      )
     }
   }
 

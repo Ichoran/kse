@@ -332,6 +332,10 @@ final case class Style(elements: Set[Stylish], off: Boolean = false) extends Sca
   def unfilled: Style =
     new Style(elements + FillNone(), off)
 
+  def explicitFillOnly = 
+    if (elements.exists{ case f: Fillish[_] if !f.off => true; case _ => false }) this
+    else new Style(elements + FillNone(), off)
+
   def unstroked: Style =
     new Style(elements.filter{ e => e match { case _: Strokish[_] => false; case _ => !e.off } }, off)
 
