@@ -197,7 +197,7 @@ object GrokNumber {
           nbits += 1
         }
         if (d != java.math.BigDecimal.ZERO) nbits += 1
-        a(i) = (l.toShort packSS nbits.toShort).I
+        a(i) = (l.toShort bincat nbits.toShort).I
         a(i+1) = bits.and(THIRTYBITS).intValue
         a(i+2) = bits.shiftRight(30).and(THIRTYBITS).intValue
         a(i+3) = bits.shiftRight(60).and(THIRTYBITS).intValue
@@ -916,7 +916,7 @@ abstract class Grok {
     var db = 0L
     val arr = new Array[Int](6)
     val k = 5*(308 - zex)
-    val info = computedClosestLLtoDecimal(k).inInt
+    val info = computedClosestLLtoDecimal(k).asShorts
     arr(0) = computedClosestLLtoDecimal(k+1)
     arr(1) = computedClosestLLtoDecimal(k+2)
     arr(2) = computedClosestLLtoDecimal(k+3)
@@ -962,7 +962,7 @@ abstract class Grok {
     j = bigAddInPlace(arr, j, 2)
     while (j > 0 && arr(j-1) == 0) j -= 1
     val k = 5*(308 - (lex - nd + 1))
-    val info = computedClosestLLtoDecimal(k).inInt
+    val info = computedClosestLLtoDecimal(k).asShorts
     val j0 = j
     val jN = j + math.min(4, (info.s1+29)/30)
     while (j < jN) { arr(j) = computedClosestLLtoDecimal(k+1+j-j0); j += 1 }

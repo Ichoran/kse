@@ -361,8 +361,7 @@ extends Grok {
   final def indexTok: Long = {
     val l = peekIndices
     if (l != -1) {
-      val x = new LongAsBox(l)
-      i = x.i1
+      i = l.asInts.i1
       ready = 0
     }
     l
@@ -399,14 +398,14 @@ extends Grok {
 
   final def peekIndices: Long = {
     val j = Delimiter.zero.not(buffer, i, iN)
-    if (j < 0) -1L else (i packII j).L
+    if (j < 0) -1L else (i bincat j).L
   }
 
   def peekTok: String = {
     val l = peekIndices
     if (l == -1) null
     else {
-      val x = new LongAsBox(l)
+      val x = l.asInts
       unencodedString(x.i0, x.i1 - x.i0)
     }
   }
