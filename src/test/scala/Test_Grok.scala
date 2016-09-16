@@ -677,7 +677,7 @@ object Test_Grok extends Test_Kse {
     val g = Grok text "initial input".getBytes
     g{ implicit fail => (g.tok, g.input("input finalized".getBytes, 6, 11).tok) } =?= Yes(("initial", "final"))
   }
-
+  
   def main(args: Array[String]) { typicalMain(args) }
 }
 

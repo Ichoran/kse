@@ -459,7 +459,7 @@ package packed {
   }
 
   object Bytes {
-    def apply(b0: Byte, b1: Byte) = new Bytex2(((b0 & 0xFF) | ((b1 << 8) & 0xFF)).toShort)
+    def apply(b0: Byte, b1: Byte) = new Bytex2(((b0 & 0xFF) | ((b1 & 0xFF) << 8 )).toShort)
     def apply(b0: Byte, b1: Byte, b2: Byte, b3: Byte) =
       new Bytex4((b0 & 0xFF) | ((b1 & 0xFF) << 8) | ((b2 & 0xFF) << 16) | (b3 << 24))
     def apply(b0: Byte, b1: Byte, b2: Byte, b3: Byte, b4: Byte, b5: Byte, b6: Byte, b7: Byte) =

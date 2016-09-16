@@ -22,7 +22,7 @@ object Test_Packed extends Test_Kse {
     }
   }
   
-  def test_short = {
+  def test_short_b =
     (0 to 255).map(_.toByte).forall(x => (x <> 0).S == (x&0xFF)) &&
     (0 to 65535).map(_.toShort).forall{ s =>
       val x = s.asBits
@@ -44,16 +44,15 @@ object Test_Packed extends Test_Kse {
       (0 to 15).forall{ y => (0 to 12 by 2).forall{ k =>
         x.bitTo(k)((y&1) != 0).bitTo(k+1)((y&2) != 0).bitTo(k+2)((y&4) != 0).bitTo(k+3)((y&8) != 0).S == x.bitsTo(k, 4)(y.toShort).S
       }}
-    }
+    } &&
     (0 to 65535).map(_.toShort).forall{ s =>
       val x = s.asBytes
       x.S == s && x.C == s.toChar &&
+      x.swapB.S == x.b1To(x.b0).b0To(x.b1).S &&
       (x.b0 <> x.b1).S == s && (0: Short).asBytes.b0To(x.b0).b1To(x.b1).S == s &&
-      x.swapB == x.b1To(x.b0).b0To(x.b1).S &&
       (x.b0 & 0xFF) == (s & 0xFF) && (x.b1 & 0xFF) == ((s >>> 8) & 0xFF) &&
-      x.b1To(0).S == (x.b0 & 0xFF) && (x.b1To(-1).S & 0xFFFF) == (0xFF00 | (x.b0 & 0xFF))
+      x.b1To(0).S == (x.b0 & 0xFF) && (x.b1To(-1).S & 0xFFFF) == (0xFF00 | (x.b0 & 0xFF))      
     }
-  }
   
   def test_int = {
     val rng = new scala.util.Random(8917561)

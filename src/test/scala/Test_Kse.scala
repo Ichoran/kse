@@ -66,7 +66,7 @@ trait Test_Kse { self =>
           u.foreach(println)
           println
         }
-        println(s"${v.length} failures.")
+        println(s"${v.length} failures in ${tidyClassName(getClass)}.")
         sys.exit(1)
     }
   }
