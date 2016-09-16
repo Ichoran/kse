@@ -14,7 +14,12 @@ publishArtifact in Test := false
 pomExtra := (
   <url>http://www.github.com/ichoran</url>
   <licenses>
-    <license><name>BSD 3-clause</name><url>https://opensource.org/licenses/BSD-3-Clause</url><distribution>repo</distribution></license>
+    <license>
+      <name>BSD 3-clause</name>
+      <url>https://opensource.org/licenses/BSD-3-Clause</url>
+      <distribution>repo</distribution>
+      <comments>Copyright 2011-2016 by Rex Kerr, HHMI Janelia, UC San Francisco, and Calico Life Sciences.</comments>
+    </license>
   </licenses>
   <scm>
     <url>git@github.com:ichoran/kse.git</url>
@@ -32,7 +37,7 @@ pomExtra := (
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.11.7",
-  version := "0.5-SNAPSHOT",
+  version := "0.5.0",
   scalacOptions += "-feature",
   scalacOptions += "-deprecation"
 )
