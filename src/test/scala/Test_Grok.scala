@@ -456,7 +456,7 @@ object Test_Grok extends Test_Kse {
     validTokens.forall{ s =>
       val g = mkGrok(s)
       val h = mkGrok(s)
-      Iterator.continually(g.indexTok).takeWhile(_ != -1L).forall{ l => Some(s.substring(l.asInts.i0, l.asInts.i1)) == h{ implicit fail => h.tok }.toOption } &&
+      Iterator.continually(g.indexTok).takeWhile(_ != -1L).forall{ l => Some(s.substring(l.asInts.i0, l.asInts.i1)) =?= h{ implicit fail => h.tok }.toOption } &&
       h{ implicit fail => h.tok }.isNo(h, e.tok, e.end)
     }
   }

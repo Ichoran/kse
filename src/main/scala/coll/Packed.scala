@@ -464,9 +464,9 @@ package packed {
       new Bytex4((b0 & 0xFF) | ((b1 & 0xFF) << 8) | ((b2 & 0xFF) << 16) | (b3 << 24))
     def apply(b0: Byte, b1: Byte, b2: Byte, b3: Byte, b4: Byte, b5: Byte, b6: Byte, b7: Byte) =
       new Bytex8(
-        (b0.toLong & 0xFF) | ((b1.toLong & 0xFF) << 8) | ((b2.toLong & 0xFF) << 16) | ((b3.toLong & 0xFF) << 24) |
-        ((b4.toLong & 0xFF) << 32) | ((b5.toLong & 0xFF) << 40) | ((b6.toLong & 0xFF) << 48) | (b7.toLong << 56)
-    )
+        (b0 & 0xFFL) | ((b1 & 0xFFL) << 8) | ((b2 & 0xFFL) << 16) | ((b3 & 0xFFL) << 24) |
+        ((b4 & 0xFFL) << 32) | ((b5 & 0xFFL) << 40) | ((b6 & 0xFFL) << 48) | ((b7 & 0xFFL) << 56)
+      )
   }
 
   final class Shortx2(val I: Int) extends AnyVal {
@@ -507,7 +507,7 @@ package packed {
   object Shorts {
     def apply(s0: Short, s1: Short) = new Shortx2((s0 & 0xFFFF) | (s1 << 16))
     def apply(s0: Short, s1: Short, s2: Short, s3: Short) =
-      new Shortx4((s0.toLong & 0xFFFF) | ((s1.toLong & 0xFFFF) << 16) | ((s2.toLong & 0xFFFF) << 32) | (s2.toLong << 48))
+      new Shortx4((s0.toLong & 0xFFFF) | ((s1.toLong & 0xFFFF) << 16) | ((s2.toLong & 0xFFFF) << 32) | (s3.toLong << 48))
   }
 
   final class Charx2(val I: Int) extends AnyVal {
@@ -548,14 +548,14 @@ package packed {
   object Chars {
     def apply(c0: Char, c1: Char) = new Charx2((c0 & 0xFFFF) | (c1 << 16))
     def apply(c0: Char, c1: Char, c2: Char, c3: Char) =
-      new Charx4((c0.toLong & 0xFFFF) | ((c1.toLong & 0xFFFF) << 16) | ((c2.toLong & 0xFFFF) << 32) | (c2.toLong << 48))
+      new Charx4((c0.toLong & 0xFFFF) | ((c1.toLong & 0xFFFF) << 16) | ((c2.toLong & 0xFFFF) << 32) | (c3.toLong << 48))
   }
 
   final class Intx2(val L: Long) extends AnyVal {
     @inline def i0 = (L & 0xFFFFFFFFL).toInt
     @inline def i1 = (L >>> 32).toInt
     @inline def i0To(i: Int) = new Intx2((L&0xFFFFFFFF00000000L) | (i&0xFFFFFFFFL))
-    @inline def i1To(i: Int) = new Intx2((L&0xFFFFFFFFL) | (i.toLong<<32))
+    @inline def i1To(i: Int) = new Intx2((L&0xFFFFFFFFL) | (i.toLong << 32))
     @inline def swapI = new Intx2((L >>> 32) | (L << 32))
 
     @inline def asBits = new Bitx64(L)
@@ -567,7 +567,7 @@ package packed {
   }
 
   object Ints {
-    def apply(i0: Int, i1: Int) = new Intx2((i0 & 0xFFFFFFFFL) | (i0.toLong << 32))
+    def apply(i0: Int, i1: Int) = new Intx2((i0 & 0xFFFFFFFFL) | (i1.toLong << 32))
   }
 
   final class Floatx2(val L: Long) extends AnyVal {

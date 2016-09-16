@@ -750,7 +750,7 @@ extends Grok {
   final def indexTok: Long = {
     val l = peekIndices
     if (l != -1) {
-      l.asInts.i1
+      i = l.asInts.i1
       ready = 0
     }
     l

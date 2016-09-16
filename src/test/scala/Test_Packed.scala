@@ -3,6 +3,8 @@ package kse.tests
 import kse.coll.packed._
 
 object Test_Packed extends Test_Kse {
+  def equivalent_floats(f: Float, g: Float) = (f.isNaN && g.isNaN) || f == g
+
   def test_byte = {
     (0 to 255).map(_.toByte).forall{ b =>
       val x = b.asBits
@@ -22,7 +24,7 @@ object Test_Packed extends Test_Kse {
     }
   }
   
-  def test_short_b =
+  def test_short =
     (0 to 255).map(_.toByte).forall(x => (x <> 0).S == (x&0xFF)) &&
     (0 to 65535).map(_.toShort).forall{ s =>
       val x = s.asBits
@@ -51,7 +53,10 @@ object Test_Packed extends Test_Kse {
       x.swapB.S == x.b1To(x.b0).b0To(x.b1).S &&
       (x.b0 <> x.b1).S == s && (0: Short).asBytes.b0To(x.b0).b1To(x.b1).S == s &&
       (x.b0 & 0xFF) == (s & 0xFF) && (x.b1 & 0xFF) == ((s >>> 8) & 0xFF) &&
-      x.b1To(0).S == (x.b0 & 0xFF) && (x.b1To(-1).S & 0xFFFF) == (0xFF00 | (x.b0 & 0xFF))      
+      x.b1To(0).S == (x.b0 & 0xFF) && (x.b1To(-1).S & 0xFFFF) == (0xFF00 | (x.b0 & 0xFF)) &&
+      s == Bytes((s & 0xFF).toByte, ((s >>> 8) & 0xFF).toByte).S &&
+      s == ((s & 0xFF).toByte <> ((s >>> 8) & 0xFF).toByte).S &&
+      s == ((s & 0xFF).toByte bincat ((s >>> 8) & 0xFF).toByte).S
     }
   
   def test_int = {
@@ -63,10 +68,10 @@ object Test_Packed extends Test_Kse {
     ) ++ List.fill(2048)(rng.nextInt)
     
     (0 to 65535).map(_.toChar).forall(x => Chars(x, 0.toChar).I == x) &&
-    (0 to 65535).map(_.toShort).forall{ x => Shorts(x, 0).I == (x&0xFFFF) } &&
+    (0 to 65535).map(_.toShort).forall{ x => Shorts(x, 0).I == (x & 0xFFFF) } &&
     xs.forall{ i =>
       val x = i.asBits
-      x.I == i && x.F.asBits.I == i && x.F.asBits.F == x.F &&
+      x.I == i && x.F.asBits.I == i && equivalent_floats(x.F.asBits.F, x.F) &&
       x.bit0 == x.bit(0) && x.bit1 == x.bit(1) && x.bit2 == x.bit(2) && x.bit3 == x.bit(3) && x.bit4 == x.bit(4) && x.bit5 == x.bit(5) && x.bit6 == x.bit(6) && x.bit7 == x.bit(7) &&
       x.bit8 == x.bit(8) && x.bit9 == x.bit(9) && x.bit10 == x.bit(10) && x.bit11 == x.bit(11) && x.bit12 == x.bit(12) && x.bit13 == x.bit(13) && x.bit14 == x.bit(14) && x.bit15 == x.bit(15) &&
       x.bit16 == x.bit(16) && x.bit17 == x.bit(17) && x.bit18 == x.bit(18) && x.bit19 == x.bit(19) && x.bit20 == x.bit(20) && x.bit21 == x.bit(21) && x.bit22 == x.bit(22) && x.bit23 == x.bit(23) &&
@@ -93,34 +98,42 @@ object Test_Packed extends Test_Kse {
       }}
     } &&
     xs.forall{ i =>
-      // TODO -- Keep fixing tests from here!!!
       val x = i.asBytes
       x.I == i &&
       x.b0 == (i & 0xFF).toByte && x.b1 == ((i >>> 8) & 0xFF).toByte &&
       x.b2 == ((i >>> 16) & 0xFF).toByte && x.b3 == (i >>> 24).toByte &&
       Bytes(x.b0, x.b1, x.b2, x.b3).I == i &&
-      0.asBytes.b0To(x.b0).b1To(x.b1).b2To(x.b2).b3To(x.b3) == i &&
+      0.asBytes.b0To(x.b0).b1To(x.b1).b2To(x.b2).b3To(x.b3).I == i &&
       x.swapBB.I == ((x.b1 <> x.b0).S <> (x.b3 <> x.b2).S).I &&
-      x.reverseB.I == Bytes(x.b3, x.b2, x.b1, x.b0) &&
-      x.rotlB.I == Bytes(x.b3, x.b0, x.b1, x.b2) &&
-      x.rotrB.I == Bytes(x.b1, x.b2, x.b3, x.b0)
-    }
+      x.reverseB.I == Bytes(x.b3, x.b2, x.b1, x.b0).I &&
+      x.rotlB.I == Bytes(x.b3, x.b0, x.b1, x.b2).I &&
+      x.rotrB.I == Bytes(x.b1, x.b2, x.b3, x.b0).I
+    } &&
     xs.forall{ i =>
       val x = i.asShorts
       x.I == i &&
       (x.s0 & 0xFFFF) == (i & 0xFFFF) && (x.s1 & 0xFFFF) == (i >>> 16) &&
       (x.s0 <> x.s1).I == i && 0.asShorts.s0To(x.s0).s1To(x.s1).I == i &&
       x.swapS.I == (x.s1 <> x.s0).I
-    }
+    } &&
     xs.forall{ i =>
       val x = i.asChars
       x.I == i &&
       x.c0 == (i & 0xFFFF) && x.c1 == (i >>> 16) &&
       (x.c0 <> x.c1).I == i && 0.asChars.c0To(x.c0).c1To(x.c1).I == i &&
       x.swapC.I == (x.c1 <> x.c0).I
-    }
+    } &&
+    xs.forall{ i =>
+      i == Bytes((i & 0xFF).toByte, ((i >>> 8) & 0xFF).toByte, ((i >>> 16) & 0xFF).toByte,((i >>> 24) & 0xFF).toByte).I &&
+      i == Shorts((i & 0xFFFF).toShort, (i >>> 16).toShort).I &&
+      i == Chars(i.toChar, (i >>> 16).toChar).I &&
+      i == ((i & 0xFFFF).toShort <> (i >>> 16).toShort).I &&
+      i == ((i & 0xFFFF).toShort bincat (i >>> 16).toShort).I &&
+      i == ((i & 0xFFFF).toChar <> (i >>> 16).toChar).I &&
+      i == ((i & 0xFFFF).toChar bincat (i >>> 16).toChar).I
+    } &&
     List.fill(2048)(rng.nextFloat).forall{ f => 
-      (if (f.isNaN) { f.asBits.F.isNaN } else { f.asBits.F == f }) &&
+      equivalent_floats(f, f.asBits.F) &&
       f.asBits.I == f.asBytes.I && f.asBits.I == f.asShorts.I && f.asBits.I == f.asChars.I
     }
   }
@@ -196,7 +209,7 @@ object Test_Packed extends Test_Kse {
       x.rotlB.L == Bytes(x.b7, x.b0, x.b1, x.b2, x.b3, x.b4, x.b5, x.b6).L &&
       x.rotrB.L == Bytes(x.b1, x.b2, x.b3, x.b4, x.b5, x.b6, x.b7, x.b0).L &&
       x.reverseB.L == Bytes(x.b7, x.b6, x.b5, x.b4, x.b3, x.b2, x.b1, x.b0).L
-    }
+    } &&
     xs.forall{ l =>
       val x = l.asShorts
       x.L == l &&
@@ -209,7 +222,7 @@ object Test_Packed extends Test_Kse {
       x.rotlS.L == Shorts(x.s3, x.s0, x.s1, x.s2).L &&
       x.rotrS.L == Shorts(x.s1, x.s2, x.s3, x.s0).L &&
       x.reverseS.L == Shorts(x.s3, x.s2, x.s1, x.s0).L
-    }
+    } &&
     xs.forall{ l =>
       val x = l.asChars
       x.L == l &&
@@ -222,7 +235,7 @@ object Test_Packed extends Test_Kse {
       x.rotlC.L == Chars(x.c3, x.c0, x.c1, x.c2).L &&
       x.rotrC.L == Chars(x.c1, x.c2, x.c3, x.c0).L &&
       x.reverseC.L == Chars(x.c3, x.c2, x.c1, x.c0).L
-    }
+    } &&
     xs.forall{ l =>
       val x = l.asInts
       x.L == l &&
@@ -230,7 +243,7 @@ object Test_Packed extends Test_Kse {
       (x.i0 <> x.i1).L == Ints(x.i0, x.i1).L &&
       (x.i0 <> x.i1).L == 0L.asInts.i0To(x.i0).i1To(x.i1).L &&
       x.swapI.L == (x.i1 <> x.i0).L
-    }
+    } &&
     xs.forall{ l =>
       val x = l.asFloats
       x.L == l &&
@@ -238,7 +251,21 @@ object Test_Packed extends Test_Kse {
       (x.f0 <> x.f1).L == Floats(x.f0, x.f1).L &&
       (x.f0 <> x.f1).L == 0L.asFloats.f0To(x.f0).f1To(x.f1).L &&
       x.swapF.L == (x.f1 <> x.f0).L
-    }
+    } &&
+    xs.forall{ l =>
+      l == Bytes(
+        (l & 0xFFL).toByte, ((l >>> 8) & 0xFFL).toByte, ((l >>> 16) & 0xFFL).toByte, ((l >>> 24) & 0xFFL).toByte,
+        ((l >>> 32) & 0xFFL).toByte, ((l >>> 40) & 0xFFL).toByte, ((l >>> 48) & 0xFFL).toByte, ((l >>> 56) & 0xFFL).toByte
+      ).L &&
+      l == Shorts((l & 0xFFFFL).toShort, ((l >>> 16) & 0xFFFFL).toShort, ((l >>> 32) & 0xFFFFL).toShort, ((l >>> 48) & 0xFFFFL).toShort).L &&
+      l == Chars((l & 0xFFFFL).toChar, ((l >>> 16) & 0xFFFFL).toChar, ((l >>> 32) & 0xFFFFL).toChar, ((l >>> 48) & 0xFFFFL).toChar).L &&
+      l == Ints((l & 0xFFFFFFFFL).toInt, (l >>> 32).toInt).L &&
+      l == Floats((l & 0xFFFFFFFFL).toInt.asBits.F, (l >>> 32).toInt.asBits.F).L &&
+      l == ((l & 0xFFFFFFFFL).toInt <> (l >>> 32).toInt).L &&
+      l == ((l & 0xFFFFFFFFL).toInt bincat (l >>> 32).toInt).L &&
+      l == ((l & 0xFFFFFFFFL).toInt.asBits.F <> (l >>> 32).toInt.asBits.F).L &&
+      l == ((l & 0xFFFFFFFFL).toInt.asBits.F bincat (l >>> 32).toInt.asBits.F).L
+    } &&
     List.fill(4096)(rng.nextFloat).forall{ f => 
       (f <> 0f).L == Floats(f, 0f).L && (f <> 0f).L == 0L.asFloats.f0To(f).L &&
       (0f <> f).L == Floats(0f, f).L && (0f <> f).L == 0L.asFloats.f1To(f).L
