@@ -11,13 +11,13 @@ abstract class Prng {
   def C: Char = L.toChar
   def I: Int = L.toInt
   def L: Long
-  def F: Float = Prng.uniformFloatFromInt(I)
-  def D: Double = Prng.uniformDoubleFromLong(L)
+  def F: Float = Prng.symmetricFloatFromInt(I)
+  def D: Double = Prng.symmetricDoubleFromLong(L)
   def arrayZ(n: Int): Array[Boolean] = {
     val a = new Array[Boolean](n)
     var i = 0
     var l = 0L
-    while (i < n.length) {
+    while (i < a.length) {
       if ((i & 0x3F) == 0) l = L
       a(i) = ((l & 0x1) != 0)
       l = l >>> 1
@@ -29,7 +29,7 @@ abstract class Prng {
     val a = new Array[Byte](n)
     var i = 0
     var l = 0L
-    while (i < n.length) {
+    while (i < a.length) {
       if ((i & 0x7) == 0) l = L
       a(i) = (l & 0xFF).toByte
       l = l >>> 8
@@ -41,7 +41,7 @@ abstract class Prng {
     val a = new Array[Short](n)
     var i = 0
     var l = 0L
-    while (i < n.length) {
+    while (i < a.length) {
       if ((i & 0x3) == 0) l = L
       a(i) = (l & 0xFFFF).toShort
       l = l >>> 16
@@ -53,7 +53,7 @@ abstract class Prng {
     val a = new Array[Char](n)
     var i = 0
     var l = 0L
-    while (i < n.length) {
+    while (i < a.length) {
       if ((i & 0x3) == 0) l = L
       a(i) = l.toChar
       l = l >>> 16
@@ -64,12 +64,12 @@ abstract class Prng {
   def arrayI(n: Int): Array[Int] = {
     val a = new Array[Int](n)
     var i = 0
-    while (i < n.length) {
+    while (i < a.length) {
       val l = L
       val p = (l & 0xFFFFFFFF).toInt
       a(i) = p
       i += 1
-      if (i < n.length) {
+      if (i < a.length) {
         a(i) = (l >>> 32).toInt
         i += 1
       }
@@ -79,7 +79,7 @@ abstract class Prng {
   def arrayL(n: Int): Array[Long] = {
     val a = new Array[Long](n)
     var i = 0
-    while (i < n.length) {
+    while (i < a.length) {
       a(i) = L
       i += 1
     }
@@ -87,24 +87,24 @@ abstract class Prng {
   }
   def arrayF(n: Int): Array[Float] = {
     val a = new Array[Float](n)
-
-    while (i < n.length) {
+    var i = 0
+    while (i < a.length) {
       val l = L
       val p = (l & 0xFFFFFFFF).toInt
-      a(i) = Prng.uniformFloatFromInt(p)
+      a(i) = Prng.symmetricFloatFromInt(p)
       i += 1
-      if (i < n.length) {
-        a(i) = Prng.uniformFloatFromInt((l >>> 32).toInt)
+      if (i < a.length) {
+        a(i) = Prng.symmetricFloatFromInt((l >>> 32).toInt)
         i += 1
       }
     }
     a 
   }
   def arrayD(n: Int): Array[Double] = {
-    val a = new Array[Long](n)
+    val a = new Array[Double](n)
     var i = 0
-    while (i < n.length) {
-      a(i) = Prng.uniformDoubleFromLong(L)
+    while (i < a.length) {
+      a(i) = Prng.symmetricDoubleFromLong(L)
       i += 1
     }
     a    
@@ -118,10 +118,23 @@ abstract class Prng {
   def setFromClock: Boolean
 }
 object Prng {
-  def uniformFloatFromInt(i: Int): Float = ???
-  def uniformDoubleFromLong(l: Long): Double = {
-    val bits = l >>> 11   // 53 bits
-    ???
+  def symmetricFloatFromInt(i: Int): Float = {
+    val leadingZeros = java.lang.Integer.numberOfLeadingZeros(i)
+    if (leadingZeros <= 22) {
+      val exponent = 126 - leadingZeros
+      val mantissa = ((i >>> 9) << leadingZeros) & 0x003FFFFF
+      java.lang.Float.intBitsToFloat( (exponent << 22) | mantissa )
+    }
+    else 0.001953125f*i + 9.765625E-4f     // Subnormal values aren't symmetric, so we remap them equally spaced between 0 and 1
+  }
+  def symmetricDoubleFromLong(l: Long): Double = {
+    val leadingZeros = java.lang.Long.numberOfLeadingZeros(l)
+    if (leadingZeros <= 52) {
+      val exponent = 1022L - leadingZeros
+      val mantissa = ((l >>> 11) << leadingZeros) & 0x000FFFFFFFFFFFFFL
+      java.lang.Double.longBitsToDouble( (exponent << 52) | mantissa )
+    }
+    else 4.8828125E-4*l + 2.44140625E-4   // Subnormal values aren't symmetric, so we remap them equally spaced between 0 and 1
   }
 }
 
@@ -156,16 +169,30 @@ abstract class PrngState64 extends Prng {
     }
   def setFrom(i: Int): Boolean = { setFromClock; false }
   def setFrom(a: Long, b: Long) = setFrom(a)
-  def setFromClock = setFrom(java.lang.System.nanotime)
+  def setFromClock = setFrom(java.lang.System.nanoTime)
 }
 
 // From public domain code by Sebastiano Vigna
-final class ShiftMix64(state0: Long = java.lang.System.nanotime) extends PrngState64 {
+final class ShiftMix64(state0: Long = java.lang.System.nanoTime) extends PrngState64 {
   private[this] var myState = state0
+  def state64 = myState
+  def setFrom(l: Long): Boolean = { myState = l; true }
   final def L = {
     myState += 0x9E3779B97F4A7C15L;
     var l = (myState ^ (myState >>> 30)) * 0xBF58476D1CE4E5B9L
-    l = (l ^ (l >> 27)) * 0x94D049BB133111EBL
+    l = (l ^ (l >>> 27)) * 0x94D049BB133111EBL
     l ^ (l >>> 31)
+  }
+}
+
+// Algorithm taken from PCG generators by Melissa O'Niell (Apache 2 license); RXS M XS 64 variant (one sequence)
+final class Pcg64(state0: Long = java.lang.System.nanoTime) extends PrngState64 {
+  private[this] var myState = state0
+  def state64 = myState
+  def setFrom(l: Long): Boolean = { myState = l; true }
+  final def L = {
+    myState = (myState * 6364136223846793005L) + 1442695040888963407L
+    val l = ((myState >>> ((myState >>> 59) + 5)) ^ myState) * 0xAEF17502108EF2D9L   // 12605985483714917081 base 10
+    (l >>> 43) ^ l
   }
 }
