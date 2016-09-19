@@ -317,7 +317,6 @@ final case class Style(elements: List[Stylish]) extends Scalable[Style] with Col
     new Style(elements.filter{ e => e match { case _: Strokish => false; case _ => true } })
 
   def generally: Style = {
-    val o = opacity
     val es = elements.collect[Stylish, List[Stylish]]{
       case FillNone => FillNone
       case sj: StrokeJoin => sj
@@ -326,17 +325,17 @@ final case class Style(elements: List[Stylish]) extends Scalable[Style] with Col
       case ff: FontFace => ff
       case fv: FontVertical => fv
       case fh: FontHorizontal => fh
+      case o: Opaque => o
     }
-    new Style(Stylish.unique(Opaque(o) :: es))
+    new Style(es)
   }
 
   def specifically: Style = {
-    val o = opacity
     val es = elements.collect[Stylish, List[Stylish]]{
       case fc: FillColor => fc
-      case fo: FillOpacity if (fo.opacity < o && !(fo.opacity closeTo o)) => fo.solidify(_ / o)
+      case fo: FillOpacity => fo
       case sc: StrokeColor => sc
-      case so: StrokeOpacity if (so.opacity < o && !(so.opacity closeTo o)) => so.solidify(_ / o)
+      case so: StrokeOpacity => so
       case sw: StrokeWidth => sw
       case fs: FontSize => fs
     }
