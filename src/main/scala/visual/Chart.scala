@@ -73,6 +73,13 @@ package chart {
         Indent.V(f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", r * myMag.value)}$show/>")
       }
     }
+    final case class R(c: Vc, r: Vc, style: Style) extends Shown {
+      def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+        val ctr = xform(c)
+        implicit val myMag = Magnification.from(mag, xform, c)
+        Indent.V(f"<rect${fm.vquote(ctr, "x", "y")}${fm.vquote(r * (2*myMag.value), "width", "height")}$show/>")
+      }
+    }
   }
 
 
