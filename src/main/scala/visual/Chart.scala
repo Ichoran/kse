@@ -87,7 +87,7 @@ package chart {
         Indent.V(f"<rect${fm.vquote(ctr, "x", "y")}${fm.vquote(r * (2*myMag.value), "width", "height")}$show/>")
       }
     }
-    final case class ManyC(cs: Array[Long], r: Float, style: Style) extends Shown {
+    final case class ManyC(cs: Array[Long], r: Float, tiled: Boolean, style: Style) extends Shown {
       def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
         var umx, umy, uMx, uMy = 0f
         val us = {
@@ -126,9 +126,14 @@ package chart {
           val top = Vector.newBuilder[Vc]
           b += Indent(f"<g ${showWith(_.generallySolid)}>")
           bsp.forleaves{ (usi, u0, u1) =>
+            val td = u1 - u0
             var j = 0
-            val lim = (1 + 0.5*(u1.x - u0.x)/ur)*(1 + 0.5*(u1.y - u0.y)/ur)/sqrt(alphic)
-            val J = (if (usi.length < lim) 0 else usi.length - math.max(1, lim/2))
+            val lim = 
+              if (tiled) 1 + ((td.x * td.y)/(math.Pi*ur*ur))/sqrt(alphic)
+              else (1 + 0.5*td.x/ur)*(1 + 0.5*td.y/ur)/sqrt(alphic)
+            val J = 
+              if (tiled) (if (usi.length <= 3*lim/2) 0 else usi.length - math.max(1, lim))
+              else (if (usi.length <= lim) 0 else usi.length - math.max(1, lim/2))
             val ex, ey = new EstXM
             while (j < J) {
               val uij = Vc from usi(j)
@@ -138,13 +143,16 @@ package chart {
             }
             val ec = Vc.from((ex.max + ex.min)/2, (ey.max + ey.min)/2)
             val er = Vc.from((ex.max - ex.min)/2, (ey.max - ey.min)/2)
-            val areaRatio = (1 + 0.5*(ex.max - ex.min)/ur)*(1 + 0.5*(ey.max - ey.min)/ur)
+            val areaRatio = 
+              if (tiled) (td.x*td.y)/(math.Pi*ur*ur)
+              else (1 + er.x/ur)*(1 + er.y/ur)
             val densityRatio = J / areaRatio
             if (J > 0) {
               val restyle =
                 if ((densityRatio - 1).abs < 0.05 || !(alphic < 1)) style.specificallyInsubstantial
-                else style.specificallyInsubstantial.solidify(f => if (f <= 0 || f >= 1) f else math.exp(math.log(f)/densityRatio).clip(0,1).toFloat)
-              b += Indent(f"<ellipse${fm.vquote(ec, "cx", "cy")}${fm.vquote(er + ur, "rx", "ry")}${showWith(_ => restyle)}/>")
+                else style.specificallyInsubstantial.solidify(f => if (f <= 0 || f >= 1) f else (1-math.exp(math.log(1-f)*densityRatio)).clip(0,1).toFloat)
+              if (tiled) b += Indent(f"<rect${fm.vquote(u0, "x", "y")}${fm.vquote(td, "width", "height")}${showWith(_ => restyle)}/>",1)
+              else       b += Indent(f"<ellipse${fm.vquote(ec, "cx", "cy")}${fm.vquote(er + ur, "rx", "ry")}${showWith(_ => restyle)}/>", 1)
             }
             while (j < usi.length) {
               top += Vc from usi(j)
