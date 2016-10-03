@@ -73,11 +73,89 @@ package chart {
         Indent.V(f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", r * myMag.value)}$show/>")
       }
     }
+    final case class E(c: Vc, r: Vc, style: Style) extends Shown {
+      def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+        val ctr = xform(c)
+        implicit val myMag = Magnification.from(mag, xform, c)
+        Indent.V(f"<ellipse${fm.vquote(ctr, "cx", "cy")}${fm.vquote(r* myMag.value, "rx", "ry")}$show/>")
+      }      
+    }
     final case class R(c: Vc, r: Vc, style: Style) extends Shown {
       def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
         val ctr = xform(c)
         implicit val myMag = Magnification.from(mag, xform, c)
         Indent.V(f"<rect${fm.vquote(ctr, "x", "y")}${fm.vquote(r * (2*myMag.value), "width", "height")}$show/>")
+      }
+    }
+    final case class ManyC(cs: Array[Long], r: Float, style: Style) extends Shown {
+      def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+        var umx, umy, uMx, uMy = 0f
+        val us = {
+          val result = new Array[Long](cs.length)
+          var i = 0
+          while (i < cs.length) { 
+            val ui = xform(Vc from cs(i))
+            if (i == 0 || ui.x < umx) umx = ui.x
+            if (i == 0 || ui.x > uMx) uMx = ui.x
+            if (i == 0 || ui.y < umy) umy = ui.y
+            if (i == 0 || ui.y > uMy) uMy = ui.y
+            result(i) = ui.underlying
+            i += 1
+          }
+          result
+        }
+        implicit val myMag = Magnification.from(mag, xform, cs)
+        val ur = r * myMag.value
+        val showSpec = showWith(_.specificallyInsubstantial)
+        val fmR = fm("r", ur)
+        if (cs.length < 100) {
+          Indent(f"<g ${showWith(_.generallySolid)}>") +: (
+            us.map{ lu => 
+              val u = Vc from lu
+              Indent(f"<circle${fm.vquote(u, "cx", "cy")}$fmR$showSpec}/>", 1)
+            }.toVector
+          ) :+ Indent("</g>")
+        }
+        else {
+          val alphic = style.opacity
+          val bsp = new BspTree[Long]((1.5*ur).toFloat, (1.5*ur).toFloat, math.ceil(4/alphic.toFloat).toInt, Vc from _)
+          bsp.suggestBounds(umx vc umy, uMx vc uMy)
+          var i = 0
+          while (i < us.length) { bsp += us(i); i += 1 }
+          val b = Vector.newBuilder[Indent]
+          val top = Vector.newBuilder[Vc]
+          b += Indent(f"<g ${showWith(_.generallySolid)}>")
+          bsp.forleaves{ (usi, u0, u1) =>
+            var j = 0
+            val lim = (1 + 0.5*(u1.x - u0.x)/ur)*(1 + 0.5*(u1.y - u0.y)/ur)/sqrt(alphic)
+            println(f"In $u0 $u1 with ${usi.length} points (lim = $lim)")
+            val J = (if (usi.length < lim) 0 else usi.length - math.max(1, lim/2))
+            val ex, ey = new EstXM
+            while (j < J) {
+              val uij = Vc from usi(j)
+              ex += uij.x
+              ey += uij.y
+              j += 1
+            }
+            val ec = Vc.from((ex.max + ex.min)/2, (ey.max + ey.min)/2)
+            val er = Vc.from((ex.max - ex.min)/2, (ey.max - ey.min)/2)
+            val areaRatio = (1 + 0.5*(ex.max - ex.min)/ur)*(1 + 0.5*(ey.max - ey.min)/ur)
+            val densityRatio = J / areaRatio
+            if (J > 0) {
+              val restyle =
+                if ((densityRatio - 1).abs < 0.05 || !(alphic < 1)) style.specificallyInsubstantial
+                else style.specificallyInsubstantial.solidify(f => if (f <= 0 || f >= 1) f else math.exp(math.log(f)/densityRatio).clip(0,1).toFloat)
+              b += Indent(f"<ellipse${fm.vquote(ec, "cx", "cy")}${fm.vquote(er + ur, "rx", "ry")}${showWith(_ => restyle)}/>")
+            }
+            while (j < usi.length) {
+              top += Vc from usi(j)
+              j += 1
+            }
+          }
+          top.result.foreach(uc => b += Indent(f"<circle${fm.vquote(uc, "cx", "cy")}$fmR$showSpec/>", 1))
+          b += Indent("</g>")
+          b.result
+        }
       }
     }
   }

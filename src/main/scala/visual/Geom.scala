@@ -187,7 +187,7 @@ final class BspTree[A: Tag](minx: Float, miny: Float, nmax: Int, coord: A => Vc)
       bigger = new BspTree[A](minx, miny, nmax, coord)
       if (nx > ny) {
         cutOrientation = 1
-        cut = (myMaxX - myMinX)/2
+        cut = (myMaxX + myMinX)/2
         smaller.suggestBounds(myMinX vc myMinY, cut vc myMaxY)
         bigger.suggestBounds(cut vc myMinY, myMaxX vc myMaxY)
         if (nx < 2 && ny < 1) { smaller.cutOrientation = -1; bigger.cutOrientation = -1 }
@@ -200,7 +200,7 @@ final class BspTree[A: Tag](minx: Float, miny: Float, nmax: Int, coord: A => Vc)
       }
       else {
         cutOrientation = 2
-        cut = (myMaxY - myMinY)/2
+        cut = (myMaxY + myMinY)/2
         smaller.suggestBounds(myMinX vc myMinY, myMaxX vc cut)
         bigger.suggestBounds(myMinX vc cut, myMaxX vc myMaxY)
         if (nx < 2 && ny < 1) { smaller.cutOrientation = -1; bigger.cutOrientation = -1 }
@@ -215,20 +215,30 @@ final class BspTree[A: Tag](minx: Float, miny: Float, nmax: Int, coord: A => Vc)
     }
     this
   }
-  def leaf: Option[Array[A]] =
-    if (smaller ne null) None
-    else if (mine eq null) Some(new Array[A](0))
-    else if (myN == mine.length) Some(mine)
-    else {
+  private[this] def compactMine() {
+    if (myN == 0) mine = new Array[A](0)
+    else if ((mine ne null) && myN < mine.length) {
       val less = new Array[A](myN)
       System.arraycopy(mine, 0, less, 0, myN)
       mine = less
-      Some(less)
+    }
+  }
+  def leaf: Option[Array[A]] =
+    if (smaller ne null) None
+    else {
+      compactMine()
+      Some(mine)
     }
   def xSplit: Option[(BspTree[A], Float, BspTree[A])] = if (cutOrientation == 1) Some((smaller, cut, bigger)) else None
   def ySplit: Option[(BspTree[A], Float, BspTree[A])] = if (cutOrientation == 2) Some((smaller, cut, bigger)) else None
   def forleaves[U](f: (Array[A], Vc, Vc) => U) {
-    if (smaller ne null) { smaller.forleaves(f); bigger.forleaves(f) }
-    else f(mine, myMinX vc myMinY, myMaxX vc myMaxY)
+    if (smaller ne null) {
+      smaller.forleaves(f)
+      bigger.forleaves(f)
+    }
+    else {
+      compactMine()
+      f(mine, myMinX vc myMinY, myMaxX vc myMaxY)
+    }
   }
 }

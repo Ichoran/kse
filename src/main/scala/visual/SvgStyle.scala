@@ -330,6 +330,19 @@ final case class Style(elements: List[Stylish]) extends Scalable[Style] with Col
     new Style(es)
   }
 
+  def generallySolid: Style = {
+    val es = elements.collect[Stylish, List[Stylish]]{
+      case FillNone => FillNone
+      case sj: StrokeJoin => sj
+      case sm: StrokeMiter => sm
+      case sc: StrokeCap => sc
+      case ff: FontFace => ff
+      case fv: FontVertical => fv
+      case fh: FontHorizontal => fh
+    }
+    new Style(es)
+  }
+
   def specifically: Style = {
     val es = elements.collect[Stylish, List[Stylish]]{
       case fc: FillColor => fc
@@ -340,6 +353,20 @@ final case class Style(elements: List[Stylish]) extends Scalable[Style] with Col
       case fs: FontSize => fs
     }
     new Style(es)
+  }
+
+  def specificallyInsubstantial: Style = {
+    val es = elements.collect[Stylish, List[Stylish]]{
+      case fc: FillColor => fc
+      case fo: FillOpacity => fo
+      case sc: StrokeColor => sc
+      case so: StrokeOpacity => so
+      case sw: StrokeWidth => sw
+      case fs: FontSize => fs
+      case o: Opaque => o
+    }
+    new Style(es)
+
   }
 }
 object Style {
