@@ -879,7 +879,16 @@ package chart {
       new Assembly(0 vc 0, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
   }
 
-  final case class Space(dataOrigin: Vc, dataExtent: Vc, viewOrigin: Vc, viewExtent: Vc, ticknum: Int, ticklen: Float, arrow: Option[Arrowhead], linestyle: Style, stuff: Seq[InSvg]) extends Shown {
+  final case class Titling(
+    title: String, xlegend: String, ylegend: String,
+    titler: Style => Style = Titling.defaultTitler, legender: Style => Style = Titling.defaultLegender
+  ) {}
+  object Titling {
+    val defaultTitler = (s: Style) => s.scale(1.59f)
+    val defaultLegender = (s: Style) => s.scale(1.26f)
+  }
+
+  final case class Space(dataOrigin: Vc, dataExtent: Vc, viewOrigin: Vc, viewExtent: Vc, ticknum: Int, ticklen: Float, arrow: Option[Arrowhead], linestyle: Style, stuff: Seq[InSvg], titles: Option[Titling] = None) extends Shown {
     private[this] val extrascale = if (arrow.isDefined) 1.3f else 1.1f;
 
     lazy val dataAssembly = Assembly(
@@ -909,7 +918,16 @@ package chart {
     }
 
 
-    lazy val tickstyle = linestyle.map{ case StrokeWidth(w) => StrokeWidth(w*0.71f); case x => x }
+    lazy val tickstyle = {
+      val w: Float = linestyle.elements.collectFirst{ case StrokeWidth(x) => x }.getOrElse(3)
+      linestyle.
+        map{ case StrokeWidth(w) => StrokeWidth(w*0.71f); case x => x }.
+        defaultTo(FontSize(w*4), FontFace("Carlito, Callibri, Arial, sans-serif"))
+    }
+
+    lazy val legendstyle: Style = titles.map(_.legender(tickstyle)).getOrElse(tickstyle).unstroked
+
+    lazy val titlestyle: Style = titles.map(_.titler(tickstyle)).getOrElse(tickstyle).unstroked
 
     lazy val xTicks = AutoTick(
       dataOrigin,
@@ -933,9 +951,34 @@ package chart {
       None
     )
 
+    lazy val theTitle = titles.map(_.title).filter(_.nonEmpty).map{ titleText =>
+      val textHeight: Float = titlestyle.elements.collectFirst{ case FontSize(fs) => fs }.getOrElse(16f)
+      val x = 0.5f * viewExtent.x
+      val y = viewExtent.y * (extrascale + 0.05f) + textHeight*0.2f
+      Letters(viewOrigin + Vc(x, y), titleText, 0, titlestyle ++ Font(Horizontal.Middle, Vertical.Bottom))
+    }.toVector
+
+    lazy val xyLegends = {
+      val textHeight: Float = legendstyle.elements.collectFirst{ case FontSize(fs) => fs }.getOrElse(13f)
+      val tickTextH: Float = tickstyle.elements.collectFirst{ case FontSize(fs) => fs }.getOrElse(10f)
+      titles.map(_.xlegend).filter(_.nonEmpty).map{ xText =>
+        val x = 0.5f*viewExtent.x
+        val y = -(2*ticklen + tickTextH)
+        Letters(viewOrigin + Vc(x,y), xText, 0, legendstyle ++ Font(Horizontal.Middle, Vertical.Top))
+      }.toVector ++
+      titles.map(_.ylegend).filter(_.nonEmpty).map{ yText =>
+        val y = 0.5f*viewExtent.y
+        val x = -(
+          2*ticklen +
+          tickTextH * 0.5f * yTicks.theTicks.ticks.map(_.what.length).reduceOption(_ max _).getOrElse(1)
+        )
+        Letters(viewOrigin + Vc(x,y), yText, -math.Pi.toFloat/2, legendstyle ++ Font(Horizontal.Middle, Vertical.Bottom))
+      }.toVector
+    }
+
     lazy val lineAssembly = dataAssembly.copy(thicken = None, stuff = Vector(axisLine, xTicks, yTicks))
 
-    lazy val fullAssembly = Assembly(dataAssembly, lineAssembly)
+    lazy val fullAssembly = Assembly((Vector(dataAssembly, lineAssembly) ++ xyLegends ++ theTitle): _*)
 
     def style = linestyle
 

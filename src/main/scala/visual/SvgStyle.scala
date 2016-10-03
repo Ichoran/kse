@@ -281,6 +281,9 @@ final case class Style(elements: List[Stylish]) extends Scalable[Style] with Col
   def +(s: Stylish) = 
     new Style(Stylish.unique(s :: elements))
 
+  def defaultTo(s: Stylish*) =
+    new Style(Stylish.unique(elements, s))
+
   def ++(style: Style) = new Style(Stylish.unique(style.elements, elements))
 
   def map(f: Stylish => Stylish) = new Style(Stylish.unique(elements.map(f)))
