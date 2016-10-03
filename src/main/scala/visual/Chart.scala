@@ -128,7 +128,6 @@ package chart {
           bsp.forleaves{ (usi, u0, u1) =>
             var j = 0
             val lim = (1 + 0.5*(u1.x - u0.x)/ur)*(1 + 0.5*(u1.y - u0.y)/ur)/sqrt(alphic)
-            println(f"In $u0 $u1 with ${usi.length} points (lim = $lim)")
             val J = (if (usi.length < lim) 0 else usi.length - math.max(1, lim/2))
             val ex, ey = new EstXM
             while (j < J) {
