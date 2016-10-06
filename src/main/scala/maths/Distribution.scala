@@ -118,6 +118,16 @@ object Est {
     new Est(n, mean, cuml)
   }
   def from(data: Array[Double]): Est = from(data, 0, data.length)
+  def boxed(data: TraversableOnce[Double]): Est = {
+    val em = new EstM()
+    data.foreach{ d => em += d }
+    em.immutable
+  }
+  def boxed[A](data: TraversableOnce[Float])(implicit ev: A =:= Float): Est = {
+    val em = new EstM()
+    data.foreach{ f => em += f }
+    em.immutable
+  }
 
   def bayes(i: Int, j: Int) = {
     val n = i+j

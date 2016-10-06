@@ -29,6 +29,8 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
   def bFn(blue: Float => Float) = new Rgba(r, g, clip(blue(b)), a)
   def aFn(alpha: Float => Float) = new Rgba(r, g, b, { val aph = alpha(a); if (aph.nan) aph else clip(aph) })
 
+  def exists: Boolean = a > 0
+
   def grayLevel = clip(0.1f*r + 0.7f*g + 0.2f*b)
   def gray = { val k = grayLevel; new Rgba(k, k, k, a) }
   

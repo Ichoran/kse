@@ -112,6 +112,8 @@ object Vc {
 
   def from(p: java.awt.geom.Point2D) = apply(p.getX.toFloat, p.getY.toFloat)
   def from(d: java.awt.geom.Dimension2D) = apply(d.getWidth.toFloat, d.getHeight.toFloat)
+
+  def angle(theta: Double): Vc = Vc.from(math.cos(theta), math.sin(theta))
   
   /** Find point of intersection between lines p0,v0 and p1,v1.  If the lines are coincident, p0 will be chosen.  If they are
     * paralel but not coincident, NaN will be returned.  If v1 is zero, NaN will be returned unless p0 == p1.  If v0 is zero,

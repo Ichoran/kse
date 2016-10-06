@@ -985,6 +985,95 @@ package chart {
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = fullAssembly.inSvg(xform, mag)(fm)
   }
 
-  // This "one-liner" should work in the REPL after: import kse.flow._, kse.coll._, kse.maths._, kse.maths.stats._, kse.maths.stochastic._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
-  // { val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f)); val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0))); val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f))); val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4)); val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f)); val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2)); val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10)); val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5)); val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10)); val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5)); val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2)); val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle)); val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f))); val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f))); val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1))))); val sh = Shape(Array(Vc(100, 200).underlying, Vc(200, 100).underlying, Vc(300, 300).underlying), Option(c.copy(c = 0 vc 0)), Stroke(Rgba.Blue, 5) ++ Fill.alpha(Rgba.Blue.aTo(0.2f)) ++ Opacity(0.4f)); quick(sh, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, Assembly(0 vc 100, 400f vc 1f, 0 vc 200, None, Opacity(1f), at, at.copy(to = Vc(1.33f, 100))), tl.copy(to = 100 vc 200, left = -20, right = 0), Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f), c, pa), gr) }
+  final case class Piece(value: Float, outer: String = "", inner: String = "", fill: Rgba = Rgba.Empty, stroke: Rgba = Rgba.Empty) {}
+
+  final case class Pie(pieces: Vector[Piece], center: Vc, radius: Float, style: Style, zeroAngle: Option[Float] = None, overcolor: Option[Rgba => Rgba] = None) extends Shown {
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
+      val uc = xform(center)
+      val ur = xform.radius(center, Vc(radius, 0))
+      implicit val myMag = Magnification.from(mag, radius, ur)
+      val pinv = pieces.reverse  // Generally want CCW progression when viewed in screen coords (flipped y).
+      val values = pinv.map(_.value)
+      val vsum = values.sum
+      if (vsum closeTo 0) return Vector.empty
+      if (pieces.isEmpty) return Vector.empty
+      val zero = zeroAngle.getOrElse(((if (values.length == 2) math.Pi else (math.Pi*5)/6) - math.Pi*values.head/vsum).toFloat).toDouble
+      val edges = values.scanLeft(zero)((acc, vi) => acc + 2*math.Pi*vi/vsum)
+      val middles = edges.grouped(2).map(x => (x(0) + x(1))*0.5)
+      val spec = style.specifically
+      var ltextn = 0
+      var rtextn = 0
+      val fontsize = style.elements.collectFirst{ case FontSize(x) => x }
+      val labelsize = fontsize.getOrElse((radius*2.5).sqrt.toFloat)
+      val strokewidth = style.elements.collectFirst{ case StrokeWidth(x) => x }
+      val strokesize = strokewidth.getOrElse(labelsize/5f)
+      Indent(f"<g${showWith(_.generally)}>") +: {
+        edges.indices.dropRight(1).flatMap{ i =>
+          val p = pinv(i)
+          val wedge =
+            if (!p.fill.exists && !p.stroke.exists) Nil
+            else {
+              val ua = uc + Vc.angle(edges(i))*ur
+              val ub = uc + Vc.angle(edges(i+1))*ur
+              val s = showWith{_ =>
+                if (!p.fill.exists) spec ++ Stroke.alpha(p.stroke) + FillNone
+                else if (!p.stroke.exists) spec.unstroked ++ Fill.alpha(p.fill)
+                else spec ++ Stroke.alpha(p.stroke) ++ Fill.alpha(p.fill)
+              }
+              val largeangle = (if ((edges(i+1)-edges(i)).abs > math.Pi/2) 1 else 0)
+              Indent(f"<path d=${q}M ${fm comma uc} L ${fm comma ua} A $ur,$ur 0 $largeangle,1 ${fm comma ub} L ${fm comma uc}${q}$s/>",1) :: Nil         
+            }
+          val outtext =
+            if ((p.outer eq null) || p.outer.isEmpty) Nil
+            else {
+              val s = showWith{_ =>
+                (
+                  if (spec.elements.exists{ case _: FillColor => true; case _ => false}) spec.unstroked
+                  else if (p.fill.exists) spec.unstroked + Fill.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
+                  else if (p.stroke.exists) spec.unstroked + Fill.alpha(p.stroke.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
+                  else spec
+                ).defaultTo(FontSize(labelsize))
+              }
+              val sl = showWith{_ =>
+                if (p.fill.exists) spec.stroky ++ Stroke.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a), strokesize)
+                else if (p.stroke.exists) spec.stroky ++ Stroke.alpha(p.stroke, strokesize)
+                else spec.stroky.defaultTo(StrokeWidth(strokesize))
+              }
+              ??? :: Nil
+            }
+          wedge // ++ outtext ++ intext
+        }.toVector
+      } :+ Indent("</g>")
+    }
+  }
+
+  // This should work in the REPL after: import kse.flow._, kse.coll._, kse.coll.packed._, kse.maths._, kse.maths.stats._, kse.maths.stochastic._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
+  /*
+  {
+    val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f))
+    val pie = Pie(Vector(Piece(15, "red", "", Rgba.Red), Piece(5, "green", "", Rgba.Green, Rgba.Lime), Piece(5, "gold", "", Rgba.Gold)), 150 vc 150, 20, Stroke(3))
+    val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0)))
+    val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f)))
+    val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4))
+    val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f))
+    val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2))
+    val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10))
+    val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5))
+    val ab = Arrow(50 vc 225, 200 vc 125, 0, ah, Stroke.alpha(Rgba(0.5f, 0, 1, 0.5f), 10))
+    val pa = PolyArrow(Array(20 vc 400, 20 vc 20, 400 vc 20).map(_.underlying), ah, ah, Stroke(Rgba(0.7f, 0.7f, 0), 5))
+    val tk = Ticky(20 vc 20, 400 vc 20, Seq(0.2f, 0.4f, 0.6f, 0.8f), -20, 0, Stroke(Rgba(0.7f, 0.7f, 0), 2))
+    val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle))
+    val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f)))
+    val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f)))
+    val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1)))), Some(Titling("Fish", "salmon", "perch")))
+    val sh = Shape(Array(Vc(100, 200).underlying, Vc(200, 100).underlying, Vc(300, 300).underlying), Option(c.copy(c = 0 vc 0)), Stroke(Rgba.Blue, 5) ++ Fill.alpha(Rgba.Blue.aTo(0.2f)) ++ Opacity(0.4f))
+    quick(
+      sh, pie, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl,
+      Assembly(0 vc 100, 400f vc 1f, 0 vc 200, None, Opacity(1f), at, at.copy(to = Vc(1.33f, 100))),
+      tl.copy(to = 100 vc 200, left = -20, right = 0),
+      Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f), c, pa, pie.copy(pieces = pie.pieces.dropRight(1).map(p => p.copy(inner = "", outer = "")))),
+      gr
+    )
+  }
+  */
 }
