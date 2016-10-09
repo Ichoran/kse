@@ -183,7 +183,6 @@ package object maths {
         big <= 1 || x <= big*fractol
       case _ => false
     }
-
     /** Formats a string with `sigfig` significant figures and `maxZeros` zeros before a nonzero digit
       * (including the one before the decimal point).  If `sigfig` is negative, the full number of
       * digits is shown even if they are zero; otherwise trailing zeros will be truncated.
@@ -263,6 +262,92 @@ package object maths {
     }
     /** A shortcut method for fmt with default arguments */
     def fmt[X](implicit always: X =:= X, always2: X =:= X, always3: X =:= X): String = fmt()
+  }
+
+  implicit class EnrichedFloatArrayMaths(private val values: Array[Float]) extends AnyVal {
+    @inline final def copy: Array[Float] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyTo(i: Int): Array[Float] = java.util.Arrays.copyOf(values, math.min(values.length, math.max(i, 0)))
+    @inline final def copyRange(i0: Int, iN: Int): Array[Float] = {
+      val i = math.max(0, math.min(values.length, i0))
+      java.util.Arrays.copyOfRange(values, i, math.max(i, math.min(values.length, iN)))
+    }
+    final def toDoubles: Array[Double] = {
+      val ds = new Array[Double](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toDouble
+        i += 1
+      }
+      ds
+    }
+    final def bisect(value: Float): Double = {
+      if (values.isEmpty) Double.NaN
+      else if (value < values(0)) Double.NegativeInfinity
+      else if (value > values(values.length-1)) Double.PositiveInfinity
+      else {
+        var lo = 0
+        var hi = values.length -1
+        while (hi - lo > 1) {
+          val m = (hi + lo) >>> 1   // Average, avoids overflow
+          if (value < values(m)) hi = m
+          else lo = m
+        }
+        if (hi == lo) lo
+        else {
+          val vhi = values(hi)
+          val vlo = values(lo)
+          if (vhi > vlo) lo + (value - vlo).toDouble / (vhi - vlo).toDouble
+          else {
+            while (lo > 0 && values(lo-1) == vlo) lo -= 1
+            while (hi+1 < values.length && values(hi+1) == vhi) hi += 1
+            (hi+lo)*0.5
+          }
+        }
+      }
+    }
+  }
+
+  implicit class EnrichedDoubleArrayMaths(private val values: Array[Double]) extends AnyVal {
+    @inline def copy: Array[Double] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyTo(i: Int): Array[Double] = java.util.Arrays.copyOf(values, math.min(values.length, math.max(i, 0)))
+    @inline final def copyRange(i0: Int, iN: Int): Array[Double] = {
+      val i = math.max(0, math.min(values.length, i0))
+      java.util.Arrays.copyOfRange(values, i, math.max(i, math.min(values.length, iN)))
+    }
+    final def toFloats: Array[Float] = {
+      val fs = new Array[Float](values.length)
+      var i = 0
+      while (i < fs.length) {
+        fs(i) = values(i).toFloat
+        i += 1
+      }
+      fs
+    }
+    final def bisect(value: Double): Double = {
+      if (values.isEmpty) Double.NaN
+      else if (value < values(0)) Double.NegativeInfinity
+      else if (value > values(values.length-1)) Double.PositiveInfinity
+      else {
+        var lo = 0
+        var hi = values.length -1
+        while (hi - lo > 1) {
+          val m = (hi + lo) >>> 1   // Average, avoids overflow
+          if (value < values(m)) hi = m
+          else lo = m
+        }
+        if (hi == lo) lo
+        else {
+          val vhi = values(hi)
+          val vlo = values(lo)
+          if (vhi > vlo) lo + (value - vlo).toDouble / (vhi - vlo).toDouble
+          else {
+            while (lo > 0 && values(lo-1) == vlo) lo -= 1
+            while (hi+1 < values.length && values(hi+1) == vhi) hi += 1
+            (hi+lo)*0.5
+          }
+        }
+      }
+    }
   }
 
   @inline final implicit def float_enriched_with_vc(f: Float): RichFloatToVc = new RichFloatToVc(f)

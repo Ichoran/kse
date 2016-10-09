@@ -886,6 +886,7 @@ package chart {
   object Titling {
     val defaultTitler = (s: Style) => s.scale(1.59f)
     val defaultLegender = (s: Style) => s.scale(1.26f)
+    val defaultFaces = FontFace("Carlito, Callibri, Arial, sans-serif")
   }
 
   final case class Space(dataOrigin: Vc, dataExtent: Vc, viewOrigin: Vc, viewExtent: Vc, ticknum: Int, ticklen: Float, arrow: Option[Arrowhead], linestyle: Style, stuff: Seq[InSvg], titles: Option[Titling] = None) extends Shown {
@@ -922,7 +923,7 @@ package chart {
       val w: Float = linestyle.elements.collectFirst{ case StrokeWidth(x) => x }.getOrElse(3)
       linestyle.
         map{ case StrokeWidth(w) => StrokeWidth(w*0.71f); case x => x }.
-        defaultTo(FontSize(w*4), FontFace("Carlito, Callibri, Arial, sans-serif"))
+        defaultTo(FontSize(w*4), Titling.defaultFaces)
     }
 
     lazy val legendstyle: Style = titles.map(_.legender(tickstyle)).getOrElse(tickstyle).unstroked
@@ -985,65 +986,153 @@ package chart {
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = fullAssembly.inSvg(xform, mag)(fm)
   }
 
-  final case class Piece(value: Float, outer: String = "", inner: String = "", fill: Rgba = Rgba.Empty, stroke: Rgba = Rgba.Empty) {}
+  final case class Piece(value: Float, legend: String = "", fill: Rgba = Rgba.Empty, stroke: Rgba = Rgba.Empty) {}
 
   final case class Pie(pieces: Vector[Piece], center: Vc, radius: Float, style: Style, zeroAngle: Option[Float] = None, overcolor: Option[Rgba => Rgba] = None) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val uc = xform(center)
       val ur = xform.radius(center, Vc(radius, 0))
+      def myxfr(v: Vc): Vc = (xform(center + v.hat * radius) - uc).hat * ur
       implicit val myMag = Magnification.from(mag, radius, ur)
-      val pinv = pieces.reverse  // Generally want CCW progression when viewed in screen coords (flipped y).
-      val values = pinv.map(_.value)
+      val values = pieces.map(_.value)
       val vsum = values.sum
       if (vsum closeTo 0) return Vector.empty
       if (pieces.isEmpty) return Vector.empty
       val zero = zeroAngle.getOrElse(((if (values.length == 2) math.Pi else (math.Pi*5)/6) - math.Pi*values.head/vsum).toFloat).toDouble
       val edges = values.scanLeft(zero)((acc, vi) => acc + 2*math.Pi*vi/vsum)
-      val middles = edges.grouped(2).map(x => (x(0) + x(1))*0.5)
+      val middles = edges.sliding(2).map(x => myxfr(if (x.length > 1) Vc.angle((x(0) + x(1))*0.5) else 1 vc 0)).toArray
       val spec = style.specifically
-      var ltextn = 0
-      var rtextn = 0
       val fontsize = style.elements.collectFirst{ case FontSize(x) => x }
-      val labelsize = fontsize.getOrElse((radius*2.5).sqrt.toFloat)
+      val labelsize = fontsize.getOrElse((ur*10).sqrt.toFloat)
       val strokewidth = style.elements.collectFirst{ case StrokeWidth(x) => x }
-      val strokesize = strokewidth.getOrElse(labelsize/5f)
-      Indent(f"<g${showWith(_.generally)}>") +: {
+      val strokesize = strokewidth.getOrElse(labelsize/10f)
+      val aside = math.max(0.67*ur, 1.5*labelsize)
+      val wedges = edges.indices.dropRight(1).flatMap{ i =>
+        val p = pieces(i)
+        if (!p.fill.exists) Nil
+        else {
+          val ua = uc + myxfr(Vc.angle(edges(i)))
+          val ub = uc + myxfr(Vc.angle(edges(i+1)))
+          val s = showWith{_ => spec.unstroked ++ Fill.alpha(p.fill) }
+          val largeangle = (if ((ua*ub).toDouble * (ua*middles(i)) < 0) 1 else 0)
+          Indent(f"<path d=${q}M ${fm comma uc} L ${fm comma ua} A $ur,$ur 0 $largeangle,0 ${fm comma ub} L ${fm comma uc}${q}$s/>",1) :: Nil         
+        }
+      }.toVector
+      val arrowpoints = middles.map{ m =>
+        val mhat = m.hat
+        val e = if (m.x.abs*5 >= m.y.abs) mhat else Vc.from((if (m.x == 0) 1 else m.x.sign)*1, m.y.sign*5).hat
+        val point = m + mhat*math.max(ur/10, strokesize * myMag.value)
+        val bend = point + e*math.max(ur/3, 8 * strokesize * myMag.value)
+        val tail = bend.xFn(x => (if (e.x < 0) -1 else 1) * math.max(x.abs + 4 * strokesize * myMag.value, ur + aside).toFloat)
+        (point, bend, tail)
+      }.tap{ pts =>
+        // Fix up anything that's too close together for text to fit
+        val lix = middles.zipWithIndex.
+          filter{ case (m, i) => m.x < 0 && pieces(i).fn(p => (p.legend ne null) && p.legend.nonEmpty) }.
+          sortBy(_._1.y).map{ case (_, i) => i }
+        val rix = middles.zipWithIndex.
+          filter{ case (m, i) => m.x >= 0 && pieces(i).fn(p => (p.legend ne null) && p.legend.nonEmpty) }.
+          sortBy(_._1.y).map{ case (_, i) => i }
+        val lys = Array.tabulate(lix.size)(j => pts(lix(j))._3.y)
+        val rys = Array.tabulate(rix.size)(j => pts(rix(j))._3.y)
+        val lyok = Pie.separateValues(lys, labelsize*1.05f)
+        val ryok = Pie.separateValues(rys, labelsize*1.05f)
+        if (lyok ne lys) {
+          var j = 0; while (j < lyok.length) { val i = lix(j); pts(i) = pts(i).copy(_3 = pts(i)._3.yTo(lyok(j))); j += 1 }
+        }
+        if (ryok ne rys) {
+          var j = 0; while (j < ryok.length) { val i = rix(j); pts(i) = pts(i).copy(_3 = pts(i)._3.yTo(ryok(j))); j += 1 }
+        }
+      }
+      val arrows = arrowpoints.indices.flatMap{ i =>
+        val p = pieces(i)
+        val (point, bend, tail) = arrowpoints(i)
+        if ((p.legend eq null) || p.legend.isEmpty || p.stroke.unicorn) Nil
+        else {
+          val theSpec = 
+            if (p.stroke.exists) spec ++ Stroke.alpha(p.stroke, strokesize)
+            else if (p.fill.exists) spec ++ Stroke.alpha(p.fill, strokesize)
+            else if (spec.elements.contains{ (x: Stylish) => x match { case _: StrokeColor => true; case _ => false } })
+              spec ++ Stroke(strokesize)
+            else if (spec.elements.contains{ (x: Stylish) => x match { case _: FillColor => true; case _ => false } })
+              (spec + StrokeWidth(strokesize)).map{
+                case FillColor(c) => StrokeColor(c)
+                case FillOpacity(o) => StrokeOpacity(o)
+                case x => x
+              }
+            else spec ++ Stroke(strokesize)
+          val thePoints =
+            if (tail.y == bend.y) Array(point, bend, tail + Vc(labelsize/4, 0)*(if (point.x < 0) -1 else 1))
+            else Array(point, bend, tail, tail + Vc(labelsize/4, 0)*(if (point.x < 0) -1 else 1))
+          PolyArrow(thePoints.map(u => (uc + u).underlying), None, Some(Pie.defaultArrow), theSpec).
+            inSvg(Xform.identity, None)(fm)
+        }
+      }
+      Indent(f"<g${showWith(_.generally.defaultTo(Titling.defaultFaces))}>") +: {
+        wedges ++
+        arrows.map(_.in) ++
         edges.indices.dropRight(1).flatMap{ i =>
-          val p = pinv(i)
-          val wedge =
-            if (!p.fill.exists && !p.stroke.exists) Nil
-            else {
-              val ua = uc + Vc.angle(edges(i))*ur
-              val ub = uc + Vc.angle(edges(i+1))*ur
-              val s = showWith{_ =>
-                if (!p.fill.exists) spec ++ Stroke.alpha(p.stroke) + FillNone
-                else if (!p.stroke.exists) spec.unstroked ++ Fill.alpha(p.fill)
-                else spec ++ Stroke.alpha(p.stroke) ++ Fill.alpha(p.fill)
-              }
-              val largeangle = (if ((edges(i+1)-edges(i)).abs > math.Pi/2) 1 else 0)
-              Indent(f"<path d=${q}M ${fm comma uc} L ${fm comma ua} A $ur,$ur 0 $largeangle,1 ${fm comma ub} L ${fm comma uc}${q}$s/>",1) :: Nil         
+          val p = pieces(i)
+          if ((p.legend eq null) || p.legend.isEmpty) Nil
+          else {
+            val stytx = showWith{_ =>
+              (
+                if (spec.elements.exists{ case _: FillColor => true; case _ => false}) spec.unstroked
+                else if (p.fill.exists) spec.unstroked + Fill.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
+                else if (p.stroke.exists) spec.unstroked + Fill.alpha(p.stroke.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
+                else spec
+              ).defaultTo(FontSize(labelsize)) ++ Font(if (arrowpoints(i)._3.x < 0) Horizontal.Right else Horizontal.Left, Vertical.Middle)
             }
-          val outtext =
-            if ((p.outer eq null) || p.outer.isEmpty) Nil
-            else {
-              val s = showWith{_ =>
-                (
-                  if (spec.elements.exists{ case _: FillColor => true; case _ => false}) spec.unstroked
-                  else if (p.fill.exists) spec.unstroked + Fill.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
-                  else if (p.stroke.exists) spec.unstroked + Fill.alpha(p.stroke.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
-                  else spec
-                ).defaultTo(FontSize(labelsize))
-              }
-              val sl = showWith{_ =>
-                if (p.fill.exists) spec.stroky ++ Stroke.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a), strokesize)
-                else if (p.stroke.exists) spec.stroky ++ Stroke.alpha(p.stroke, strokesize)
-                else spec.stroky.defaultTo(StrokeWidth(strokesize))
-              }
-              ??? :: Nil
+            val styln = showWith{_ =>
+              if (p.fill.exists) spec.stroky ++ Stroke.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a), strokesize)
+              else if (p.stroke.exists) spec.stroky ++ Stroke.alpha(p.stroke, strokesize)
+              else spec.stroky.defaultTo(StrokeWidth(strokesize))
             }
-          wedge // ++ outtext ++ intext
+            val u = uc + arrowpoints(i)._3 + Vc(labelsize/2, 0)*(if (arrowpoints(i)._3.x < 0) -1 else 1)
+            Indent(f"<text${fm.vquote(u,"x","y")}$stytx>${p.legend}</text>",1) :: Nil
+          }
         }.toVector
       } :+ Indent("</g>")
+    }
+  }
+  object Pie {
+    val defaultArrow = LineArrow((math.Pi/8).toFloat, 1.75f, 1)
+    def separateValues(values: Array[Float], minsep: Float): Array[Float] = {
+      if (values.length < 2) return values
+      var xs = values
+      var fixed = false
+      val xi = xs.bisect(0)
+      var i0 = xi.floor.toInt
+      var i1 = if (i0 < 0) { i0 = 0; 0 } else if (i0 >= xs.length-1) { i0 = xs.length-1; i0 } else i0+1
+      if (i0 != i1) {
+        if (xs(i1) - xs(i0) < minsep) {
+          fixed = true
+          xs = values.copy
+          if (xs(i0) <= xs(i1)) { xs(i0) = -minsep/2; xs(i1) = xs(i0) + minsep }
+          else if (xs(i0) closeTo 0) { xs(i1) = xs(i0) + minsep }
+          else if (xs(i1) closeTo minsep) { xs(i0) = xs(i1) - minsep }
+          else {
+            val sep = xs(i1) - xs(i0)
+            xs(i0) = xs(i0)*(minsep/sep)
+            xs(i1) = xs(i0) + minsep
+          }
+        }
+      }
+      while (i1+1 < xs.length && !(xs(i1+1) - xs(i1) < minsep)) i1 += 1
+      if (i1 < xs.length && !fixed) { fixed = true; xs = values.copy }
+      while (i1+1 < xs.length) {
+        val sep = xs(i1+1) - xs(i1)
+        if (sep < minsep) xs(i1+1) = xs(i1) + minsep
+        i1 += 1
+      }
+      while (i0 > 0 && !(xs(i0) - xs(i0-1) < minsep)) i0 -= 1
+      if (i1 > 0 && !fixed) { fixed = true; xs = values.copy }
+      while (i0 > 0) {
+        val sep = xs(i0) - xs(i0-1)
+        if (sep < minsep) xs(i0 - 1) = xs(i0) - minsep
+        i0 -= 1
+      }
+      xs
     }
   }
 
@@ -1051,7 +1140,7 @@ package chart {
   /*
   {
     val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f))
-    val pie = Pie(Vector(Piece(15, "red", "", Rgba.Red), Piece(5, "green", "", Rgba.Green, Rgba.Lime), Piece(5, "gold", "", Rgba.Gold)), 150 vc 150, 20, Stroke(3))
+    val pie = Pie(Vector(Piece(15, "red", Rgba.Red), Piece(5, "green", Rgba.Green, Rgba.DarkGreen), Piece(0.1f, "gold", Rgba.Gold), Piece(0.3f, "logically blue", Rgba.Empty, Rgba.Blue)), 150 vc 350, 20, Style.empty, Some(math.Pi.toFloat/12))
     val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0)))
     val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f)))
     val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4))
@@ -1071,9 +1160,12 @@ package chart {
       sh, pie, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl,
       Assembly(0 vc 100, 400f vc 1f, 0 vc 200, None, Opacity(1f), at, at.copy(to = Vc(1.33f, 100))),
       tl.copy(to = 100 vc 200, left = -20, right = 0),
-      Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f), c, pa, pie.copy(pieces = pie.pieces.dropRight(1).map(p => p.copy(inner = "", outer = "")))),
+      Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f), c, pa, pie.copy(pieces = pie.pieces.dropRight(1).map(p => p.copy(legend = "")))),
       gr
     )
   }
+
+quick(Pie(Vector(Piece(15, "red", "", Rgba.Red), Piece(5, "green", "", Rgba.Green, Rgba.Lime), Piece(5, "gold", "", Rgba.Gold)), 150 vc 350, 20, Stroke(3)))
+
   */
 }
