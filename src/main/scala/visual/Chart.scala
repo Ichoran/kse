@@ -87,7 +87,7 @@ package chart {
         Indent.V(f"<rect${fm.vquote(ctr, "x", "y")}${fm.vquote(r * (2*myMag.value), "width", "height")}$show/>")
       }
     }
-    final case class ManyC(cs: Array[Long], r: Float, tiled: Boolean, style: Style) extends Shown {
+    final case class ManyC(cs: Array[Long], r: Float, tiled: Boolean, style: Style, count: Option[Int] = None, relsize: Option[Float] = None) extends Shown {
       def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
         var umx, umy, uMx, uMy = 0f
         val us = {
@@ -118,7 +118,8 @@ package chart {
         }
         else {
           val alphic = style.opacity
-          val bsp = new BspTree[Long]((1.5*ur).toFloat, (1.5*ur).toFloat, math.ceil(4/alphic.toFloat).toInt, Vc from _)
+          val sz = max(relsize.getOrElse(4f), 1f)
+          val bsp = new BspTree[Long](sz*ur, sz*ur, max(2, count.getOrElse(math.ceil(4/alphic.toFloat).toInt)), Vc from _)
           bsp.suggestBounds(umx vc umy, uMx vc uMy)
           var i = 0
           while (i < us.length) { bsp += us(i); i += 1 }
@@ -988,7 +989,7 @@ package chart {
 
   final case class Piece(value: Float, legend: String = "", fill: Rgba = Rgba.Empty, stroke: Rgba = Rgba.Empty) {}
 
-  final case class Pie(pieces: Vector[Piece], center: Vc, radius: Float, style: Style, zeroAngle: Option[Float] = None, overcolor: Option[Rgba => Rgba] = None) extends Shown {
+  final case class Pie(pieces: Vector[Piece], center: Vc, radius: Float, style: Style, zeroAngle: Option[Float] = None, asideness: Option[(Vc, Float, Float) => Float] = None) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val uc = xform(center)
       val ur = xform.radius(center, Vc(radius, 0))
@@ -1006,7 +1007,9 @@ package chart {
       val labelsize = fontsize.getOrElse((ur*10).sqrt.toFloat)
       val strokewidth = style.elements.collectFirst{ case StrokeWidth(x) => x }
       val strokesize = strokewidth.getOrElse(labelsize/10f)
-      val aside = math.max(0.67*ur, 1.5*labelsize)
+      val asideFn: (Vc, Float) => Float = 
+        asideness.getOrElse(Pie.alignText).
+        fn(flx => (v: Vc, x: Float) => math.max(flx(v, x, labelsize), math.min(0.3*labelsize, 0.2*ur).toFloat))
       val wedges = edges.indices.dropRight(1).flatMap{ i =>
         val p = pieces(i)
         if (!p.fill.exists) Nil
@@ -1014,7 +1017,7 @@ package chart {
           val ua = uc + myxfr(Vc.angle(edges(i)))
           val ub = uc + myxfr(Vc.angle(edges(i+1)))
           val s = showWith{_ => spec.unstroked ++ Fill.alpha(p.fill) }
-          val largeangle = (if ((ua*ub).toDouble * (ua*middles(i)) < 0) 1 else 0)
+          val largeangle = (if (values(i) > 0.5*vsum) 1 else 0)
           Indent(f"<path d=${q}M ${fm comma uc} L ${fm comma ua} A $ur,$ur 0 $largeangle,0 ${fm comma ub} L ${fm comma uc}${q}$s/>",1) :: Nil         
         }
       }.toVector
@@ -1023,7 +1026,7 @@ package chart {
         val e = if (m.x.abs*5 >= m.y.abs) mhat else Vc.from((if (m.x == 0) 1 else m.x.sign)*1, m.y.sign*5).hat
         val point = m + mhat*math.max(ur/10, strokesize * myMag.value)
         val bend = point + e*math.max(ur/3, 8 * strokesize * myMag.value)
-        val tail = bend.xFn(x => (if (e.x < 0) -1 else 1) * math.max(x.abs + 4 * strokesize * myMag.value, ur + aside).toFloat)
+        val tail = bend.xFn(x => (if (e.x < 0) -1 else 1) * (x.abs + asideFn(bend, ur)).toFloat)
         (point, bend, tail)
       }.tap{ pts =>
         // Fix up anything that's too close together for text to fit
@@ -1097,6 +1100,8 @@ package chart {
   }
   object Pie {
     val defaultArrow = LineArrow((math.Pi/8).toFloat, 1.75f, 1)
+    val wrapText = (v: Vc, r: Float, lz: Float) => 0f
+    val alignText = (v: Vc, r: Float, lz: Float) => 1.67f*r + max(0, lz*0.5f) - v.x.abs
     def separateValues(values: Array[Float], minsep: Float): Array[Float] = {
       if (values.length < 2) return values
       var xs = values

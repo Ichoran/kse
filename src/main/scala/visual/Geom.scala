@@ -203,7 +203,7 @@ final class BspTree[A: Tag](minx: Float, miny: Float, nmax: Int, coord: A => Vc)
         cut = (myMaxY + myMinY)/2
         smaller.suggestBounds(myMinX vc myMinY, myMaxX vc cut)
         bigger.suggestBounds(myMinX vc cut, myMaxX vc myMaxY)
-        if (nx < 2 && ny < 1) { smaller.cutOrientation = -1; bigger.cutOrientation = -1 }
+        if (ny < 2 && nx < 1) { smaller.cutOrientation = -1; bigger.cutOrientation = -1 }
         var i = 0
         while (i < myN) {
           val v = coord(mine(i))
