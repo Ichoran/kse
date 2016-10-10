@@ -278,6 +278,28 @@ final case class Style(elements: List[Stylish]) extends Scalable[Style] with Col
     if (elements.count{ case g: Ghostly[_] => true; case _ => false } == 1) solidify(f)
     else this + elements.collectFirst{ case o: Opaque => o.solidify(f) }.getOrElse(Opaque(f(1)))
 
+  def promoteStrokeOpacity: Style = {
+    var o = 1f
+    val eb = List.newBuilder[Stylish]
+    elements.foreach{ 
+      case Opaque(op) => o *= op
+      case StrokeOpacity(op) => o *= op
+      case x => eb += x
+    }
+    new Style(if (o < 1) Opaque(o) :: eb.result else eb.result)
+  }
+
+  def promoteFillOpacity: Style = {
+    var o = 1f
+    val eb = List.newBuilder[Stylish]
+    elements.foreach{ 
+      case Opaque(op) => o *= op
+      case FillOpacity(op) => o *= op
+      case x => eb += x
+    }
+    new Style(if (o < 1) Opacity(o) :: eb.result else eb.result)
+  }
+
   def +(s: Stylish) = 
     new Style(Stylish.unique(s :: elements))
 

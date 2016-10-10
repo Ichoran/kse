@@ -394,7 +394,7 @@ package chart {
     * The wider of the two is drawn at the stroke width; the other, narrower.
     */
   final case class ErrorBarYY(x: Float, lo: Float, hi: Float, across: Float, hvbias: Float, style: Style) extends Shown {
-    override def styled = style.stroky
+    override def styled = style.stroky.promoteStrokeOpacity
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, Vc(x,lo), Vc(x,hi))
       val l = xform(Vc(x, lo))
@@ -485,7 +485,7 @@ package chart {
   }
 
   final case class Arrow(from: Vc, to: Vc, indirection: Float, head: Option[Arrowhead], style: Style) extends Shown {
-    override def styled = style.stroky
+    override def styled = style.stroky.promoteStrokeOpacity
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val vi = if (indirection.finite && !(indirection closeTo 0)) indirection else 0
       val v = to - from;
@@ -496,7 +496,7 @@ package chart {
       implicit val myMag = Magnification.from(mag, xform, from, to)
       if (head.nonEmpty) {
         val ah = head.get
-        val (setback, arrowline) = ah.stroked(to, (to - ip).hat)(xform, style.specifically.scale(myMag.value))
+        val (setback, arrowline) = ah.stroked(to, (to - ip).hat)(xform, styled.specifically.scale(myMag.value))
         val wt = ut - setback*(ut - iq).hat
         val mainline =
           if (indirection.finite && !(indirection closeTo 0))
@@ -521,7 +521,7 @@ package chart {
 
 
   final case class PolyArrow(points: Array[Long], fwdarrow: Option[Arrowhead], bkwarrow: Option[Arrowhead], style: Style) extends Shown {
-    override def styled = style.stroky
+    override def styled = style.stroky.promoteStrokeOpacity
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       if (points.length < 2) return Vector.empty
       val up = {
@@ -536,13 +536,13 @@ package chart {
       var arrows = List.empty[String]
       if (bkwarrow.isDefined) {
         val ar = bkwarrow.get
-        val (setback, arrowline) = ar.stroked(Vc from points(0), bkw)(xform, style.specifically.scale(myMag.value))
+        val (setback, arrowline) = ar.stroked(Vc from points(0), bkw)(xform, styled.specifically.scale(myMag.value))
         up(0) = (Vc.from(up(0)) - setback*(Vc.from(up(0)) - Vc.from(up(1))).hat).underlying
         arrows = arrowline :: arrows
       }
       if (fwdarrow.isDefined) {
         val ar = fwdarrow.get
-        val (setback, arrowline) = ar.stroked(Vc from points(points.length-1), fwd)(xform, style.specifically.scale(myMag.value))
+        val (setback, arrowline) = ar.stroked(Vc from points(points.length-1), fwd)(xform, styled.specifically.scale(myMag.value))
         up(up.length-1) = (Vc.from(up(up.length-1)) - setback*(Vc.from(up(up.length-1)) - Vc.from(up(up.length-2))).hat).underlying
         arrows = arrowline :: arrows
       }
@@ -598,8 +598,8 @@ package chart {
       }
       Indent.V({
         Seq(
-          f"<g${showWith(_.generally)}>",
-          f"<path d=${q}${strokes.mkString}$q${showWith(_.specifically.unfilled)}/>"
+          f"<g${showWith(_.promoteStrokeOpacity.generally)}>",
+          f"<path d=${q}${strokes.mkString}$q${showWith(_.promoteStrokeOpacity.specifically.unfilled)}/>"
         ) ++
         labels ++
         Seq("</g>")
