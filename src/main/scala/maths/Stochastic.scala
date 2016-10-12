@@ -4,6 +4,8 @@
 package kse.maths
 package stochastic
 
+import scala.math._
+
 abstract class Prng {
   def Z: Boolean = (L & 0x1) != 0
   def B: Byte = L.toByte
@@ -13,6 +15,50 @@ abstract class Prng {
   def L: Long
   def F: Float = Prng.symmetricFloatFromInt(I)
   def D: Double = Prng.symmetricDoubleFromLong(L)
+  def %(n: Int): Int = 
+    if (n <= 0) 0
+    else {
+      var l = 0L
+      val mask = 0xFFFFFFFFL >>> java.lang.Integer.numberOfLeadingZeros(n)
+      var more = true
+      do {
+        l = L
+        if ((l & mask) < n) more = false
+        else {
+          l = l >>> 32;
+          if ((l & mask) < n) more = false
+        }
+      } while (more);
+      (l & mask).toInt
+    }
+  def %(n: Long): Long =
+    if (n <= 0) 0
+    else {
+      var l = L
+      val mask = 0xFFFFFFFFFFFFFFFFL >>> java.lang.Long.numberOfLeadingZeros(n)
+      while ((l & mask) >= n) l = L
+      l & mask
+    }
+  def gaussian: Double = {
+    // Polar Box-Muller transform
+    var x, y, rr = 0.0
+    do {
+      x = D*2 - 1
+      y = D*2 - 1
+      rr = x*x + y*y
+    } while (rr >= 1);
+    x * sqrt( (-2 * log(rr)) / rr )  // Discard y, but it's valid too!
+  }
+  def gaussianVc: Vc = {
+    var x, y, rr = 0.0
+    do {
+      x = D*2 - 1
+      y = D*2 - 1
+      rr = x*x + y*y
+    } while (rr >= 1);
+    val scale = sqrt( (-2 * log(rr)) / rr )
+    Vc.from(x * scale, y * scale)
+  }
   def arrayZ(n: Int): Array[Boolean] = {
     val a = new Array[Boolean](n)
     var i = 0
@@ -108,6 +154,45 @@ abstract class Prng {
       i += 1
     }
     a    
+  }
+  /** Todo--improve efficiency by inlining and reusing Long */
+  def arrayMod(n: Int, mod: Int): Array[Int] = {
+    val a = new Array[Int](n)
+    var i = 0
+    while (i < a.length) {
+      a(i) = this % mod
+      i += 1
+    }
+    a
+  }
+  def arrayMod(n: Int, mod: Long): Array[Long] = {
+    val a = new Array[Long](n)
+    var i = 0
+    while (i < a.length) {
+      a(i) = this % mod
+      i += 1
+    }
+    a
+  }
+  def arrayGaussian(n: Int): Array[Double] = {
+    val a = new Array[Double](n)
+    var i = 0
+    while (i < a.length) {
+      var x, y, rr =  0.0
+      do {
+        x = D*2 - 1
+        y = D*2 - 1
+        rr = x*x + y*y
+      } while (rr >= 1);
+      val scale = sqrt( (-2 * log(rr)) / rr )
+      a(i) = x * scale
+      i += 1
+      if (i < a.length) {
+        a(i) = y * scale
+        i += 1
+      }
+    }
+    a
   }
   def state: Array[Byte]
   def bits: Int

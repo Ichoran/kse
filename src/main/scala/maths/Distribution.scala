@@ -8,6 +8,18 @@ import scala.math._
 
 import kse.flow._
 
+trait Accumulates[@specialized(Float, Double, Int) A, @specialized(Double) B] {
+  def reset(): this.type
+  def +=(a: A): this.type
+  def result: B
+}
+
+final class Mean(var n: Int, var mean: Double) extends Accumulates[Double, Double] {
+  def reset(): this.type = { n = 0; mean = 0; this }
+  def +=(x: Double): this.type = { mean = (n*mean + x)/(n+1); n += 1; this }
+  def result: Double = mean
+}
+
 trait Deviable {
   def value: Double
   def error: Double
@@ -65,15 +77,27 @@ abstract class MutableEstimate(var n: Int, var mean: Double, var sse: Double) ex
   }
 }
 
-final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n0, mean0, sse0) {
+final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n0, mean0, sse0) with Accumulates[Double, Double] {
   def this() = this(0, 0, 0)
   override def clone: EstM = new EstM(n, mean, sse)
+  def reset(): this.type = { n = 0; mean = 0; sse = 0; this }
+  def result: Double = mean
   def immutable = new Est(n, mean, sse)
   def ++(that: Estimate): EstM = clone ++= that
   def +:(x: Double): EstM = if (!x.nan) this else clone += x
   def :+(x: Double): EstM = if (!x.nan) this else clone += x
   def +=(x: Double): this.type = { if (!x.nan) incorporate(x); this }
   def ++=(that: Estimate): this.type = { incorporate(that); this }
+  def ++=(xs: Array[Double]): this.type = {
+    var i = 0
+    while (i < xs.length) { this += xs(i); i += 1 }
+    this
+  }
+  def ++=(xs: Array[Float]): this.type = {
+    var i = 0
+    while (i < xs.length) { this += xs(i); i += 1 }
+    this
+  }
   override def toString = f"$mean +- $error (n=$n)"
 }
 object EstM {
