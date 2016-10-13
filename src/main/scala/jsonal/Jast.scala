@@ -59,6 +59,12 @@ sealed trait Jast {
   /** True if and only if this represents a simple JSON value (null, true, false, number, or String) */
   def simple: Boolean
 
+  /** The number of direct children (0 if simple) */
+  def fanout: Int
+
+  /** True if and only if it takes String keys (i.e. is a JSON object) */
+  def keyed: Boolean
+
   /** True only if this is a JSON null */
   def isNull: Boolean
 
@@ -111,6 +117,8 @@ object Jast extends ParseToJast(false) {
 final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.Null) extends Jast {
   def isError = true
   def simple = false
+  def fanout = 0
+  def keyed = false
   def isNull = false
   def double = Json.not_a_normal_NaN
   def bool = None
@@ -164,6 +172,7 @@ trait JsonBuildTerminator[T] {}
   */
 sealed trait Json extends Jast with AsJson {
   protected def myName: String
+  def keyed = false
   def isError = false
   def isNull = false
   def double = Json.not_a_normal_NaN
@@ -467,6 +476,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     def simple = true
 
+    def fanout = 0
+
     override def double = Double.NaN
 
     override def jsonString(sb: java.lang.StringBuilder) { sb append "null" }
@@ -502,6 +513,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   sealed abstract class Bool extends Json { 
     protected def myName = "boolean"
     def simple = true
+    def fanout = 0
     def value: Boolean
   }
   /** Contains the two unique instances of JSON boolean types: `Bool.True` and `Bool.False` */
@@ -564,6 +576,8 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     protected def myName = "string"
 
     def simple = true
+
+    def fanout = 0
 
     override def string = Some(text)
 
@@ -669,7 +683,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
   class Num private[jsonal] (private val content: Double, private val text: String) extends Json {
     protected def myName = "number"
+
     def simple = true
+
+    def fanout = 0
 
     /** Returns `true` if this number is represented by a finite `Double` value */
     def isDouble: Boolean = (text eq null) || (!java.lang.Double.isNaN(content) && !java.lang.Double.isInfinite(content))
@@ -1076,7 +1093,10 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
   sealed trait Arr extends Json {
     protected def myName = "array"
+
     def simple = false
+
+    def fanout = size
 
     /** The length of this array. */
     def size: Int
@@ -1744,7 +1764,13 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
   sealed trait Obj extends Json {
     protected def myName = "object"
+    
     def simple = false
+
+    def fanout = size
+
+    override def keyed = true
+
     def size: Int
 
     /** Returns `true` if the JSON object has duplicate keys.  This requires map creation, so may be slow. */
