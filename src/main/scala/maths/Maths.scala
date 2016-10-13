@@ -5,6 +5,8 @@ package kse
 
 import scala.language.implicitConversions
 
+import kse.coll.packed._
+
 package maths {
   /** Useful constants.  Computed using Mathematica 8.0 or Wolfram Alpha. */
   object NumericConstants {
@@ -43,7 +45,7 @@ package maths {
     final val SqrtTiniestDouble = 1.4916681462400413e-154
     final val OverSqrtTiniestDouble = 6.7039039649712985e153
     final val EpsDouble10x = 2.220446049250313e-15
-    final val EpsDouble100x = 2.220446049250313E-14
+    final val EpsDouble100x = 2.220446049250313e-14
   }
 }
 
@@ -63,6 +65,7 @@ package object maths {
   implicit class EnrichedByteMaths(private val value: Byte) extends AnyVal {
     @inline final def clip(lo: Byte, hi: Byte) = max(lo, min(hi, value)).toByte
     @inline final def in(lo: Byte, hi: Byte) = lo <= value && value <= hi
+    @inline final def toUInt: Int = value & 0xFF
   }
 
   implicit class EnrichedCharMaths(private val value: Char) extends AnyVal {
@@ -73,6 +76,7 @@ package object maths {
   implicit class EnrichedShortMaths(private val value: Short) extends AnyVal {
     @inline final def clip(lo: Short, hi: Short) = max(lo, min(hi, value)).toShort
     @inline final def in(lo: Short, hi: Short) = lo <= value && value <= hi
+    @inline final def toUInt: Int = value & 0xFFFF
   }
 
   implicit class EnrichedIntMaths(private val value: Int) extends AnyVal {
@@ -264,6 +268,220 @@ package object maths {
     def fmt[X](implicit always: X =:= X, always2: X =:= X, always3: X =:= X): String = fmt()
   }
 
+  implicit class EnrichedByteArrayMaths(private val values: Array[Byte]) extends AnyVal {
+    @inline final def copy: Array[Byte] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyTo(i: Int): Array[Byte] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyRange(i0: Int, iN: Int): Array[Byte] = {
+      val i = math.max(0, math.min(values.length, i0))
+      java.util.Arrays.copyOfRange(values, i, math.max(i, math.min(values.length, iN)))
+    }
+    final def toInts: Array[Int] = {
+      val ds = new Array[Int](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toInt
+        i += 1
+      }
+      ds
+    }
+    final def toUInts: Array[Int] = {
+      val ds = new Array[Int](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i) & 0xFF
+        i += 1
+      }
+      ds
+    }
+    final def extrema: Intx2 = {
+      if (values.length == 0) Ints(0, -1)
+      else {
+        var min, max = values(0)
+        var i = 1
+        while (i < values.length) {
+          val vi = values(i)
+          if (vi < min) min = vi
+          else if (vi > max) max = vi
+          i += 1
+        }
+        Ints(min, max)
+      }
+    }
+  }
+
+  implicit class EnrichedShortArrayMaths(private val values: Array[Short]) extends AnyVal {
+    @inline final def copy: Array[Short] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyTo(i: Int): Array[Short] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyRange(i0: Int, iN: Int): Array[Short] = {
+      val i = math.max(0, math.min(values.length, i0))
+      java.util.Arrays.copyOfRange(values, i, math.max(i, math.min(values.length, iN)))
+    }
+    final def toInts: Array[Int] = {
+      val ds = new Array[Int](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toInt
+        i += 1
+      }
+      ds
+    }
+    final def toUInts: Array[Int] = {
+      val ds = new Array[Int](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i) & 0xFFFF
+        i += 1
+      }
+      ds
+    }
+    final def extrema: Intx2 = {
+      if (values.length == 0) Ints(0, -1)
+      else {
+        var min, max = values(0)
+        var i = 1
+        while (i < values.length) {
+          val vi = values(i)
+          if (vi < min) min = vi
+          else if (vi > max) max = vi
+          i += 1
+        }
+        Ints(min, max)
+      }
+    }
+  }
+
+  implicit class EnrichedCharArrayMaths(private val values: Array[Char]) extends AnyVal {
+    @inline final def copy: Array[Char] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyTo(i: Int): Array[Char] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyRange(i0: Int, iN: Int): Array[Char] = {
+      val i = math.max(0, math.min(values.length, i0))
+      java.util.Arrays.copyOfRange(values, i, math.max(i, math.min(values.length, iN)))
+    }
+    final def toInts: Array[Int] = {
+      val ds = new Array[Int](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toInt
+        i += 1
+      }
+      ds
+    }
+    final def extrema: Intx2 = {
+      if (values.length == 0) Ints(0, -1)
+      else {
+        var min, max = values(0)
+        var i = 1
+        while (i < values.length) {
+          val vi = values(i)
+          if (vi < min) min = vi
+          else if (vi > max) max = vi
+          i += 1
+        }
+        Ints(min, max)
+      }
+    }
+  }
+
+  implicit class EnrichedIntArrayMaths(private val values: Array[Int]) extends AnyVal {
+    @inline final def copy: Array[Int] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyTo(i: Int): Array[Int] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyRange(i0: Int, iN: Int): Array[Int] = {
+      val i = math.max(0, math.min(values.length, i0))
+      java.util.Arrays.copyOfRange(values, i, math.max(i, math.min(values.length, iN)))
+    }
+    final def toLongs: Array[Long] = {
+      val ds = new Array[Long](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toInt
+        i += 1
+      }
+      ds
+    }
+    final def toULongs: Array[Long] = {
+      val ds = new Array[Long](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i) & 0xFFFFFFFFL
+        i += 1
+      }
+      ds
+    }
+    final def toFloats: Array[Float] = {
+      val ds = new Array[Float](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toFloat
+        i += 1
+      }
+      ds
+    }
+    final def toDoubles: Array[Double] = {
+      val ds = new Array[Double](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toDouble
+        i += 1
+      }
+      ds
+    }
+    final def extrema: Intx2 = {
+      if (values.length == 0) Ints(0, -1)
+      else {
+        var min, max = values(0)
+        var i = 1
+        while (i < values.length) {
+          val vi = values(i)
+          if (vi < min) min = vi
+          else if (vi > max) max = vi
+          i += 1
+        }
+        Ints(min, max)
+      }
+    }
+  }
+
+  implicit class EnrichedLongArrayMaths(private val values: Array[Long]) extends AnyVal {
+    @inline final def copy: Array[Long] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyTo(i: Int): Array[Long] = java.util.Arrays.copyOf(values, values.length)
+    @inline final def copyRange(i0: Int, iN: Int): Array[Long] = {
+      val i = math.max(0, math.min(values.length, i0))
+      java.util.Arrays.copyOfRange(values, i, math.max(i, math.min(values.length, iN)))
+    }
+    final def toInts: Array[Int] = {
+      val ds = new Array[Int](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toInt
+        i += 1
+      }
+      ds
+    }
+    final def toDoubles: Array[Double] = {
+      val ds = new Array[Double](values.length)
+      var i = 0
+      while (i < ds.length) {
+        ds(i) = values(i).toDouble
+        i += 1
+      }
+      ds
+    }
+    final def extrema: (Long, Long) = {
+      if (values.length == 0) (0L, -1L)
+      else {
+        var min, max = values(0)
+        var i = 1
+        while (i < values.length) {
+          val vi = values(i)
+          if (vi < min) min = vi
+          else if (vi > max) max = vi
+          i += 1
+        }
+        (min, max)
+      }
+    }
+  }
+
   implicit class EnrichedFloatArrayMaths(private val values: Array[Float]) extends AnyVal {
     @inline final def copy: Array[Float] = java.util.Arrays.copyOf(values, values.length)
     @inline final def copyTo(i: Int): Array[Float] = java.util.Arrays.copyOf(values, math.min(values.length, math.max(i, 0)))
@@ -279,6 +497,33 @@ package object maths {
         i += 1
       }
       ds
+    }
+    final def finite: Boolean = {
+      var i = 0
+      var okay = true
+      while (i < values.length && okay) {
+        okay = values(i).finite
+        i += 1
+      }
+      okay
+    }
+    final def extrema: Floatx2 = {
+      if (values.length == 0) Floats(Float.NaN, Float.NaN)
+      else {
+        var i = 1
+        var min, max = {
+          var x = values(0)
+          while (x.nan && i < values.length) { x = values(i); i += 1 }
+          x
+        }
+        while (i < values.length) {
+          val vi = values(i)
+          if (vi < min) min = vi
+          if (vi > max) max = vi
+          i += 1
+        }
+        Floats(min, max)
+      }
     }
     final def bisect(value: Float): Double = {
       if (values.isEmpty) Double.NaN
@@ -322,6 +567,33 @@ package object maths {
         i += 1
       }
       fs
+    }
+    final def finite: Boolean = {
+      var i = 0
+      var okay = true
+      while (i < values.length && okay) {
+        okay = values(i).finite
+        i += 1
+      }
+      okay
+    }
+    final def extrema: (Double, Double) = {
+      if (values.length == 0) (Double.NaN, Double.NaN)
+      else {
+        var i = 1
+        var min, max = {
+          var x = values(0)
+          while (x.nan && i < values.length) { x = values(i); i += 1 }
+          x
+        }
+        while (i < values.length) {
+          val vi = values(i)
+          if (vi < min) min = vi
+          if (vi > max) max = vi
+          i += 1
+        }
+        (min, max)
+      }
     }
     final def bisect(value: Double): Double = {
       if (values.isEmpty) Double.NaN
