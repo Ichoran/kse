@@ -8,6 +8,48 @@ import scala.math._
 
 import kse.flow._
 
+trait Interpolate {
+  def inputDimension: Int
+  def size: Int
+  def parameters: Array[Double]
+}
+
+trait Interpolate1D extends Interpolate {
+  final def inputDimension = 1
+  def lower: Double
+  def upper: Double
+}
+
+final class LinearInterp(in: Array[Double], out: Array[Double]) extends Interpolate1D {
+  val size = min(in.length, out.length)
+  val parameters = new Array[Double](2*size)
+  System.arraycopy(in, 0, parameters, 0, size)
+  System.arraycopy(out, 0, parameters, size, size)
+  val lower = if (parameters.length > 0) parameters(0) else Double.NaN
+  val upper = if (parameters.length > 0) parameters(parameters.length - 1) else Double.NaN
+  def apply(a: Double): Double = {
+    var i0 = 0
+    var i1 = size - 1
+    while (i0 + 1 < i1) {
+      val i = (i0 + i1) >>> 1   // Avoids overflow, but we don't actually need to
+      if (parameters(i) < a) i0 = i
+      else i1 = i
+    }
+    val a0 = parameters(i0)
+    val a1 = parameters(i1)
+    if (a <= a0) parameters(size + i0)
+    else if (a >= a1) parameters(size + i1)
+    else {
+      val z0 = parameters(size + i0)
+      val z1 = parameters(size + i1)
+      z0 + (z1 - z0)*(a - a0)/(a1 - a0)
+    }
+  }
+}
+object LinearInterp {
+  def apply(in: Array[Double], out: Array[Double]) = new LinearInterp(in, out)
+}
+
 /** Marker trait so we know what fits we could have */
 sealed trait Fit[F <: Fit[F]] extends scala.Cloneable {
   def samples: Long
