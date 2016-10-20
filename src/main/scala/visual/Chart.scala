@@ -112,7 +112,7 @@ package chart {
           Indent(f"<g ${showWith(_.generallySolid)}>") +: (
             us.map{ lu => 
               val u = Vc from lu
-              Indent(f"<circle${fm.vquote(u, "cx", "cy")}$fmR$showSpec}/>", 1)
+              Indent(f"<circle${fm.vquote(u, "cx", "cy")}$fmR$showSpec/>", 1)
             }.toVector
           ) :+ Indent("</g>")
         }
@@ -327,7 +327,7 @@ package chart {
       while (i < math.min(v.length,2)) { sb ++= " L "; sb ++= fm(Vc from v(i)); i += 1 }
       while (i < v.length) { sb += ' '; sb ++= fm(Vc from v(i)); i += 1 }
       implicit val myMag = Magnification.from(mag, xform, pts)
-      sb ++= f"$q$show}/>"
+      sb ++= f"$q$show/>"
       Indent.V(sb.result)
     }
   }
