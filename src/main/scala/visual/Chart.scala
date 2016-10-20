@@ -587,14 +587,22 @@ package chart {
         " M " + fm(p + tkl) + " L " + fm(p + tkr)
       }
       val xish = e.x.abs >= NumericConstants.OverSqrtTwo
-      val textalign =
-        if (xish) Font(Horizontal.Middle, if (e.x >= 0 == anchor >= 0) Vertical.Top else Vertical.Bottom)
-        else      Font(if (e.y > 0 == anchor > 0) Horizontal.Left else Horizontal.Right, Vertical.Middle)
+      val (halign, valign) =
+        if (xish) (Horizontal.Middle, if (e.x >= 0 == anchor >= 0) Vertical.Top else Vertical.Bottom)
+        else      (if (e.y > 0 == anchor > 0) Horizontal.Left else Horizontal.Right, Vertical.Middle)
+      val textalign = Font(halign, valign)
       val jump = e.ccw * (myMag.value * (if (xish == anchor >= 0) right + anchor else left - anchor))
-      val spectext = showWith(_.specifically.unstroked + textalign)
+      val specced = (styled.specifically.unstroked + textalign).defaultTo(FontSize(10))
+      val spectext = showWith(_ => specced)
       val labels = ticks.map{ case Tik(l,t) =>
         val p = uf + e*(ud*l.clip(0,1))
-        f"<text${fm.vquote(p + jump, "x", "y")}$spectext>$t</text>"
+        val unbug =
+          if (!fm.verticalTextIsBuggy || valign == Vertical.Bottom) 0 vc 0
+          else {
+            val height = specced.elements.collectFirst{ case FontSize(s) => s * myMag.value }.getOrElse(10f)
+            0 vc height * fm.verticalFix(valign)
+          }
+        f"<text${fm.vquote(p + jump + unbug, "x", "y")}$spectext>$t</text>"
       }
       Indent.V({
         Seq(
@@ -832,10 +840,21 @@ package chart {
 
 
   final case class Letters(anchor: Vc, text: String, rotate: Float, style: Style) extends Shown {
+    override def styled = style.defaultTo(FontSize(12))
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, anchor)
-      val u = xform(anchor)
       val rot = (rotate*180/math.Pi).toFloat
+      val u = {
+        val u0 = xform(anchor)
+        if (!fm.verticalTextIsBuggy) u0
+        else style.elements.collectFirst{ case FontVertical(valign) =>
+          val height = style.elements.collectFirst{ case FontSize(s) => s }.getOrElse(12f)
+          val mult = myMag.value * fm.verticalFix(valign)
+          if (mult closeTo 0) u0
+          else if (rotate closeTo 0) u0 + (0 vc height * mult)
+          else u0 + (0 vc height * mult).rotate(rotate)
+        }.getOrElse(u0)
+      }
       Indent.V(
         if (rotate closeTo 0)
           f"<text${fm.vquote(u,"x","y")}$show>$text</text>"
@@ -1078,20 +1097,28 @@ package chart {
           val p = pieces(i)
           if ((p.legend eq null) || p.legend.isEmpty) Nil
           else {
-            val stytx = showWith{_ =>
-              (
-                if (spec.elements.exists{ case _: FillColor => true; case _ => false}) spec.unstroked
-                else if (p.fill.exists) spec.unstroked + Fill.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
-                else if (p.stroke.exists) spec.unstroked + Fill.alpha(p.stroke.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
-                else spec
-              ).defaultTo(FontSize(labelsize)) ++ Font(if (arrowpoints(i)._3.x < 0) Horizontal.Right else Horizontal.Left, Vertical.Middle)
-            }
+            val stytxRaw = (
+              if (spec.elements.exists{ case _: FillColor => true; case _ => false}) spec.unstroked
+              else if (p.fill.exists) spec.unstroked + Fill.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
+              else if (p.stroke.exists) spec.unstroked + Fill.alpha(p.stroke.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a))
+              else spec
+            ).defaultTo(FontSize(labelsize)) ++ Font(if (arrowpoints(i)._3.x < 0) Horizontal.Right else Horizontal.Left, Vertical.Middle)
+            val stytx = showWith{_ => stytxRaw}
             val styln = showWith{_ =>
               if (p.fill.exists) spec.stroky ++ Stroke.alpha(p.fill.aFn(a => if (a < 0.5) (a*0.5).sqrt.toFloat else a), strokesize)
               else if (p.stroke.exists) spec.stroky ++ Stroke.alpha(p.stroke, strokesize)
               else spec.stroky.defaultTo(StrokeWidth(strokesize))
             }
-            val u = uc + arrowpoints(i)._3 + Vc(labelsize/2, 0)*(if (arrowpoints(i)._3.x < 0) -1 else 1)
+            val u = 
+              uc +
+              arrowpoints(i)._3 +
+              Vc(labelsize/2, 0)*(if (arrowpoints(i)._3.x < 0) -1 else 1) +
+              Vc(
+                0,
+                if (!fm.verticalTextIsBuggy) 0
+                else fm.verticalFix(Vertical.Middle) * myMag.value *
+                    stytxRaw.elements.collectFirst{ case FontSize(s) => s }.getOrElse(labelsize)                
+              )
             Indent(f"<text${fm.vquote(u,"x","y")}$stytx>${p.legend}</text>",1) :: Nil
           }
         }.toVector
@@ -1141,9 +1168,10 @@ package chart {
     }
   }
 
-  // This should work in the REPL after: import kse.flow._, kse.coll._, kse.coll.packed._, kse.maths._, kse.maths.stats._, kse.maths.stochastic._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
+  // This should work in the REPL
   /*
   {
+    import kse.flow._, kse.coll._, kse.coll.packed._, kse.maths._, kse.maths.stats._, kse.maths.stochastic._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
     val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f))
     val pie = Pie(Vector(Piece(15, "red", Rgba.Red), Piece(5, "green", Rgba.Green, Rgba.DarkGreen), Piece(0.1f, "gold", Rgba.Gold), Piece(0.3f, "logically blue", Rgba.Empty, Rgba.Blue)), 150 vc 350, 20, Style.empty, Some(math.Pi.toFloat/12))
     val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0)))

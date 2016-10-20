@@ -53,6 +53,16 @@ class Formatter {
     case FontHorizontal(h) => apply(h)
     case Style(es)         => es.map(e => apply(e)).mkString
   }
+
+  def verticalTextIsBuggy = false
+
+  /** Amount to shift down vertical text if dominant-baseline attribute doesn't work in a viewer */
+  def verticalFix(v: Vertical) = v match {
+    case Vertical.Top => 0.75f
+    case Vertical.Middle => 0.35f
+    case Vertical.Bottom => 0f
+    case Whatever => 0f
+  }
 }
 class ProxyFormatter(original: Formatter) extends Formatter {
   override def apply(x: Float) = original(x)
@@ -72,7 +82,16 @@ class ProxyFormatter(original: Formatter) extends Formatter {
 
   override def apply(stylish: Stylish): String = original(stylish)
 }
-object DefaultFormatter extends Formatter {}
+trait VerticalTextWorkaround extends Formatter {
+  override def apply(tx: Textual): String = {
+    tx match {
+      case _: Vertical => ""
+      case _ => super.apply(tx)
+    }
+  }
+  override def verticalTextIsBuggy = true
+}
+object DefaultFormatter extends Formatter with VerticalTextWorkaround {}
 
 
 trait Textual extends Serializable with Product { 
