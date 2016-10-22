@@ -17,7 +17,7 @@ package object chart {
   private[chart] val q = "\""
 
   def svg(size: Vc, stuff: InSvg*): Vector[Indent] =
-    Vector("""<svg width="%.2f" height="%.2f">""".format(size.x, size.y), "<g>").map(x => Indent(x)) ++
+    Vector("""<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f">""".format(size.x, size.y), "<g>").map(x => Indent(x)) ++
     stuff.flatMap(_.inSvg(Xform.flipy(size.y), None)(DefaultFormatter)).map(x => x.in) ++
     Vector("</g>", "</svg>").map(x => Indent(x))
 
@@ -31,7 +31,7 @@ package object chart {
 
   def quick(i: InSvg*) {
     val svg = 
-      Vector("<html>", "<body>", """<svg width="640" height="480">""", "<g>").map(x => Indent(x)) ++
+      Vector("<html>", "<body>", """<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">""", "<g>").map(x => Indent(x)) ++
       i.flatMap(_.inSvg(Xform.flipy(480), None)(DefaultFormatter)).map(x => x.in) ++
       Vector("</g>", "</svg>", "</body>", "</html>").map(x => Indent(x))
     println(svg.mkString("\n"))
