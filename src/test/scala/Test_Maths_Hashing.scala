@@ -528,6 +528,102 @@ object Test_Maths_Hashing extends Test_Kse {
     }
   }
 
+  def test_consistency_all = {
+    val xx32 = new XxHash32
+    val cs32 = new CheckSum32
+    val xx64 = new XxHash64
+    val cs64 = new CheckSum64
+    def pairsame[A](v: Vector[A], what: => String) = v.zipWithIndex.sliding(2).forall{ x =>
+      val ans = x(0)._1 == x(1)._1
+      if (!ans) println(f"$what\nMismatch on ${x(0)._2} vs ${x(1)._2}: ${x(0)._1} != ${x(1)._1}")
+      ans
+    }
+    (1 to 500).forall{ i =>
+      val a = Array.fill(i)(util.Random.nextInt.toByte)
+      val b = a.take(util.Random.nextInt(a.length))
+      val c = a.drop(b.length)
+      pairsame(Vector(
+        XX.hash32(ByteBuffer wrap a),
+        xx32.hash32(ByteBuffer wrap a),
+        xx32.hash32(ByteBuffer wrap a),
+        xx32.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
+        xx32.begin(0).result(ByteBuffer wrap a),
+        xx32.hash32(ByteBuffer wrap a)
+      ), f"xx32 $i ${b.length}\n${a.toVector}\n") &&
+      pairsame(Vector(
+        cs32.hash32(ByteBuffer wrap a),
+        cs32.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
+        cs32.begin(0).result(ByteBuffer wrap a),
+        cs32.hash32(ByteBuffer wrap a)
+      ), f"cs32 $i ${b.length}\n${a.toVector}\n") &&
+      pairsame(Vector(
+        XX.hash64(ByteBuffer wrap a),
+        xx64.hash64(ByteBuffer wrap a),
+        xx64.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
+        xx64.begin(0).result(ByteBuffer wrap a),
+        xx64.hash64(ByteBuffer wrap a)
+      ), f"xx64 $i ${b.length}") &&
+      pairsame(Vector(
+        cs64.hash64(ByteBuffer wrap a),
+        cs64.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
+        cs64.begin(0).result(ByteBuffer wrap a),
+        cs64.hash64(ByteBuffer wrap a)
+      ), f"cs64 $i ${b.length}\n${a.toVector}\n")
+    }
+  }
+
+  def test_checksum32 = {
+    val h = new CheckSum32
+    (1 to 1000).forall{ i =>
+      val a = Array.fill(i)(util.Random.nextInt.toByte)
+      val bb = ByteBuffer wrap a
+      val sum = {
+        var j, s = 0
+        while (j+3 < a.length) {
+          s += littleI(a, j)
+          j += 4
+        }
+        if (j < a.length) {
+          val k = j
+          while (j < a.length) {
+            s += ((a(j) & 0xFF) << (j-k)*8)
+            j += 1
+          }
+        }
+        s
+      }
+      val ans = h hash32 bb
+      sum == ans
+    }
+  }
+
+  def test_checksum64 = {
+    val h = new CheckSum64
+    (1 to 1000).forall{ i =>
+      val a = Array.fill(i)(util.Random.nextInt.toByte)
+      val bb = ByteBuffer wrap a
+      val sum = {
+        var j = 0
+        var s = 0L
+        while (j+7 < a.length) {
+          s += littleL(a, j)
+          j += 8
+        }
+        if (j < a.length) {
+          val k = j
+          while (j < a.length) {
+            s += ((a(j) & 0xFFL) << (j-k)*8)
+            j += 1
+          }       
+        }
+        s
+      }
+      val ans = h hash64 bb
+      if (sum != ans) println(f"$i $sum $ans ${a.toVector}")
+      sum == ans
+    }
+  }
+
   def main(args: Array[String]) { typicalMain(args) }
 }
 

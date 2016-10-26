@@ -10,9 +10,34 @@ import java.lang.Long.{rotateLeft => rotl64, rotateRight => rotr64 }
 import java.nio.{ByteBuffer, ByteOrder}
 
 package hashing {
-  trait Hash32 { def hash32(bb: ByteBuffer, seed: Int): Int }
-  trait Hash64 { def hash64(bb: ByteBuffer, seed: Long): Long }
-  class XxHash32(initialSeed: Int) {
+
+  trait EagerHash32 {
+    def hash32(bb: ByteBuffer, seed: Int): Int
+    final def hash32(bb: ByteBuffer): Int = hash32(bb, 0)
+  }
+
+  trait Hash32 extends EagerHash32 {
+    def hash32(bb: ByteBuffer, seed: Int): Int = begin(seed).result(bb)
+    def begin(seed: Int): this.type
+    def append(bb: ByteBuffer): this.type
+    def result(bb: ByteBuffer): Int
+  }
+
+
+  trait EagerHash64 {
+    def hash64(bb: ByteBuffer, seed: Long): Long
+    final def hash64(bb: ByteBuffer): Long = hash64(bb, 0L)
+  }
+
+  trait Hash64 extends EagerHash64 {
+    def hash64(bb: ByteBuffer, seed: Long): Long = begin(seed).result(bb)
+    def begin(seed: Long): this.type
+    def append(bb: ByteBuffer): this.type
+    def result(bb: ByteBuffer): Long
+  }
+
+
+  class XxHash32(initialSeed: Int) extends Hash32 {
     import XX.{Prime32_1, Prime32_2, Prime32_3, Prime32_4, Prime32_5}
     private[this] var v1: Int = 0
     private[this] var v2: Int = 0
@@ -20,6 +45,7 @@ package hashing {
     private[this] var v4: Int = 0
     private[this] var v5: Int = 0
     private[this] var hadBlock: Boolean = false
+    private[this] var myBuffer: ByteBuffer = null
     begin(initialSeed)
     def this() = this(0)
     def begin(seed: Int): this.type = {
@@ -29,9 +55,10 @@ package hashing {
       v4 = seed - Prime32_1
       v5 = 0
       hadBlock = false
+      if (myBuffer ne null) myBuffer.clear
       this
     }
-    def apply(bb: ByteBuffer): this.type = {
+    def appendBy16(bb: ByteBuffer): this.type = {
       bb.order(ByteOrder.LITTLE_ENDIAN)
       var x1 = v1
       var x2 = v2
@@ -83,15 +110,51 @@ package hashing {
       h32 *= Prime32_3
       h32 ^ (h32 >>> 16)      
     }
+    def append(bb: ByteBuffer): this.type = {
+      bb.order(ByteOrder.LITTLE_ENDIAN)
+      if ((myBuffer ne null) && (myBuffer.position > 0)) {
+        while (myBuffer.position <= 12 && bb.remaining >= 4) myBuffer.putInt(bb.getInt)
+        while (myBuffer.position < 16 && bb.remaining >= 1) myBuffer.put(bb.get)
+        if (myBuffer.position == 16) {
+          myBuffer.flip
+          apply(myBuffer.getInt, myBuffer.getInt, myBuffer.getInt, myBuffer.getInt)
+          myBuffer.clear
+        }
+      }
+      if (bb.remaining >= 16) appendBy16(bb)
+      if (bb.remaining > 0) {
+        if (myBuffer eq null) {
+          myBuffer = ByteBuffer.allocate(16)
+          myBuffer.order(ByteOrder.LITTLE_ENDIAN)
+        }
+        while (bb.remaining >= 4) myBuffer.putInt(bb.getInt)
+        while (bb.remaining >= 1) myBuffer.put(bb.get)
+      }
+      this
+    }
     def result(bb: ByteBuffer): Int = {
-      if (bb.remaining >= 16) apply(bb) else bb.order(ByteOrder.LITTLE_ENDIAN)
-      counting(bb.remaining)
-      while (bb.remaining >= 4) trailing(bb.getInt)
-      while (bb.remaining >= 1) trailing(bb.get)
+      val terminal =
+        if ((myBuffer ne null) && (myBuffer.position > 0)) {
+          append(bb)
+          myBuffer.flip
+          if (myBuffer.remaining == 16) apply(myBuffer.getInt, myBuffer.getInt, myBuffer.getInt, myBuffer.getInt)
+          myBuffer
+        }
+        else {
+          if (bb.remaining >= 16) appendBy16(bb)
+          else bb.order(ByteOrder.LITTLE_ENDIAN)
+          bb
+        }
+      counting(terminal.remaining)
+      while (terminal.remaining >= 4) trailing(terminal.getInt)
+      while (terminal.remaining >= 1) trailing(terminal.get)
+      if (terminal eq myBuffer) myBuffer.clear
       complete()
     }
   }
-  class XxHash64(initialSeed: Long) {
+
+
+  class XxHash64(initialSeed: Long) extends Hash64 {
     import XX.{Prime64_1, Prime64_2, Prime64_3, Prime64_4, Prime64_5}
     private[this] var v1: Long = 0
     private[this] var v2: Long = 0
@@ -99,6 +162,7 @@ package hashing {
     private[this] var v4: Long = 0
     private[this] var v5: Long = 0
     private[this] var hadBlock: Boolean = false
+    private[this] var myBuffer: ByteBuffer = null
     begin(initialSeed)
     def this() = this(0)
     def begin(seed: Long): this.type = {
@@ -108,9 +172,10 @@ package hashing {
       v4 = seed - Prime64_1
       v5 = 0
       hadBlock = false
+      if (myBuffer ne null) myBuffer.clear
       this
     }
-    def apply(bb: ByteBuffer): this.type = {
+    def appendBy32(bb: ByteBuffer): this.type = {
       bb.order(ByteOrder.LITTLE_ENDIAN)
       var x1 = v1
       var x2 = v2
@@ -178,16 +243,52 @@ package hashing {
       h64 *= Prime64_3
       h64 ^ (h64 >>> 32)      
     }
+    def append(bb: ByteBuffer): this.type = {
+      bb.order(ByteOrder.LITTLE_ENDIAN)
+      if ((myBuffer ne null) && (myBuffer.position > 0)) {
+        while (myBuffer.position <= 24 && bb.remaining >= 8) myBuffer.putLong(bb.getLong)
+        while (myBuffer.position < 32 && bb.remaining >= 1) myBuffer.put(bb.get)
+        if (myBuffer.position == 32) {
+          myBuffer.flip
+          apply(myBuffer.getLong, myBuffer.getLong, myBuffer.getLong, myBuffer.getLong)
+          myBuffer.clear
+        }
+      }
+      if (bb.remaining >= 32) appendBy32(bb)
+      if (bb.remaining > 0) {
+        if (myBuffer eq null) {
+          myBuffer = ByteBuffer.allocate(32)
+          myBuffer.order(ByteOrder.LITTLE_ENDIAN)
+        }
+        while (bb.remaining >= 8) myBuffer.putLong(bb.getLong)
+        while (bb.remaining >= 1) myBuffer.put(bb.get)
+      }
+      this
+    }
     def result(bb: ByteBuffer): Long = {
-      if (bb.remaining >= 32) apply(bb) else bb.order(ByteOrder.LITTLE_ENDIAN)
-      counting(bb.remaining)
-      while (bb.remaining >= 8) trailing(bb.getLong)
-      if (bb.remaining >= 4) trailing(bb.getInt)
-      while (bb.remaining >= 1) trailing(bb.get)
+      val terminal =
+        if ((myBuffer ne null) && (myBuffer.position > 0)) {
+          append(bb)
+          myBuffer.flip
+          if (myBuffer.remaining == 36) apply(myBuffer.getLong, myBuffer.getLong, myBuffer.getLong, myBuffer.getLong)
+          myBuffer
+        }
+        else {
+          if (bb.remaining >= 32) appendBy32(bb)
+          else bb.order(ByteOrder.LITTLE_ENDIAN)
+          bb
+        }
+      counting(terminal.remaining)
+      while (terminal.remaining >= 8) trailing(terminal.getLong)
+      if (terminal.remaining >= 4) trailing(terminal.getInt)
+      while (terminal.remaining >= 1) trailing(terminal.get)
+      if (terminal eq myBuffer) myBuffer.clear
       complete()
     }
   }
-  object XX extends Hash32 with Hash64 {
+
+
+  object XX extends EagerHash32 with EagerHash64 {
     final val Prime32_1 = 0x9e3779b1 // 2654435761
     final val Prime32_2 = 0x85ebca77 // 2246822519
     final val Prime32_3 = 0xc2b2ae3d // 3266489917
@@ -343,5 +444,78 @@ package hashing {
       h64 ^ (h64 >>> 32)      
     }
     def hash64(ab: Array[Byte], seed: Int, i0: Int = 0, iN: Int = Int.MaxValue): Long = hash64(ByteBuffer.wrap(ab, i0, math.min(iN, ab.length)), seed)
+  }
+
+
+  class CheckSum32 extends Hash32 {
+    private[this] var sum = 0
+    private[this] var partial = 0
+    private[this] var partialN = 0
+    def begin(seed: Int): this.type = { sum = seed; partial = 0; partialN = 0; this }
+    def append(bb: ByteBuffer): this.type = {
+      bb.order(ByteOrder.LITTLE_ENDIAN)
+      if (partialN > 0) {
+        while (partialN < 4 && bb.hasRemaining) {
+          partial |= (bb.get & 0xFF) << (partialN*8)
+          partialN += 1
+        }
+        if (partialN == 4) {
+          sum += partial
+          partialN = 0
+          partial = 0
+        }
+      }
+      while (bb.remaining >= 4) sum += bb.getInt
+      while (bb.hasRemaining) {
+        partial |= (bb.get & 0xFF) << (partialN*8)
+        partialN += 1
+      }
+      this
+    }
+    def result(bb: ByteBuffer): Int = {
+      append(bb)
+      if (partialN > 0) {
+        sum += partial
+        partial = 0
+        partialN = 0        
+      }
+      sum
+    }
+  }
+
+  class CheckSum64 extends Hash64 {
+    private[this] var sum = 0L
+    private[this] var partial = 0L
+    private[this] var partialN = 0
+    def begin(seed: Long): this.type = { sum = seed; partial = 0; partialN = 0; this }
+    def append(bb: ByteBuffer): this.type = {
+      bb.order(ByteOrder.LITTLE_ENDIAN)
+      if (partialN > 0) {
+        while (partialN < 8 && bb.hasRemaining) {
+          partial |= (bb.get & 0xFFL) << (partialN*8)
+          partialN += 1
+        }
+        if (partialN == 8) {
+          sum += partial
+          partialN = 0
+          partial = 0
+        }
+      }
+      while (bb.remaining >= 8) sum += bb.getLong
+      while (bb.hasRemaining) {
+        partial |= (bb.get & 0xFFL) << (partialN*8)
+        partialN += 1
+      }
+      this
+    }
+    def result(bb: ByteBuffer): Long = {
+      append(bb)
+      if (partialN > 0) {
+        sum += partial
+        partialN = 0
+        partial = 0
+      }
+      sum
+    }
   }
 }
