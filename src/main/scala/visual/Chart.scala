@@ -901,7 +901,8 @@ package chart {
 
   final case class Titling(
     title: String, xlegend: String, ylegend: String,
-    titler: Style => Style = Titling.defaultTitler, legender: Style => Style = Titling.defaultLegender
+    titler: Style => Style = Titling.defaultTitler, legender: Style => Style = Titling.defaultLegender,
+    titleGap: Float = 0f, xlegendGap: Float = 0f, ylegendGap: Float = 0f
   ) {}
   object Titling {
     val defaultTitler = (s: Style) => s.scale(1.59f)
@@ -975,7 +976,7 @@ package chart {
     lazy val theTitle = titles.map(_.title).filter(_.nonEmpty).map{ titleText =>
       val textHeight: Float = titlestyle.elements.collectFirst{ case FontSize(fs) => fs }.getOrElse(16f)
       val x = 0.5f * viewExtent.x
-      val y = viewExtent.y * (extrascale + 0.05f) + textHeight*0.2f
+      val y = viewExtent.y * (extrascale + 0.05f) + textHeight*0.2f + titles.get.titleGap*textHeight
       Letters(viewOrigin + Vc(x, y), titleText, 0, titlestyle ++ Font(Horizontal.Middle, Vertical.Bottom))
     }.toVector
 
@@ -984,14 +985,15 @@ package chart {
       val tickTextH: Float = tickstyle.elements.collectFirst{ case FontSize(fs) => fs }.getOrElse(10f)
       titles.map(_.xlegend).filter(_.nonEmpty).map{ xText =>
         val x = 0.5f*viewExtent.x
-        val y = -(2*ticklen + tickTextH)
+        val y = -(2*ticklen + tickTextH) - titles.get.xlegendGap*textHeight
         Letters(viewOrigin + Vc(x,y), xText, 0, legendstyle ++ Font(Horizontal.Middle, Vertical.Top))
       }.toVector ++
       titles.map(_.ylegend).filter(_.nonEmpty).map{ yText =>
         val y = 0.5f*viewExtent.y
         val x = -(
           2*ticklen +
-          tickTextH * 0.5f * yTicks.theTicks.ticks.map(_.what.length).reduceOption(_ max _).getOrElse(1)
+          tickTextH * 0.5f * yTicks.theTicks.ticks.map(_.what.length).reduceOption(_ max _).getOrElse(1) +
+          -titles.get.ylegendGap*textHeight
         )
         Letters(viewOrigin + Vc(x,y), yText, -math.Pi.toFloat/2, legendstyle ++ Font(Horizontal.Middle, Vertical.Bottom))
       }.toVector
@@ -1172,6 +1174,7 @@ package chart {
   /*
   {
     import kse.flow._, kse.coll._, kse.coll.packed._, kse.maths._, kse.maths.stats._, kse.maths.stochastic._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
+    val tga, xga, yga = -0.1f
     val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f))
     val pie = Pie(Vector(Piece(15, "red", Rgba.Red), Piece(5, "green", Rgba.Green, Rgba.DarkGreen), Piece(0.1f, "gold", Rgba.Gold), Piece(0.3f, "logically blue", Rgba.Empty, Rgba.Blue)), 150 vc 350, 20, Style.empty, Some(math.Pi.toFloat/12))
     val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0)))
@@ -1187,7 +1190,7 @@ package chart {
     val qbf = Letters(200 vc 200, "Quick brown fox", (10*math.Pi/180).toFloat, Fill(Rgba.Black) ++ Font(40, Horizontal.Middle))
     val tl = TickLabels(Vc(100,100), Vc(200,100), Seq(Tik(0, "0"), Tik(0.4f, "40"), Tik(0.8f, "80")), 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.8f, 0.8f), 4) ++ Fill(Rgba(0f, 0.4f, 0.4f)))
     val at = AutoTick(Vc(0.2f, 100), Vc(1.26f, 100), 5, 0, 20, 5, Font(18) ++ Stroke(Rgba(0f, 0.6f, 1f), 4) ++ Fill(Rgba(0f, 0.2f, 0.5f)))
-    val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1)))), Some(Titling("Fish", "salmon", "perch")))
+    val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1)))), Some(Titling("Fish", "salmon", "perch", titleGap = tga, ylegendGap = yga, xlegendGap = xga)))
     val sh = Shape(Array(Vc(100, 200).underlying, Vc(200, 100).underlying, Vc(300, 300).underlying), Option(c.copy(c = 0 vc 0)), Stroke(Rgba.Blue, 5) ++ Fill.alpha(Rgba.Blue.aTo(0.2f)) ++ Opacity(0.4f))
     quick(
       sh, pie, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl,
