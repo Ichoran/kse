@@ -12,6 +12,7 @@ import kse.typecheck._
 import kse.flow._
 import kse.coll._
 import kse.maths._
+import kse.maths.hashing._
 
 import kse.jsonal._
 
@@ -280,6 +281,62 @@ package object eio {
       catch { case oome: OutOfMemoryError => fail(s"Out of memory reading ${underlying.getPath}") }
       finally { try { src.close } catch { case t if NonFatal(t) => } }
     }
+
+    private[this] def myHashWith(
+      h0: IncrementalHash, h1: IncrementalHash, hmore: Seq[IncrementalHash]
+    ): Ok[String, Array[Any]] =
+      okay[String]{ fail =>
+        if (underlying.isDirectory) fail(s"${underlying.getPath} is a directory")
+        var sz = try { underlying.length } catch { case t if NonFatal(t) => fail(s"Could not read length of ${underlying.getPath}") }
+        val h = new Array[IncrementalHash](hmore.length + (if (h1 eq null) 0 else 1) + (if (h0 eq null) 0 else 1))
+        var i = 0
+        if (h0 ne null) { h(i) = h0.begin(); i += 1 }
+        if (h1 ne null) { h(i) = h1.begin(); i += 1 }
+        hmore.foreach{ hi => h(i) = hi.begin(); i += 1 }
+        try {
+          val buf = new Array[Byte](math.min(sz, 262144).toInt)
+          val bb = java.nio.ByteBuffer wrap buf
+          val fis = new FileInputStream(underlying)
+          try {
+            var n = 0
+            var zeros = 0
+            while (n >= 0 && sz >= 0 && zeros < 4) {
+              n = fis.read(buf, 0, buf.length)
+              if (n == 0) zeros += 1
+              else if (n > 0) {
+                zeros = 0
+                sz -= n
+                i = 0
+                while (i < h.length) {
+                  bb.position(0).limit(n)
+                  h(i) append bb
+                  i += 1
+                }
+              }
+            }
+          }
+          catch { case t if NonFatal(t) => fail(s"Error while reading ${underlying.getPath}:\n${t.toString}") }
+          finally { try { fis.close } catch { case t if NonFatal(t) => } }
+        }
+        catch { case t if NonFatal(t) => fail(s"Could not read ${underlying.getPath} because:\n${t.toString}") }
+        h.map{ hi => 
+          hi.resultAs[Any] match {
+            case Some(x) => x
+            case None    =>
+              fail(s"Could not get final hash value from hasher of type ${hi.getClass.getName} on ${underlying.getPath}")
+          }
+        }
+      }
+
+    def hashWith(h: maths.hashing.Hash32, h2: maths.hashing.Hash32, more: maths.hashing.Hash32*): Ok[String, Array[Int]] =
+      myHashWith(h, h2, more).map{_.map{ case i: Int => i; case _ => throw new Exception("Wrong hash type") }}
+
+    def hashWith(h: maths.hashing.Hash32): Ok[String, Int] = hashWith(h, null).map(_.head)
+
+    def hashWith(h: maths.hashing.Hash64, h2: maths.hashing.Hash64, more: maths.hashing.Hash64*): Ok[String, Array[Long]] =
+      myHashWith(h, h2, more).map{_.map{ case l: Long => l; case _ => throw new Exception("Wrong hash type") }}
+
+    def hashWith(h: maths.hashing.Hash64): Ok[String, Long] = hashWith(h, null).map(_.head)
     
     def walk(act: FileWalker, log: FileLogger, sizeLimit: Int = Int.MaxValue) {
       val fw = act match { case fwi: FileWalkImpl => fwi }

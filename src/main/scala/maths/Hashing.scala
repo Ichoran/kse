@@ -11,29 +11,45 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 package hashing {
 
-  trait EagerHash32 {
+  trait IncrementalHash {
+    def begin(): this.type
+    def append(bb: ByteBuffer): this.type
+    def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A]
+  }
+
+  trait FullHash32 {
     def hash32(bb: ByteBuffer, seed: Int): Int
     final def hash32(bb: ByteBuffer): Int = hash32(bb, 0)
   }
 
-  trait Hash32 extends EagerHash32 {
+  trait Hash32 extends FullHash32 with IncrementalHash {
     def hash32(bb: ByteBuffer, seed: Int): Int = begin(seed).result(bb)
+    final def begin(): this.type = begin(0)
     def begin(seed: Int): this.type
     def append(bb: ByteBuffer): this.type
     def result(bb: ByteBuffer): Int
+    def result(): Int
+    final def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A] = {
+      tag.unapply(0: Int).flatMap{_ => tag.unapply(result()) }
+    }
   }
 
 
-  trait EagerHash64 {
+  trait FullHash64 {
     def hash64(bb: ByteBuffer, seed: Long): Long
     final def hash64(bb: ByteBuffer): Long = hash64(bb, 0L)
   }
 
-  trait Hash64 extends EagerHash64 {
+  trait Hash64 extends FullHash64 with IncrementalHash {
     def hash64(bb: ByteBuffer, seed: Long): Long = begin(seed).result(bb)
+    final def begin(): this.type = begin(0L)
     def begin(seed: Long): this.type
     def append(bb: ByteBuffer): this.type
     def result(bb: ByteBuffer): Long
+    def result(): Long
+    final def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A] = {
+      tag.unapply(0: Long).flatMap{ _ => tag.unapply(result()) }
+    }
   }
 
 
@@ -150,6 +166,19 @@ package hashing {
       while (terminal.remaining >= 1) trailing(terminal.get)
       if (terminal eq myBuffer) myBuffer.clear
       complete()
+    }
+    def result(): Int = {
+      if ((myBuffer ne null) && myBuffer.hasRemaining) {
+        counting(myBuffer.remaining)
+        while (myBuffer.remaining >= 4) trailing(myBuffer.getInt)
+        while (myBuffer.remaining >= 1) trailing(myBuffer.get)
+        myBuffer.clear
+        complete()
+      }
+      else {
+        counting(0)
+        complete()
+      }
     }
   }
 
@@ -285,10 +314,24 @@ package hashing {
       if (terminal eq myBuffer) myBuffer.clear
       complete()
     }
+    def result(): Long = {
+      if ((myBuffer ne null) && myBuffer.hasRemaining) {
+        counting(myBuffer.remaining)
+        while (myBuffer.remaining >= 8) trailing(myBuffer.getLong)
+        if (myBuffer.remaining >= 4) trailing(myBuffer.getInt)
+        while (myBuffer.remaining >= 1) trailing(myBuffer.get)
+        myBuffer.clear
+        complete()
+      }
+      else {
+        counting(0)
+        complete()
+      }
+    }
   }
 
 
-  object XX extends EagerHash32 with EagerHash64 {
+  object XX extends FullHash32 with FullHash64 {
     final val Prime32_1 = 0x9e3779b1 // 2654435761
     final val Prime32_2 = 0x85ebca77 // 2246822519
     final val Prime32_3 = 0xc2b2ae3d // 3266489917
@@ -474,6 +517,9 @@ package hashing {
     }
     def result(bb: ByteBuffer): Int = {
       append(bb)
+      result()
+    }
+    def result(): Int = {
       if (partialN > 0) {
         sum += partial
         partial = 0
@@ -510,6 +556,9 @@ package hashing {
     }
     def result(bb: ByteBuffer): Long = {
       append(bb)
+      result()
+    }
+    def result(): Long = {
       if (partialN > 0) {
         sum += partial
         partialN = 0
