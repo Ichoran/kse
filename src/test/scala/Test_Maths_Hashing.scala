@@ -487,7 +487,7 @@ object Test_Maths_Hashing extends Test_Kse {
         val xx32 = new XxHash32
         var j = 0
         while (j+16 <= a.length) {
-          xx32(littleI(a,j), littleI(a,j+4), littleI(a,j+8), littleI(a,j+12))
+          xx32.appendIx4(littleI(a,j), littleI(a,j+4), littleI(a,j+8), littleI(a,j+12))
           j += 16
         }
         xx32.counting(a.length - j)
@@ -505,7 +505,7 @@ object Test_Maths_Hashing extends Test_Kse {
         val xx64 = new XxHash64
         var k = 0
         while (k+32 <= a.length) {
-          xx64(littleL(a,k), littleL(a,k+8), littleL(a,k+16), littleL(a,k+24))
+          xx64.appendLx4(littleL(a,k), littleL(a,k+8), littleL(a,k+16), littleL(a,k+24))
           k += 32
         }
         xx64.counting(a.length - k)
@@ -530,9 +530,11 @@ object Test_Maths_Hashing extends Test_Kse {
 
   def test_consistency_all = {
     val xx32 = new XxHash32
-    val cs32 = new CheckSum32
+    val cs32 = new SimpleSum32
+    val mh32 = new Murmur32
     val xx64 = new XxHash64
-    val cs64 = new CheckSum64
+    val cs64 = new SimpleSum64
+    val mh128 = new Murmur128
     def pairsame[A](v: Vector[A], what: => String) = v.zipWithIndex.sliding(2).forall{ x =>
       val ans = x(0)._1 == x(1)._1
       if (!ans) println(f"$what\nMismatch on ${x(0)._2} vs ${x(1)._2}: ${x(0)._1} != ${x(1)._1}")
@@ -551,6 +553,12 @@ object Test_Maths_Hashing extends Test_Kse {
         xx32.hash32(ByteBuffer wrap a)
       ), f"xx32 $i ${b.length}\n${a.toVector}\n") &&
       pairsame(Vector(
+        mh32.hash32(ByteBuffer wrap a),
+        mh32.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
+        mh32.begin(0).result(ByteBuffer wrap a),
+        mh32.hash32(ByteBuffer wrap a)
+      ), f"mh32 $i ${b.length}\n${a.toVector}\n") &&
+      pairsame(Vector(
         cs32.hash32(ByteBuffer wrap a),
         cs32.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
         cs32.begin(0).result(ByteBuffer wrap a),
@@ -568,12 +576,32 @@ object Test_Maths_Hashing extends Test_Kse {
         cs64.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
         cs64.begin(0).result(ByteBuffer wrap a),
         cs64.hash64(ByteBuffer wrap a)
-      ), f"cs64 $i ${b.length}\n${a.toVector}\n")
+      ), f"cs64 $i ${b.length}\n${a.toVector}\n") &&
+      pairsame(Vector(
+        mh128.hash128(ByteBuffer wrap a).toVector,
+        mh128.begin(0).append(ByteBuffer wrap b).results(ByteBuffer wrap c).toVector,
+        mh128.begin(0).results(ByteBuffer wrap a).toVector,
+        mh128.hash128(ByteBuffer wrap a).toVector
+      ), f"mh128 $i ${b.length}\n${a}\n")
     }
   }
 
-  def test_checksum32 = {
-    val h = new CheckSum32
+  def test_murmur32 = {
+    val h = new Murmur32
+    (1 to 100).forall{ i => 
+      val a = Array.fill(i)(util.Random.nextInt.toByte)
+      scala.util.hashing.MurmurHash3.bytesHash(a, 0) == h.hash32(ByteBuffer wrap a)
+    }
+  }
+
+  def test_murmur128_x64 = {
+    val h = new Murmur128
+    val expected = Vector(0xcd99481f9ee902c9L, 0x695da1a38987b6e7L)
+    h.hash128(ByteBuffer wrap "The quick brown fox jumps over the lazy dog.".getBytes).toVector == expected
+  }
+
+  def test_simplesum32 = {
+    val h = new SimpleSum32
     (1 to 1000).forall{ i =>
       val a = Array.fill(i)(util.Random.nextInt.toByte)
       val bb = ByteBuffer wrap a
@@ -597,8 +625,8 @@ object Test_Maths_Hashing extends Test_Kse {
     }
   }
 
-  def test_checksum64 = {
-    val h = new CheckSum64
+  def test_simplesum64 = {
+    val h = new SimpleSum64
     (1 to 1000).forall{ i =>
       val a = Array.fill(i)(util.Random.nextInt.toByte)
       val bb = ByteBuffer wrap a
