@@ -107,6 +107,9 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
     case rgba: Rgba => r == rgba.r && g == rgba.g && b == rgba.b && (a == rgba.a || (a.nan && rgba.a.nan))
     case _ => false
   }
+
+  def rgbaInt: Int = math.rint(r*255).toInt | (math.rint(g*255).toInt << 8) | (math.rint(b*255).toInt << 16) | (math.rint(a*255).toInt << 24)
+  def bgraInt: Int = math.rint(b*255).toInt | (math.rint(g*255).toInt << 8) | (math.rint(r*255).toInt << 16) | (math.rint(a*255).toInt << 24)
 }
 object Rgba {
   def apply(r: Float, g: Float, b: Float, a: Float): Rgba = new Rgba(clip(r), clip(g), clip(b), clip(a))
@@ -120,6 +123,7 @@ object Rgba {
 
   def abgr(i: Int): Rgba = new Rgba(iclip(i >>> 24), iclip((i >>> 16) & 0xFF), iclip((i >>> 8) & 0xFF), iclip(i & 0xFF))
   def bgr(i: Int): Rgba = new Rgba(iclip((i >>> 16) & 0xFF), iclip((i >>> 8) & 0xFF), iclip(i & 0xFF), 1)
+  def bgra(i: Int): Rgba = new Rgba(iclip((i >>> 16) & 0xFF), iclip((i >>> 8) & 0xFF), iclip(i & 0xFF), iclip(i >>> 24))
 
   /////////////////////////////
   // Named colors begin here //
@@ -319,3 +323,33 @@ object Rgba {
   }
 }
 
+case class Spectrum(colors: Array[Rgba], low: Option[Rgba], high: Option[Rgba]) {
+  val extremeLo = low.getOrElse(colors(0))
+  val extremeHi = high.getOrElse(colors(colors.length-1))
+  def apply(f: Float) = {
+    if (f closeTo 0) colors(0)
+    else if (f closeTo 1) colors(colors.length - 1)
+    else if (f < 0) extremeLo
+    else if (f > 1) extremeHi
+    else if (colors.length < 2) colors(0)
+    else {
+      val i = math.floor((colors.length - 1) * f).toInt
+      val cA = colors(i)
+      val cB = colors(i + 1)
+      val g = (colors.length - 1)*f - i
+      if (g closeTo 0) cA
+      else if (g closeTo 1) cB
+      else cA.blend(cB, g)
+    }
+  }
+}
+object Spectrum {
+  import Rgba._
+  val LinearGray = new Spectrum(Array(Black, White), None, None)
+  val Grayscale = new Spectrum((0 to 16).map(x => math.pow(x/16.0, 1/2.2).toFloat).map(x => Rgba(x, x, x, 1)).toArray, None, None)
+  val Rainbow = new Spectrum(Array(Red, Orange, PaleGoldenrod, MediumSeaGreen, Blue, Lavender), Some(Magenta), Some(LightPink))
+  val Fire = new Spectrum(Array(Black, Red, Orange, Yellow, White), Some(Navy), Some(Violet))
+  val Thermal = new Spectrum(Array(Blue, White, Red), Some(DarkCyan), Some(Orange))
+  val Candy = new Spectrum(Array(Magenta, White, Rgba(0, 0.8f, 0, 1)), Some(Orange), Some(Turquoise))
+  val Sunset = new Spectrum(Array(CornflowerBlue, Orchid, Coral), Some(Rgba(0.5f, 0.5f, 1f, 1)), Some(Gold))
+}

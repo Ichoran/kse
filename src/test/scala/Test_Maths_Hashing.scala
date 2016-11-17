@@ -582,7 +582,7 @@ object Test_Maths_Hashing extends Test_Kse {
         mh128.begin(0).append(ByteBuffer wrap b).results(ByteBuffer wrap c).toVector,
         mh128.begin(0).results(ByteBuffer wrap a).toVector,
         mh128.hash128(ByteBuffer wrap a).toVector
-      ), f"mh128 $i ${b.length}\n${a}\n")
+      ), f"mh128 $i ${b.length}\n${a.toVector}\n")
     }
   }
 
@@ -596,7 +596,7 @@ object Test_Maths_Hashing extends Test_Kse {
 
   def test_murmur128_x64 = {
     val h = new Murmur128
-    val expected = Vector(0xcd99481f9ee902c9L, 0x695da1a38987b6e7L)
+    val expected = Vector(0xcd99481f9ee902c9L, 0x695da1a38987b6e7L)  // Verified on http://murmurhash.shorelabs.com/
     h.hash128(ByteBuffer wrap "The quick brown fox jumps over the lazy dog.".getBytes).toVector == expected
   }
 
