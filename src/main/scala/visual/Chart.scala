@@ -885,6 +885,66 @@ package chart {
     }
   }
 
+  final case class ColorBar(corner: Vc, size: Vc, spectrum: Spectrum, outbounds: Boolean, ticks: Option[(Int, Float, Float, Float)], style: Style) extends Shown {
+    lazy val onlyOpaque = style.collect{ case o: Opaque => o }
+    val (picture: Picture, fy0: Float, fy1: Float, lobar: Option[Bar], hibar: Option[Bar]) = {
+      val locolor = spectrum.low.filter(_ => outbounds)
+      val hicolor = spectrum.high.filter(_ => outbounds)
+      val rows =
+        Iterator.iterate(spectrum.colors.length * 3)(i => if (i < 1) 30 else if (i < 30) i*2 else i).dropWhile(_ < 30).next +
+        (if (locolor.isDefined) 3 else 0) +
+        (if (hicolor.isDefined) 3 else 0)
+      val cols = math.max(5, rows/10)
+      val y0 = (if (locolor.isDefined) 3 else 0)
+      val yN = rows - (if (hicolor.isDefined) 3 else 0)
+      val img = Bitmap.empty(cols, yN - y0)
+      var y = y0
+      while (y < yN) {
+        val rgba = spectrum((y - y0)/(yN-y0-1).toFloat)
+        var x = 0
+        while (x < cols) {
+          img(x, y - y0) = rgba
+          x += 1
+        }
+        y += 1
+      }
+      val picstyle = if (ticks.isDefined && onlyOpaque.elements.nonEmpty) style.filter(x => !x.isInstanceOf[Opaque]) else style
+      val pic = Picture(corner + Vc(0, size.y*y0/rows), img, Some(Vc(size.x/cols, size.y/rows)), picstyle)
+      val lob = locolor.map(c => Bar(corner + Vc(size.x/2, size.y/rows), Vc(size.x/2, size.y/rows), Fill(c)))
+      val hib = hicolor.map(c => Bar(corner + Vc(size.x/2, (size.y*(rows-1))/rows), Vc(size.x/2, size.y/rows), Fill(c)))
+      (pic, y0/rows.toFloat, yN/rows.toFloat, lob, hib)
+    }
+    lazy val autoticks = ticks.collect{ case (n, lo, hi, tickl) if n > 1 =>
+      val v0 = if (tickl > 0) corner + Vc(size.x, 0) else corner
+      val dv = Vc(0, size.y)
+      val l = if (tickl < 0) size.x*tickl else 0
+      val r = if (tickl < 0) 0 else size.x*tickl
+      val tstyle = (Stroke(Rgba.Black, 1.5f) + Titling.defaultFaces) ++ style.filter(x => !x.isInstanceOf[Opaque])
+      val raw = AutoTick(0 vc lo, 0 vc hi, n, l, r, -size.x*tickl*0.5f, tstyle)
+      raw.theTicks.copy(from = v0 + dv*fy0, to = v0 + dv*fy1)
+    }
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = autoticks match {
+      case Some(ticked) =>
+        Indent(if (onlyOpaque.elements.isEmpty) "<g>" else f"<g${fm(onlyOpaque)}>") +:
+        (
+          (
+            picture.inSvg(xform, mag)(fm) ++
+            lobar.toVector.flatMap(_.inSvg(xform, mag)(fm)) ++
+            hibar.toVector.flatMap(_.inSvg(xform, mag)(fm)) ++
+            ticked.inSvg(xform, mag)(fm)
+          ).map(_.in) :+
+          Indent("</g>")
+        )
+      case _ =>
+        if (lobar.isDefined || hibar.isDefined) {
+          picture.inSvg(xform, mag)(fm) ++
+          lobar.toVector.flatMap(_.inSvg(xform, mag)(fm)) ++
+          hibar.toVector.flatMap(_.inSvg(xform, mag)(fm))
+        }
+        else picture.inSvg(xform, mag)(fm)
+    }
+  }
+
   final case class Assembly(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], style: Style, stuff: Seq[InSvg]) extends Shown {
     def this(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], style: Style, thing: InSvg, morestuff: InSvg*) =
       this(oldOrigin, scale, newOrigin, thicken, style, thing +: morestuff)
@@ -1214,11 +1274,12 @@ package chart {
     val gr = Space(0 vc 0, 200 vc 200, 400 vc 100, 100 vc 100, 4, 8, ah, Stroke(Rgba(1f, 0, 0), 6), Seq(c, Marker.C(50 vc 100, 8, Stroke(Rgba.Black, 2) + FillNone), Marker.C(75 vc 125, 8, Fill(Rgba(0, 0, 1)))), Some(Titling("Fish", "salmon", "perch", titleGap = tga, ylegendGap = yga, xlegendGap = xga)))
     val sh = Shape(Array(Vc(100, 200).underlying, Vc(200, 100).underlying, Vc(300, 300).underlying), Option(c.copy(c = 0 vc 0)), Stroke(Rgba.Blue, 5) ++ Fill.alpha(Rgba.Blue.aTo(0.2f)) ++ Opacity(0.4f))
     val pik = Picture(150 vc 150, Bitmap.fillRgba(2,4){ (x,y) => Rgba.web(100+100*x, 128, 50 + 60*y) }, Some(20 vc 40), Style.empty)
+    val cbr = ColorBar(250 vc 150, 10 vc 80, Spectrum.Rainbow, true, Some((5, 3f, 5f, -0.5f)), Style.empty)
     quick(
-      sh, pie, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, pik, Circ(pik.corner, 3, Fill(Rgba.Black)),
+      sh, pie, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, pik, Circ(pik.corner, 3, Fill(Rgba.Black)), cbr,
       Assembly(0 vc 100, 400f vc 1f, 0 vc 200, None, Opacity(1f), at, at.copy(to = Vc(1.33f, 100))),
       tl.copy(to = 100 vc 200, left = -20, right = 0),
-      Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f), c, pa, pie.copy(pieces = pie.pieces.dropRight(1).map(p => p.copy(legend = "")))),
+      Assembly(0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f), c, pa, pie.copy(pieces = pie.pieces.dropRight(1).map(p => p.copy(legend = ""))), cbr),
       gr
     )
   }
