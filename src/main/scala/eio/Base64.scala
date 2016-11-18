@@ -188,6 +188,20 @@ package object base64 {
   def decodeFromBase64(coded: Array[Byte], decoder: Array[Byte])(implicit oops: Oops): Array[Byte] = decodeFromBase64(coded, 0, coded.length, decoder)(oops)
   
   def decodeFromBase64Option(coded: Array[Byte], decoder: Array[Byte]): Option[Array[Byte]] = decodeFromBase64Option(coded, 0, coded.length, decoder)
+  
+
+  // Common encoders
+
+  val Mime64 = new Base64(true, 72, CommonBase64Encodings.Mime.getBytes) {}
+
+  val DataURI = new Base64(true, Int.MaxValue, CommonBase64Encodings.Mime.getBytes) {}
+  
+  val Url64 = new Base64(false, Int.MaxValue, CommonBase64Encodings.Url.getBytes) {}
+
+    
+  val UucodeLine = new Base64(false, Int.MaxValue, CommonBase64Encodings.Uucode.getBytes) {}
+  
+  val BinhexCore = new Base64(true, 64, CommonBase64Encodings.Binhex.getBytes) {}
 }
 
 package base64 {
@@ -199,7 +213,7 @@ package base64 {
     val Binhex = "!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr:\r"
   }
 
-  abstract class Base64(val pad: Boolean, val wrapAt: Int, charset: Array[Byte]) {
+  case class Base64(pad: Boolean, val wrapAt: Int, charset: Array[Byte]) {
     final val encoder = {
       val a = new Array[Byte](256)
       Array.copy(charset, 0, a, 0, 256 min charset.length)
@@ -217,284 +231,4 @@ package base64 {
       if (start >= end) ""
       else new String(encodeToBase64(a, math.max(0, start), math.min(a.length, end), pad, wrapAt, wrapAdds, charset))
   }
-  
-  object Mime64 extends Base64(true, 72, CommonBase64Encodings.Mime.getBytes) {}
-  
-  object Url64 extends Base64(false, Int.MaxValue, CommonBase64Encodings.Url.getBytes) {}
-
-    
-  object UucodeLine extends Base64(false, Int.MaxValue, CommonBase64Encodings.Uucode.getBytes) {}
-  
-  object BinhexCore extends Base64(true, 64, CommonBase64Encodings.Binhex.getBytes) {}
 }
-
-/*
-package base64 {
-}
-
-  private[eio] def validate(a: Array[Byte], start: Int, end: Int, decoder: Array[Byte]): Boolean = {
-    var i = start
-    while (i < end) {
-      while (i < end && decoder(a(i) & 0xFF) != 64) i += 1
-      if (i >= end) return true
-      i += 1
-      while (i < end && decoder(a(i) & 0xFF) == 64) i += 1
-    }
-    false  // Exited in the middle of padding--this is not allowed
-  }
-
-
-object Base64 {
-
-  def binaryFrom64(a: Array[Byte], b: Array[Byte] = null) = {
-    var i,j = 0
-    while (i<a.length) {
-      if (a(i)<64) j += 1
-      i += 1
-    }
-    val z = ( if (b==null || b.length!=(j*3)/4) new Array[Byte]( (j*3)/4 ) else b )
-    i = 0; j = 0
-    var bits,k,n = 0
-    var c0,c1,c2 = 0:Byte
-    while (i<a.length) {
-      if (a(i)<64) {
-        n += 1
-        k += 1
-        bits = (bits << 6) | a(i)
-        if ((k&0x3)==0) {
-          c0 = ((bits>>16)&0xFF).toByte
-          c1 = ((bits>>8)&0xFF).toByte
-          c2 = (bits&0xFF).toByte
-          z(j) = c0
-          z(j+1) = c1
-          z(j+2) = c2
-          bits = 0
-          n = 0
-          j += 3
-        }
-      }
-      i += 1
-    }
-    val m = (n*3)/4
-    while (n<4) { bits = bits<<6; n+= 1 }
-    n = m
-    while (n>0) {
-      z(j) = ((bits >> (16 - 8*(m-n)))&0xFF).toByte
-      j += 1
-      n -= 1
-    }
-    z
-  }
-  
-  
-  def encodedBy64(a: Array[Byte], e: Array[Byte] = base64url) = {
-    var i = 0
-    while (i < a.length) {
-      val x = a(i)&0x7F
-      if (x < e.length) a(i) = e(x)
-      else a(i) = e(64)
-      i += 1
-    }
-    a
-  }
-  
-  def encodedAs64(a: Array[Byte], einv: Array[Byte] = url64base) = {
-    var i = 0
-    while (i<a.length) {
-      a(i) = einv(a(i)&0xFF)
-      i += 1
-    }
-    a
-  }
-
-  final class Petite private (i: Int, private[this] val a: Array[Byte]) {
-    val value = (i<<8)>>8
-    def this(i: Int) = this(i, new Array[Byte](3))
-    def petite = this
-    override def toString = value.toString
-    override def equals(o: Any) = { value==o }
-    override def hashCode = value
-    def to64 = {
-      a(0) = ((value>>16)&0xFF).toByte; a(1) = ((value>>8)&0xFF).toByte; a(2) = (value&0xFF).toByte
-      encodedBy64( binaryTo64( a ) )
-    }
-  }
-  object Petite {
-    def from64(b: Array[Byte]): Petite = new Petite( ((b(0)&0xFF)<<16) + ((b(1)&0xFF)<<8) + (b(2)&0xFF), b )
-    def from64(s: String): Petite = {
-      val c = encodedAs64(s.getBytes)
-      val b = binaryFrom64(c)
-      from64(b)
-    }
-  }
-  implicit def int2petite(i: Int) = new Petite(i)
-
-  final class Grande private (l: Long, private[this] val a: Array[Byte]) {
-    val value = (l<<16)>>16
-    def this(l: Long) = this(l, new Array[Byte](6))
-    def grande = this
-    override def toString = value.toString
-    override def equals(o: Any) = { value==o }
-    override def hashCode = l.hashCode
-    def to64 = {
-      a(0) = ((value>>40)&0xFF).toByte; a(1) = ((value>>32)&0xFF).toByte; a(2) = ((value>>24)&0xFF).toByte
-      a(3) = ((value>>16)&0xFF).toByte; a(4) = ((value>>8)&0xFF).toByte; a(5) = (value&0xFF).toByte
-      encodedBy64( binaryTo64( a ) )
-    }
-  }
-  object Grande {
-    def from64(b: Array[Byte]): Grande = {
-      new Grande( ((b(0)&0xFFL)<<40) + ((b(1)&0xFFL)<<32) + ((b(2)&0xFFL)<<24) + ((b(3)&0xFF)<<16) + ((b(4)&0xFF)<<8) + (b(5)&0xFF), b )
-    }
-    def from64(s: String): Grande = {
-      val c = encodedAs64(s.getBytes)
-      val b = binaryFrom64(c)
-      from64(b)
-    }
-  }
-  implicit def long2grande(l: Long) = new Grande(l)
-  
-  class LiteralString(val s: String) { }
-  class Base64Converter(encoding: Array[Byte], decoding: Array[Byte], pad: Boolean = false, wrap: Option[(Int,Int)] = None) {
-    def encodeByte(b: Byte) = new String(encodedBy64( binaryTo64( Array(b), pad, wrap ) , encoding ))
-    def decodeByte(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else {
-        val a = binaryFrom64( encodedAs64(b, decoding) )
-        if (a.length != 1) None
-        else Some(a(0))
-      }
-    }
-    def encodeShort(s: Short) = new String(encodedBy64( binaryTo64( Array( ((s>>8)&0xFF).toByte, (s&0xFF).toByte ) , pad , wrap ) , encoding ))
-    def decodeShort(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else {
-        val a = binaryFrom64( encodedAs64(b, decoding) )
-        if (a.length != 2) None
-        else Some( (((a(0)&0xFF)<<8) + (a(1)&0xFF)).toShort )
-      }
-    }
-    def encodePetite(p: Petite) = new String(encodedBy64( binaryTo64(
-      Array( ((p.value>>16)&0xFF).toByte, ((p.value>>8)&0xFF).toByte, (p.value&0xFF).toByte ) , pad , wrap
-    ) , encoding ))
-    def decodePetite(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else {
-        val a = binaryFrom64( encodedAs64(b, decoding) )
-        if (a.length != 3) None
-        else Some( Petite.from64(a) )
-      }
-    }
-    def encodeInt(i: Int) = new String(encodedBy64( binaryTo64(
-      Array( ((i>>24)&0xFF).toByte, ((i>>16)&0xFF).toByte, ((i>>8)&0xFF).toByte, (i&0xFF).toByte ) , pad , wrap
-    ) , encoding ))
-    def decodeInt(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else {
-        val a = binaryFrom64( encodedAs64(b, decoding) )
-        if (a.length != 4) None
-        else Some( ((a(0)&0xFF)<<24) + ((a(1)&0xFF)<<16) + ((a(2)&0xFF)<<8) + (a(3)&0xFF) )
-      }
-    }
-    def encodeGrande(g: Grande) = new String(encodedBy64( binaryTo64(
-      Array( ((g.value>>40)&0xFF).toByte, ((g.value>>32)&0xFF).toByte, ((g.value>>24)&0xFF).toByte,
-        ((g.value>>16)&0xFF).toByte, ((g.value>>8)&0xFF).toByte, (g.value&0xFF).toByte
-      ) , pad , wrap
-    ) , encoding ))
-    def decodeGrande(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else {
-        val a = binaryFrom64( encodedAs64(s.getBytes, decoding) )
-        if (a.length != 6) None
-        else Some( Grande.from64(a) )
-      }
-    }
-    def encodeLong(l: Long) = new String( encodedBy64( binaryTo64( {
-      val a = new Array[Byte](8)
-      var i=7
-      while (i>=0) {
-        a(7-i) = ((l >> (8*i))&0xFF).toByte
-        i -= 1
-      }
-      a
-    } , pad , wrap ) , encoding ) )
-    def decodeLong(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else {
-        val a = binaryFrom64( encodedAs64(b, decoding) )
-        if (a.length != 8) None
-        else {
-          var i = 0
-          var l = 0L
-          while (i<8) {
-            l += (a(i)&0xFF)<<(8L*(7-i))
-            i += 1
-          }
-          Some( l )
-        }
-      }
-    }
-    def encodeBoolean(b: Boolean) = new String(encoding, if (b) 1 else 0, 1)
-    def decodeBoolean(s: String) = {
-      if (s.length != 1) None
-      else Some(s.charAt(0) == encoding(1))
-    }
-    def encodeFloat(f: Float) = encodeInt( java.lang.Float.floatToRawIntBits(f) )
-    def decodeFloat(s: String) = decodeInt(s).map(x => java.lang.Float.intBitsToFloat(x))
-    def encodeDouble(d: Double) = encodeLong( java.lang.Double.doubleToRawLongBits(d) )
-    def decodeDouble(s: String) = decodeLong(s).map(x => java.lang.Double.longBitsToDouble(x))
-    def encodeString(s: String) = new String(encodedBy64( binaryTo64( s.getBytes , pad , wrap ) , encoding ))
-    def decodeString(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else Some(new String(binaryFrom64( encodedAs64(b, decoding) )))
-    }
-    def encodeBytes(a: Array[Byte]) = new String(encodedBy64( binaryTo64(a, pad, wrap) , encoding))
-    def decodeBytes(s: String) = {
-      val b = s.getBytes
-      if (!validate(b,decoding)) None
-      else Some( binaryFrom64( encodedAs64(s.getBytes, decoding) ) )
-    }
-    def encode(a: Any*) = {
-      a.map(_ match {
-        case b: Boolean => encodeBoolean(b)
-        case b: Byte => encodeByte(b)
-        case s: Short => encodeShort(s)
-        case c: Char => encodeShort(c.toShort)
-        case i: Int => encodeInt(i)
-        case l: Long => encodeLong(l)
-        case f: Float => encodeFloat(f)
-        case d: Double => encodeDouble(d)
-        case s: String => encodeString(s)
-        case a: Array[Byte] => encodeBytes(a)
-        case l: LiteralString => l.s
-        case _ => ""
-      })
-    }
-    def decode(encoded: Seq[String], format: String) = {
-      (format zip encoded).map(_ match {
-        case ('B',x) => decodeBoolean(x)
-        case ('b',x) => decodeByte(x)
-        case ('s',x) => decodeShort(x)
-        case ('c',x) => decodeShort(x).map(_.toChar)
-        case ('i',x) => decodeInt(x)
-        case ('f',x) => decodeFloat(x)
-        case ('l',x) => decodeLong(x)
-        case ('d',x) => decodeDouble(x)
-        case ('S',x) => decodeString(x)
-        case ('A',x) => decodeBytes(x)
-        case (_,x) => x
-      })
-    }
-  }
-  
-  val Mime64 = new Base64Converter(base64mime, mime64base, true, wrapmime)
-  val Url64 = new Base64Converter(base64url, url64base, false, None)
-}
-*/

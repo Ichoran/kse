@@ -136,7 +136,11 @@ class Bitmap(val packed: Array[Int], val offset: Int, val stride: Int, val w: In
         case true => Ok.UnitYes
       }
 
-  def embedInSvg: Vector[chart.Indent] = ???
+  def toDataURI = {
+    val baos = new ByteArrayOutputStream
+    javax.imageio.ImageIO.write(toImage, "png", baos)
+    "data:image/png;base64," + base64.DataURI.encode(baos.toByteArray)
+  }
 }
 
 object Bitmap{

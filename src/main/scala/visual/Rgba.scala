@@ -67,22 +67,27 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
     // Their vector from their gray
     val v = new IVec3F(rgba.r - kk, rgba.g - kk, rgba.b - kk)
     // New vector
-    val w =
-      if ((u dotHat v) > -0.9) u interangle (v, frac)
-      else {
-        val targetLength = sqrt(u.lenSq*q + v.lenSq*p)
-        val greeny = greenvector * (targetLength/greenvector.len).toFloat
-        val cyany = cyanvector * (targetLength/cyanvector.len).toFloat
-        val waypoint = if (abs(u dotHat greeny) < abs(u dotHat cyany)) greeny else cyany
-        val angle1 = u angle waypoint
-        val angle2 = v angle waypoint
-        val fangle = angle1 / (angle1+angle2)
-        if (frac <= fangle) u.interangle(waypoint, (frac/fangle).toFloat)
-        else v.interangle(waypoint, ((1-frac)/(1-fangle)).toFloat)
-      }
-    val s = IVec3F(r, g, b) interangle ( IVec3F(rgba.r, rgba.g, rgba.b) , frac )  // Need w at all?  Maybe just use s?
-    val aph = if (a.nan) { if (rgba.a.nan) a else rgba.a } else if (rgba.a.nan) a else dclip(q*a + p*rgba.a)
-    new Rgba( dclip((w.x + zk)*0.5 + s.x*0.5), dclip((w.y + zk)*0.5 + s.y*0.5), dclip((w.z + zk)*0.5 + s.z*0.5), aph )
+    if (u.lenSq == 0 || v.lenSq == 0 || (u dotHat v).abs > 0.95) {
+      new Rgba(dclip(q*r + p*rgba.r), dclip(q*g + p*rgba.g), dclip(q*b + p*rgba.b), dclip(q*a + p*rgba.a))
+    }
+    else {
+      val w =
+        if ((u dotHat v) > -0.9) u interangle (v, frac)
+        else {
+          val targetLength = sqrt(u.lenSq*q + v.lenSq*p)
+          val greeny = greenvector * (targetLength/greenvector.len).toFloat
+          val cyany = cyanvector * (targetLength/cyanvector.len).toFloat
+          val waypoint = if (abs(u dotHat greeny) < abs(u dotHat cyany)) greeny else cyany
+          val angle1 = u angle waypoint
+          val angle2 = v angle waypoint
+          val fangle = angle1 / (angle1+angle2)
+          if (frac <= fangle) u.interangle(waypoint, (frac/fangle).toFloat)
+          else v.interangle(waypoint, ((1-frac)/(1-fangle)).toFloat)
+        }
+      val s = IVec3F(r, g, b) interangle ( IVec3F(rgba.r, rgba.g, rgba.b) , frac )  // Need w at all?  Maybe just use s?
+      val aph = if (a.nan) { if (rgba.a.nan) a else rgba.a } else if (rgba.a.nan) a else dclip(q*a + p*rgba.a)
+      new Rgba( dclip((w.x + zk)*0.5 + s.x*0.5), dclip((w.y + zk)*0.5 + s.y*0.5), dclip((w.z + zk)*0.5 + s.z*0.5), aph )      
+    }
   }
   
   def ~(rgba: Rgba): Rgba = blend(rgba, 0.5f)
@@ -345,11 +350,13 @@ case class Spectrum(colors: Array[Rgba], low: Option[Rgba], high: Option[Rgba]) 
 }
 object Spectrum {
   import Rgba._
-  val LinearGray = new Spectrum(Array(Black, White), None, None)
-  val Grayscale = new Spectrum((0 to 16).map(x => math.pow(x/16.0, 1/2.2).toFloat).map(x => Rgba(x, x, x, 1)).toArray, None, None)
-  val Rainbow = new Spectrum(Array(Red, Orange, PaleGoldenrod, MediumSeaGreen, Blue, Lavender), Some(Magenta), Some(LightPink))
-  val Fire = new Spectrum(Array(Black, Red, Orange, Yellow, White), Some(Navy), Some(Violet))
-  val Thermal = new Spectrum(Array(Blue, White, Red), Some(DarkCyan), Some(Orange))
-  val Candy = new Spectrum(Array(Magenta, White, Rgba(0, 0.8f, 0, 1)), Some(Orange), Some(Turquoise))
-  val Sunset = new Spectrum(Array(CornflowerBlue, Orchid, Coral), Some(Rgba(0.5f, 0.5f, 1f, 1)), Some(Gold))
+  val Grays = new Spectrum(Array(Black, White), None, None)
+  val Greys = Grays
+  val Rainbow = new Spectrum(Array(MediumVioletRed, Red, Orange, PaleGoldenrod, MediumSeaGreen, Blue, Thistle), Some(Magenta), Some(LavenderBlush))
+  val Fire = new Spectrum(Array(Black, Red, Orange, Yellow, White), Some(Navy), Some(Lavender))
+  val Flag = new Spectrum(Array(Blue, White, Red), Some(Indigo), Some(DarkRed))
+  val HotCold = new Spectrum(Array(Blue, Black, Red), Some(CornflowerBlue), Some(Salmon))
+  val Candy = new Spectrum(Array(Magenta, White, Rgba(0, 0.7f, 0, 1)), Some(DarkOrange), Some(DarkCyan))
+  val Fluoresce = new Spectrum(Array(Magenta, Black, Rgba(0, 0.7f, 0, 1)), Some(Orange), Some(LightSeaGreen))
+  val Sunset = new Spectrum(Array(CornflowerBlue, Orchid, Coral), Some(Rgba(0, 0.7f, 0, 1)), Some(DarkOrange))
 }
