@@ -21,6 +21,33 @@ class Bitmap(val packed: Array[Int], val offset: Int, val stride: Int, val w: In
     packed(offset + x + stride*y) = value.bgraInt
   }
 
+  def fill(f: (Int, Int) => Int) {
+    var y = 0
+    while (y < h) {
+      var x = 0
+      var i = offset + stride*y
+      while (x < w) {
+        packed(i) = f(x, y)
+        i += 1
+        x += 1
+      }
+      y += 1
+    }
+  }
+  def fill[R <: Rgba](f: (Int, Int) => Rgba)(implicit ev: R =:= Rgba) {
+    var y = 0
+    while (y < h) {
+      var x = 0
+      var i = offset + stride*y
+      while (x < w) {
+        packed(i) = f(x, y).bgraInt
+        i += 1
+        x += 1
+      }
+      y += 1
+    }
+  }
+
   def size = w*h
 
   def deepCopy: Bitmap = new Bitmap(java.util.Arrays.copyOf(packed, packed.length), offset, stride, w, h, hasAlpha)
@@ -155,6 +182,9 @@ object Bitmap{
   def empty(w: Int, h: Int): Bitmap = {
     new Bitmap(new Array[Int](w*h), 0, w, w, h, true)
   }
+
+  def fill(w: Int, h: Int)(f: (Int, Int) => Int): Bitmap = { val bm = Bitmap.empty(w,h); bm.fill(f); bm }
+  def fillRgba(w: Int, h: Int)(f: (Int, Int) => Rgba): Bitmap = { val bm = Bitmap.empty(w,h); bm.fill(f); bm }
 
   def opaque(w: Int, h: Int): Bitmap = {
     new Bitmap(new Array[Int](w*h), 0, w, w, h, false)
