@@ -4,6 +4,7 @@
 package kse
 
 import scala.language.implicitConversions
+import scala.language.higherKinds
 
 import kse.typecheck._
 import kse.flow._
@@ -521,6 +522,34 @@ package object coll {
     @inline def reduce(f: (A,A) => A) = f( f( f(underlying._1, underlying._2), f(underlying._3, underlying._4) ), underlying._5 )
   }
   
+  implicit class Tuple6UtilityMethods[A,B,C,D,E,F](val underlying: (A,B,C,D,E,F)) extends AnyVal {
+    @inline def _1To(value: A) = (value, underlying._2, underlying._3, underlying._4, underlying._5, underlying._6)
+    @inline def _2To(value: B) = (underlying._1, value, underlying._3, underlying._4, underlying._5, underlying._6)
+    @inline def _3To(value: C) = (underlying._1, underlying._2, value, underlying._4, underlying._5, underlying._6)
+    @inline def _4To(value: D) = (underlying._1, underlying._2, underlying._3, value, underlying._5, underlying._6)
+    @inline def _5To(value: E) = (underlying._1, underlying._2, underlying._3, underlying._4, value, underlying._6)
+    @inline def _6To(value: F) = (underlying._1, underlying._2, underlying._3, underlying._4, underlying._5, value)
+    @inline def _1Fn[Z](f: A => Z) = (f(underlying._1), underlying._2, underlying._3, underlying._4, underlying._5, underlying._6)
+    @inline def _2Fn[Z](f: B => Z) = (underlying._1, f(underlying._2), underlying._3, underlying._4, underlying._5, underlying._6)
+    @inline def _3Fn[Z](f: C => Z) = (underlying._1, underlying._2, f(underlying._3), underlying._4, underlying._5, underlying._6)
+    @inline def _4Fn[Z](f: D => Z) = (underlying._1, underlying._2, underlying._3, f(underlying._4), underlying._5, underlying._6)
+    @inline def _5Fn[Z](f: E => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, f(underlying._5), underlying._6)
+    @inline def _6Fn[Z](f: F => Z) = (underlying._1, underlying._2, underlying._3, underlying._4, underlying._5, f(underlying._6))
+    @inline def eachFn[A1, B1, C1, D1, E1, F1](f: A => A1, g: B => B1, h: C => C1, i: D => D1, j: E => E1, k: F => F1) = (f(underlying._1), g(underlying._2), h(underlying._3), i(underlying._4), j(underlying._5), k(underlying._6))
+    @inline def fold[Z](f: (A,B,C,D,E,F) => Z) = f(underlying._1, underlying._2, underlying._3, underlying._4, underlying._5, underlying._6)
+    @inline def _without1 = (underlying._2, underlying._3, underlying._4, underlying._5, underlying._6)
+    @inline def _without2 = (underlying._1, underlying._3, underlying._4, underlying._5, underlying._6)
+    @inline def _without3 = (underlying._1, underlying._2, underlying._4, underlying._5, underlying._6)
+    @inline def _without4 = (underlying._1, underlying._2, underlying._3, underlying._5, underlying._6)
+    @inline def _without5 = (underlying._1, underlying._2, underlying._3, underlying._4, underlying._6)
+    @inline def _without6 = (underlying._1, underlying._2, underlying._3, underlying._4, underlying._5)
+    @inline def tup[Z](z: Z) = (underlying._1, underlying._2, underlying._3, underlying._4, underlying._5, underlying._6, z)
+  }
+  implicit class Tuple6IdenticalUtilityMethods[A](val underlying: (A,A,A,A,A,A)) extends AnyVal {
+    @inline def sameFn[Z](f: A => Z) = (f(underlying._1), f(underlying._2), f(underlying._3), f(underlying._4), f(underlying._5), f(underlying._6))
+    @inline def reduce(f: (A,A) => A) = f( f( f( f(underlying._1, underlying._2), f(underlying._3, underlying._4) ), underlying._5 ), underlying._6 )
+  }
+  
   implicit class KseRichIterator[A](private val underlying: Iterator[A]) extends AnyVal {
     def takeTo(p: A => Boolean): Iterator[A] = new collection.AbstractIterator[A] {
       private[this] var foundLast = false
@@ -536,5 +565,86 @@ package object coll {
       def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
     }
     def step(f: A => Unit) = if (underlying.hasNext) { f(underlying.next); true } else false
+  }
+
+  implicit class RichCollectionOfTuple4[
+    A, B, C, D, T, CC[T] <: collection.Traversable[T]
+  ](private val underlying: CC[(A, B, C, D)]) extends AnyVal {
+    def unzip4[CCA, CCB, CCC, CCD](
+      implicit
+        cbfa: collection.generic.CanBuildFrom[CC[(A, B, C, D)], A, CCA],
+        cbfb: collection.generic.CanBuildFrom[CC[(A, B, C, D)], B, CCB],
+        cbfc: collection.generic.CanBuildFrom[CC[(A, B, C, D)], C, CCC],
+        cbfd: collection.generic.CanBuildFrom[CC[(A, B, C, D)], D, CCD]
+    ): (CCA, CCB, CCC, CCD) = {
+      val bfa = cbfa()
+      val bfb = cbfb()
+      val bfc = cbfc()
+      val bfd = cbfd()
+      underlying.foreach{ case (a, b, c, d) =>
+        bfa += a
+        bfb += b
+        bfc += c
+        bfd += d
+      }
+      (bfa.result(), bfb.result(), bfc.result(), bfd.result())
+    }
+  }
+
+  implicit class RichCollectionOfTuple5[
+    A, B, C, D, E, T, CC[T] <: collection.Traversable[T]
+  ](private val underlying: CC[(A, B, C, D, E)]) extends AnyVal {
+    def unzip5[CCA, CCB, CCC, CCD, CCE](
+      implicit
+        cbfa: collection.generic.CanBuildFrom[CC[(A, B, C, D, E)], A, CCA],
+        cbfb: collection.generic.CanBuildFrom[CC[(A, B, C, D, E)], B, CCB],
+        cbfc: collection.generic.CanBuildFrom[CC[(A, B, C, D, E)], C, CCC],
+        cbfd: collection.generic.CanBuildFrom[CC[(A, B, C, D, E)], D, CCD],
+        cbfe: collection.generic.CanBuildFrom[CC[(A, B, C, D, E)], E, CCE]
+    ): (CCA, CCB, CCC, CCD, CCE) = {
+      val bfa = cbfa()
+      val bfb = cbfb()
+      val bfc = cbfc()
+      val bfd = cbfd()
+      val bfe = cbfe()
+      underlying.foreach{ case (a, b, c, d, e) =>
+        bfa += a
+        bfb += b
+        bfc += c
+        bfd += d
+        bfe += e
+      }
+      (bfa.result(), bfb.result(), bfc.result(), bfd.result(), bfe.result())
+    }
+  }
+
+  implicit class RichCollectionOfTuple6[
+    A, B, C, D, E, F, T, CC[T] <: collection.Traversable[T]
+  ](private val underlying: CC[(A, B, C, D, E, F)]) extends AnyVal {
+    def unzip6[CCA, CCB, CCC, CCD, CCE, CCF](
+      implicit
+        cbfa: collection.generic.CanBuildFrom[CC[(A, B, C, D, E, F)], A, CCA],
+        cbfb: collection.generic.CanBuildFrom[CC[(A, B, C, D, E, F)], B, CCB],
+        cbfc: collection.generic.CanBuildFrom[CC[(A, B, C, D, E, F)], C, CCC],
+        cbfd: collection.generic.CanBuildFrom[CC[(A, B, C, D, E, F)], D, CCD],
+        cbfe: collection.generic.CanBuildFrom[CC[(A, B, C, D, E, F)], E, CCE],
+        cbff: collection.generic.CanBuildFrom[CC[(A, B, C, D, E, F)], F, CCF]
+    ): (CCA, CCB, CCC, CCD, CCE, CCF) = {
+      val bfa = cbfa()
+      val bfb = cbfb()
+      val bfc = cbfc()
+      val bfd = cbfd()
+      val bfe = cbfe()
+      val bff = cbff()
+      underlying.foreach{ case (a, b, c, d, e, f) =>
+        bfa += a
+        bfb += b
+        bfc += c
+        bfd += d
+        bfe += e
+        bff += f
+      }
+      (bfa.result(), bfb.result(), bfc.result(), bfd.result(), bfe.result(), bff.result())
+    }
   }
 }
