@@ -1789,7 +1789,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def get_or_java_null(key: String): Json
 
     /** Returns true if the corresponding key exists */
-    def contains(key: String): Boolean = (get_or_java_null(key) eq null)
+    def contains(key: String): Boolean = (get_or_java_null(key) ne null)
 
     /** Folds an initial value through each key-value pair in this JSON object */
     def fold[A](zero: A)(f: (A, String, Json) => A): A
