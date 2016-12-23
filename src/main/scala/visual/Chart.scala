@@ -8,6 +8,7 @@ import scala.util._
 import scala.collection.mutable.{ AnyRefMap => RMap }
 
 import kse.coll._
+import kse.coll.packed._
 import kse.maths._
 import kse.maths.stats._
 import kse.flow._
@@ -330,6 +331,182 @@ package chart {
       sb ++= f"$q$show/>"
       Indent.V(sb.result)
     }
+  }
+  object DataLine {
+    def from(xs: Array[Float], ys: Array[Float], style: Style): DataLine = {
+      val n = math.min(xs.length, ys.length)
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (xs(i) <> ys(i)).L
+        i += 1
+      }
+      new DataLine(a, style)
+    }
+    def from(xs: Array[Double], ys: Array[Double], style: Style): DataLine = {
+      val n = math.min(xs.length, ys.length)
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (xs(i).toFloat <> ys(i).toFloat).L
+        i += 1
+      }
+      new DataLine(a, style)
+    }
+    def from[A, B](xs: Array[A], ys: Array[B], style: Style)(f: A => Float, g: B => Float): DataLine = {
+      val n = math.min(xs.length, ys.length)
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (f(xs(i)) <> g(ys(i))).L
+        i += 1
+      }
+      new DataLine(a, style)
+    }
+    def from[A](xys: Array[A], style: Style)(f: A => Float, g: A => Float): DataLine = from[A, A](xys, xys, style)(f, g)
+    def from(n: Int, x: Int => Float, y: Int => Float, style: Style): DataLine = {
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (x(i) <> y(i)).L
+        i += 1
+      }
+      new DataLine(a, style)
+    }
+
+    def from(pts: Array[Long], color: Rgba, size: Float): DataLine = new DataLine(pts, Stroke.alpha(color, size))
+    def from(xs: Array[Float], ys: Array[Float], color: Rgba, size: Float): DataLine = from(xs, ys, Stroke.alpha(color, size))
+    def from(xs: Array[Double], ys: Array[Double], color: Rgba, size: Float): DataLine = from(xs, ys, Stroke.alpha(color, size))
+    def from[A, B](xs: Array[A], ys: Array[B], color: Rgba, size: Float)(f: A => Float, g: B => Float): DataLine =
+      from[A, B](xs, ys, Stroke.alpha(color, size))(f, g)
+    def from[A](xys: Array[A], color: Rgba, size: Float)(f: A => Float, g: A => Float)(): DataLine =
+      from[A](xys, Stroke.alpha(color, size))(f, g)
+    def from(n: Int, x: Int => Float, y: Int => Float, color: Rgba, size: Float): DataLine =
+      from(n, x, y, Stroke.alpha(color, size))
+
+    def dotted(pts: Array[Long], r: Float, lstyle: Style, dstyle: Style): Grouping = {
+      val line = new DataLine(pts, lstyle)
+      val dots = Marker.ManyC(pts, r, false, dstyle)
+      Grouping(line, dots)
+    }
+    def dotted(pts: Array[Long], rs: Array[Float], lstyle: Style, dstyle: Style): Grouping = {
+      val all = Array.newBuilder[InSvg]
+      all += new DataLine(pts, lstyle)
+      var i = 0
+      while (i < pts.length && i < rs.length) {
+        val r = rs(i)
+        if (r.finite) {
+          all += Marker.C(new Vc(pts(i)), r, dstyle)
+        }
+        i += 1
+      }
+      Grouping(all.result())
+    }
+    def dotted(xs: Array[Float], ys: Array[Float], r: Float, lstyle: Style, dstyle: Style): Grouping = {
+      val n = math.min(xs.length, ys.length)
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (xs(i) <> ys(i)).L
+        i += 1
+      }
+      dotted(a, r, lstyle, dstyle)
+    }
+    def dotted(xs: Array[Float], ys: Array[Float], rs: Array[Float], lstyle: Style, dstyle: Style): Grouping = {
+      val n = math.min(xs.length, ys.length)
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (xs(i) <> ys(i)).L
+        i += 1
+      }
+      dotted(a, rs, lstyle, dstyle)
+    }
+    def dotted[A, B](xs: Array[A], ys: Array[B], r: Float, lstyle: Style, dstyle: Style)(f: A => Float, g: B => Float): Grouping = {
+      val n = math.min(xs.length, ys.length)
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (f(xs(i)) <> g(ys(i))).L
+        i += 1
+      }
+      dotted(a, r, lstyle, dstyle)
+    }
+    def dotted[A, B, C](xs: Array[A], ys: Array[B], rs: Array[C], lstyle: Style, dstyle: Style)(f: A => Float, g: B => Float, h: C => Float): Grouping = {
+      val n = math.min(xs.length, ys.length)
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (f(xs(i)) <> g(ys(i))).L
+        i += 1
+      }
+      val all = Array.newBuilder[InSvg]
+      all += new DataLine(a, lstyle)
+      i = 0
+      while (i < a.length && i < rs.length) {
+        val r = h(rs(i))
+        if (r.finite) {
+          all += Marker.C(new Vc(a(i)), r, dstyle)
+        }
+        i += 1
+      }
+      Grouping(all.result())
+    }
+    def dotted[A](xys: Array[A], r: Float, lstyle: Style, dstyle: Style)(f: A => Float, g: A => Float): Grouping =
+      dotted[A, A](xys, xys, r, lstyle, dstyle)(f, g)
+    def dotted[A](xyrs: Array[A], lstyle: Style, dstyle: Style)(f: A => Float, g: A => Float, h: A => Float): Grouping =
+      dotted[A, A, A](xyrs, xyrs, xyrs, lstyle, dstyle)(f, g, h)
+    def dotted(n: Int, x: Int => Float, y: Int => Float, r: Float, lstyle: Style, dstyle: Style): Grouping = {
+        val a = new Array[Long](n)
+        var i = 0
+        while (i < n) {
+          a(i) = (x(i) <> y(i)).L
+          i += 1
+        }
+        dotted(a, r, lstyle, dstyle)    
+    }
+    def dotted(n: Int, x: Int => Float, y: Int => Float, r: Int => Float, lstyle: Style, dstyle: Style): Grouping = {
+      val a = new Array[Long](n)
+      var i = 0
+      while (i < n) {
+        a(i) = (x(i) <> y(i)).L
+        i += 1
+      }
+      val all = Array.newBuilder[InSvg]
+      all += new DataLine(a, lstyle)
+      i = 0
+      while (i < a.length) {
+        val ri = r(i)
+        if (ri.finite) {
+          all += Marker.C(new Vc(a(i)), ri, dstyle)
+        }
+        i += 1
+      }
+      Grouping(all.result())
+    }
+
+
+    def dotted(pts: Array[Long], r: Float, style: Style): Grouping = dotted(pts, r, style, style)
+    def dotted(pts: Array[Long], rs: Array[Float], style: Style): Grouping = dotted(pts, rs, style, style)
+    def dotted(xs: Array[Float], ys: Array[Float], r: Float, style: Style): Grouping = dotted(xs, ys, r, style, style)
+    def dotted(xs: Array[Float], ys: Array[Float], rs: Array[Float], style: Style): Grouping = dotted(xs, ys, rs, style, style)
+    def dotted[A, B](xs: Array[A], ys: Array[B], r: Float, style: Style)(f: A => Float, g: B => Float): Grouping = dotted(xs, ys, r, style, style)(f, g)
+    def dotted[A, B, C](xs: Array[A], ys: Array[B], rs: Array[C], style: Style)(f: A => Float, g: B => Float, h: C => Float): Grouping = dotted(xs, ys, rs, style, style)(f, g, h)
+    def dotted[A](xys: Array[A], r: Float, style: Style)(f: A => Float, g: A => Float): Grouping = dotted(xys, r, style, style)(f, g)
+    def dotted[A](xyrs: Array[A], style: Style)(f: A => Float, g: A => Float, h: A => Float): Grouping = dotted(xyrs, style, style)(f, g, h)
+    def dotted(n: Int, x: Int => Float, y: Int => Float, r: Float, style: Style): Grouping = dotted(n, x, y, r, style, style)
+    def dotted(n: Int, x: Int => Float, y: Int => Float, r: Int => Float, style: Style): Grouping = dotted(n, x, y, r, style, style)
+
+    def dotted(pts: Array[Long], r: Float, color: Rgba, size: Float): Grouping = dotted(pts, r, Stroke.alpha(color, size), Fill.alpha(color))
+    def dotted(pts: Array[Long], rs: Array[Float], color: Rgba, size: Float): Grouping = dotted(pts, rs, Stroke.alpha(color, size), Fill.alpha(color))
+    def dotted(xs: Array[Float], ys: Array[Float], r: Float, color: Rgba, size: Float): Grouping = dotted(xs, ys, r, Stroke.alpha(color, size), Fill.alpha(color))
+    def dotted(xs: Array[Float], ys: Array[Float], rs: Array[Float], color: Rgba, size: Float): Grouping = dotted(xs, ys, rs, Stroke.alpha(color, size), Fill.alpha(color))
+    def dotted[A, B](xs: Array[A], ys: Array[B], r: Float, color: Rgba, size: Float)(f: A => Float, g: B => Float): Grouping = dotted(xs, ys, r, Stroke.alpha(color, size), Fill.alpha(color))(f, g)
+    def dotted[A, B, C](xs: Array[A], ys: Array[B], rs: Array[C], color: Rgba, size: Float)(f: A => Float, g: B => Float, h: C => Float): Grouping = dotted(xs, ys, rs, Stroke.alpha(color, size), Fill.alpha(color))(f, g, h)
+    def dotted[A](xys: Array[A], r: Float, color: Rgba, size: Float)(f: A => Float, g: A => Float): Grouping = dotted(xys, r, Stroke.alpha(color, size), Fill.alpha(color))(f, g)
+    def dotted[A](xyrs: Array[A], color: Rgba, size: Float)(f: A => Float, g: A => Float, h: A => Float): Grouping = dotted(xyrs, Stroke.alpha(color, size), Fill.alpha(color))(f, g, h)
+    def dotted(n: Int, x: Int => Float, y: Int => Float, r: Float, color: Rgba, size: Float): Grouping = dotted(n, x, y, r, Stroke.alpha(color, size), Fill.alpha(color))
+    def dotted(n: Int, x: Int => Float, y: Int => Float, r: Int => Float, color: Rgba, size: Float): Grouping = dotted(n, x, y, r, Stroke.alpha(color, size), Fill.alpha(color))
   }
 
   final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Style) extends Shown {
@@ -943,6 +1120,19 @@ package chart {
         }
         else picture.inSvg(xform, mag)(fm)
     }
+  }
+
+  final case class Grouping(stuff: Seq[InSvg]) extends Shown {
+    def style = Style.empty
+    def this(thing: InSvg, morestuff: InSvg*) = this(thing +: morestuff)
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
+      Indent.V("<g>") ++
+      stuff.toVector.flatMap(_.inSvg(xform, mag).map(_.in)) ++
+      Indent.V("</g>")
+    }
+  }
+  object Grouping {
+    def apply(thing: InSvg, morestuff: InSvg*) = new Grouping(thing +: morestuff)
   }
 
   final case class Assembly(oldOrigin: Vc, scale: Vc, newOrigin: Vc, thicken: Option[Float => Float], style: Style, stuff: Seq[InSvg]) extends Shown {
