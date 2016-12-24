@@ -794,6 +794,21 @@ package chart {
 
   object Tickify{
     case class Num(digits: Array[Byte], decimal: Int, negative: Boolean) {
+      /** Read a single digits */
+      def apply(position: Int) = {
+        if (position >= decimal) 0
+        else if (position >= 0) digits(decimal - position - 1)
+        else if (decimal - position <= digits.length) digits(decimal - position - 1)
+        else 0
+      }
+
+      /** Write a single digit--throws an exception if out of bounds, clips values to 0-9 */
+      def update(position: Int, value: Int) {
+        val v = (if (value < 0) 0 else if (value > 9) 9 else value).toByte
+        digits(decimal - position - 1) = v
+      }
+
+
       /** Number of leading zeros */
       def leadingZeros = {
         var i = 0
@@ -836,7 +851,7 @@ package chart {
       }
 
       /** Creates a new copy with a specified number of digits after the decimal point */
-      def copyToPosition(p: Int, initialZeros: Int = 0): Num = {
+      def copyToPosition(p: Int, initialZeros: Int = 0, alwaysRound: Int = 0): Num = {
         val lz = leadingZeros
         val tz = math.min(trailingZeros, digits.length - decimal)
         val before = decimal - lz
@@ -856,7 +871,7 @@ package chart {
             i += 1
           }
           if (i < digits.length - tz) {
-            val roundup = digits(i) > 5 || (digits(i) == 5 && i + 1 < digits.length - tz)
+            val roundup = !(alwaysRound < 0) && (alwaysRound > 0 || digits(i) > 5 || (digits(i) == 5 && i + 1 < digits.length - tz))
             if (roundup) {
               j -= 1
               var overflow = a(j) >= 9
@@ -879,11 +894,15 @@ package chart {
         }
       }
 
+      def toBigDec = BigDecimal(this.toString)
+
+      def toDouble = this.toString.toDouble
+
       /** String representation */
       override def toString = {
         val a = new Array[Char](digits.length + (if (negative) 1 else 0) + (if (decimal < digits.length) 1 else 0))
         if (negative) a(0) = '-'
-        if (decimal < digits.length) a(decimal) = '.'
+        if (decimal < digits.length) a(decimal + (if (negative) 1 else 0)) = '.'
         var i = if (negative) 1 else 0
         var j = 0
         while (j < decimal) {
@@ -902,7 +921,7 @@ package chart {
 
       /** Only allow equality to other Nums, not any old number or string */
       override def equals(a: Any) = a match {
-        case n: Num => diffdig(n) > math.max(lagging, n.lagging)
+        case n: Num => diffdig(n) < math.min(lagging, n.lagging)
         case _      => false
       }
     }
@@ -913,11 +932,8 @@ package chart {
       /** A canonical encoding of zero */
       def zero = new Num(new Array[Byte](1), 1, false)
 
-      /** Creates a Num from the String representation of a Double */
-      def apply(x: Double): Num = {
-        if (!x.finite) return empty
-        if (x == 0) return zero
-        val s = new java.math.BigDecimal(x.toString).stripTrailingZeros.toPlainString;
+      /** Creates a Num from a presumably correctly-formatted string (NOT checked!) */
+      private[this] def fromString(s: String): Num = {
         val i = s.indexOf('.')
         val neg = s.charAt(0) == '-'
         val dig = new Array[Byte](s.length - (if (neg) 1 else 0) - (if (i < 0) 0 else 1))
@@ -926,16 +942,181 @@ package chart {
         while (j < i) { dig(k) = (s.charAt(j) - '0').toByte; j += 1; k += 1 }
         if (j == i) j += 1
         while (j < s.length) { dig(k) = (s.charAt(j) - '0').toByte; j += 1; k += 1 }
-        new Num(dig, if (i < 0) dig.length else if (neg) i-1 else i, neg)
+        new Num(dig, if (i < 0) dig.length else if (neg) i-1 else i, neg)        
       }
+
+      /** Creates a Num from the String representation of a Double */
+      def apply(x: Double): Num = {
+        if (!x.finite) return empty
+        if (x == 0) return zero
+        val s = new java.math.BigDecimal(x.toString).stripTrailingZeros.toPlainString;
+        fromString(s)
+      }
+
+      def apply(bd: BigDecimal): Num = fromString(bd.underlying.toPlainString)
     }
 
     case class Anchor(a: Num, b: Num, value: Num, inverted: Boolean) {}
     object Anchor {
-      def apply(a: Double, b: Double): Anchor = {
-        if (a > b) return apply(b,a).copy(inverted = true);
-        if (a == b) return new Anchor(a, b, a.copy, false);
+      def apply(a: Double, b: Double, seekBetter: Boolean = false, seekLarger: Boolean = false): Anchor = {
+        if (!a.finite || !b.finite) return new Anchor(Num.empty, Num.empty, Num.empty, false)
+        if (a > b) return apply(b, a, seekBetter, !seekLarger).copy(inverted = true)
+        val na = Num(a)
+        if (a == b) return new Anchor(na, na, na, false)
+        val nb = Num(b)
+        if (na.negative != nb.negative) return new Anchor(na, nb, Num.zero, false)
+        val p = na diffdig nb
+        val v = na.copyToPosition(p, alwaysRound = if (a > 0) 1 else -1)
+        val nbp = nb(p)
+        if (seekBetter) {
+          if (a < 0) {
+            if (v(p) > 5 && (nbp < 5 || (nbp == 5 && p == nb.lagging))) v(p) = 5
+            else {
+              if ((v(p) & 1) == 1 && (v(p)-1 > nbp || (v(p)-1 == nbp && p == nb.lagging))) v(p) = (v(p) - 1).toByte
+              if (seekLarger != na.negative) {
+                val inc = (if ((v(p) & 1) == 1) 1 else 2)
+                while (v(p) - inc > math.max(0, nbp)) v(p) = (v(p) - inc).toByte
+              }
+            }
+          }
+          else {
+            if (v(p) < 5 && nbp >= 5) v(p) = 5
+            else {
+              if ((v(p) & 1) == 1 && v(p)+1 <= nbp) v(p) = (v(p) + 1).toByte
+              if (seekLarger != na.negative) {
+                val inc = (if ((v(p) & 1) == 1) 1 else 2)
+                while (v(p) + inc <= math.min(9, nbp)) v(p) = (v(p) + inc).toByte
+              }
+            }
+          }
+        }
+        new Anchor(na, nb, v, false)
       }
+
+      def plausible(a: Double, b: Double): Array[Anchor] = {
+        val anch1 = apply(a, b)
+        val anch5 = apply(a, b, true)
+        if (anch1.value != anch5.value) {
+          val p = anch1.value.lagging
+          if (p != anch5.value.lagging || (anch1.value(p) & 1) != 1 || anch5.value(p) != 5) Array(anch5, anch1)
+          else {
+            val anch2 = Anchor(anch1.a, anch1.b, anch1.value.copy, anch1.inverted)
+            anch2.value(p) = (anch2.value(p) + (if (anch1.value(p) > anch5.value(p)) 1 else -1)).toInt
+            Array(anch5, anch2, anch1)
+          }
+        }
+        else Array(anch1)
+      }
+    }
+
+    def lastDigitScore(n: Num): Double = {
+      var score = 1.0
+      val last = n.lagging
+      var l = last
+      val digit = n(last)
+      if (n(last) == 0) return 1e186   // Greater than math.pow(4, math.log10(Double.MaxValue))
+      while (l > 0) { score *= 4; l -= 1 }
+      while (l < 0) { score *= 0.25; l += 1 }
+      score * (if (digit == 5) n(last+1) match { case 2 | 7 => 5; case _ => 3 } else if ((digit &1) == 0) 2 else 1)
+    }
+
+    val trialGapsAsDouble = Array(7.5, 5, 4, 3, 2.5, 2, 1.5, 1)
+    val trialGaps = trialGapsAsDouble.map(x => BigDecimal(x))
+
+    val typicalScorer: (Array[Num], Int, Double) => Double = (ns, target, avg) =>
+      if (target <= 0) { if (ns.length == 0) 1e9*avg else if (ns.length == 1) avg else 0 }
+      else avg*((target + 1.0 - 2.0*(target - ns.length).abs)/(target + 1.0)).sqrt
+
+    def select(a: Double, b: Double, number: Int, scorer: (Array[Num], Int, Double) => Double = typicalScorer): Array[(Num, Double)] = {
+      if (number == 0) return new Array[(Num,Double)](0)
+      if (number == 1) {
+        val anch = Anchor(a, b, true)
+        return Array((anch.value, if (a < b) (anch.value.toDouble - a)/(b-a) else if (b < a) (anch.value.toDouble - b)/(a-b) else 0.5))
+      }
+      val plausibles = Anchor.plausible(a,b)
+      val check = plausibles.flatMap{ anch =>
+        val v = anch.value.toDouble
+        val left = (v-a).abs
+        val right = (b-v).abs
+        var multiplier = 1.0
+        var shift = 0
+        // Order of these two is importantbecause we want to overshoot before finding low bound!
+        while (1 + (multiplier*left).floor + (multiplier*right).floor > number) { shift += 1; multiplier /= 10 }
+        while (1 + (multiplier*left).floor + (multiplier*right).floor < number) { shift -= 1; multiplier *= 10 }
+        var index = trialGapsAsDouble.length - 2
+        while (1 + (multiplier*left/trialGapsAsDouble(index)).floor + (multiplier*right/trialGapsAsDouble(index)).floor > 0.5*number) { 
+          index -= 1; if (index < 0) { index = trialGapsAsDouble.length - 1; multiplier /= 10; shift += 1 }
+        }
+        index += 1; if (index >= trialGapsAsDouble.length) { index = 0; multiplier *= 10; shift -= 1 }
+        val shLo = shift
+        val ixLo = index
+        while (1 + (multiplier*left/trialGapsAsDouble(index)).floor + (multiplier*right/trialGapsAsDouble(index)).floor < 1.5*number) {
+          index += 1; if (index >= trialGapsAsDouble.length) { index = 0; multiplier *= 10; shift -= 1 } 
+        }
+        index -= 1; if (index < 0) { index = trialGapsAsDouble.length - 1; multiplier /= 10; shift += 1 }
+        val shHi = shift
+        val ixHi = index
+        val ab = Array.newBuilder[(Int, Int)]
+        index = ixLo
+        shift = shLo
+        while (shift > shHi || (shift >= shHi && index <= ixHi)) {
+          ab += ((shift, index))
+          index += 1
+          if (index >= trialGapsAsDouble.length) {
+            index = 0
+            shift -= 1
+          }
+        }
+        ab.result.map{ case (sh, ix) => (anch, sh, ix) }
+      }
+      if (check.isEmpty) return new Array[(Num, Double)](0)
+      def elaborate(anch: Anchor, sh: Int, ix: Int): Array[Num] = {
+        val delta = BigDecimal((if (b < a) -trialGaps(ix) else trialGaps(ix)).underlying.scaleByPowerOfTen(sh))
+        val center = anch.value.toBigDec
+        val left = anch.a.toBigDec
+        val right = anch.b.toBigDec
+        var runner = center - delta
+        val leftBuilder = Array.newBuilder[Num]
+        while (if (a > b) runner <= left else runner >= left) { 
+          leftBuilder += Num(runner.underlying.stripTrailingZeros)
+          runner = runner - delta
+        }
+        val builder = Array.newBuilder[Num]
+        builder ++= leftBuilder.result().reverse
+        builder += anch.value
+        runner = center + delta
+        while (if (a > b) runner >= right else runner <= right) {
+          builder += Num(runner.underlying.stripTrailingZeros)
+          runner = runner + delta
+        }
+        builder.result()
+      }
+      def avscore(ns: Array[Num], ignoreValue: Option[Double]): Double = {
+        var s = 0.0
+        var i, n = 0
+        var ignore = ignoreValue.getOrElse(0.0)
+        while (i < ns.length) { 
+          val score = lastDigitScore(ns(i))
+          if (score == ignore) { if (ignore > 0) ignore = 0 else n += 1 }
+          else {
+            s += score
+            n += 1
+          }
+          i += 1
+        }
+        if (n > 0) s/n else 0.0
+      }
+      def scorify(anch: Anchor, sh: Int, ix: Int): (Array[Num], Double) = {
+        val e = elaborate(anch, sh, ix)
+        val av = avscore(e, if (plausibles.length == 1) Some(lastDigitScore(plausibles.head.value)) else None)
+        (e, scorer(e, number, av))
+      }
+      def scorifyTup(asi: (Anchor, Int, Int)) = scorify(asi._1, asi._2, asi._3)
+      val best = (scorifyTup(check.head) /: check.tail){ (scored, x) => 
+        val newscore = scorifyTup(x)
+        if (newscore._2 > scored._2) newscore else scored
+      }
+      best._1.map(n => (n, (if (b > a) (n.toDouble - a)/(b - a) else (n.toDouble - b)/(a - b)).clip(0, 1)))
     }
   }
 
