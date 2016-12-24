@@ -792,6 +792,153 @@ package chart {
     }
   }
 
+  object Tickify{
+    case class Num(digits: Array[Byte], decimal: Int, negative: Boolean) {
+      /** Number of leading zeros */
+      def leadingZeros = {
+        var i = 0
+        while (i < digits.length && digits(i) == 0) i += 1
+        i
+      }
+
+      /** Position of first nonzero digit */
+      def leading = decimal - leadingZeros - 1
+
+      /** Number of trailing zeros */
+      def trailingZeros = {
+        var i = digits.length - 1
+        while (i > 0 && digits(i) == 0) i -= 1
+        digits.length - 1 - i
+      }
+
+      /** Position of the last nonzero digit */
+      def lagging = decimal - digits.length + trailingZeros
+
+      /** Position of first digit that differs from `n` */
+      def diffdig(n: Num) = {
+        val l = leading
+        val nl = n.leading
+        if (negative != n.negative || l != nl) math.max(l, nl)
+        else {
+          var i = leadingZeros
+          var j = n.leadingZeros
+          while (i < digits.length && j < n.digits.length && digits(i) == n.digits(j)) { i += 1; j += 1 }
+          decimal - i - 1
+        }
+      }
+
+      /** Creates a new copy (truncating leading/trailing zeros) */
+      def copy(): Num = {
+        val lz = leadingZeros
+        val tz = math.min(trailingZeros, digits.length - decimal)
+        if (lz + tz >= digits.length) Num.zero
+        else new Num(java.util.Arrays.copyOfRange(digits, lz, digits.length - tz), decimal - lz, negative)
+      }
+
+      /** Creates a new copy with a specified number of digits after the decimal point */
+      def copyToPosition(p: Int, initialZeros: Int = 0): Num = {
+        val lz = leadingZeros
+        val tz = math.min(trailingZeros, digits.length - decimal)
+        val before = decimal - lz
+        val after = digits.length - decimal - tz
+        val newbefore = math.max(1, before + math.max(0, initialZeros))
+        val newafter = math.max(0, -p)
+        var a = new Array[Byte](newbefore + newafter)
+        if (lz + tz >= digits.length) {
+          new Num(a, newbefore, negative)
+        }
+        else {
+          var i = lz
+          var j = newbefore - before
+          while (i < digits.length - tz && j < a.length) {
+            a(j) = digits(i + lz)
+            j += 1
+            i += 1
+          }
+          if (i < digits.length - tz) {
+            val roundup = digits(i) > 5 || (digits(i) == 5 && i + 1 < digits.length - tz)
+            if (roundup) {
+              j -= 1
+              var overflow = a(j) >= 9
+              while (overflow && j > 0) {
+                a(j) = 0
+                j -= 1
+                overflow = a(j) >= 9
+              }
+              if (!overflow) a(j) = (a(j) + 1).toByte
+              else {
+                a(0) = 0
+                val b = a
+                a = new Array[Byte](b.length + 1)
+                a(0) = 1
+                System.arraycopy(b, 0, a, 1, b.length)
+              }
+            }
+          }
+          new Num(a, a.length-newafter, negative)
+        }
+      }
+
+      /** String representation */
+      override def toString = {
+        val a = new Array[Char](digits.length + (if (negative) 1 else 0) + (if (decimal < digits.length) 1 else 0))
+        if (negative) a(0) = '-'
+        if (decimal < digits.length) a(decimal) = '.'
+        var i = if (negative) 1 else 0
+        var j = 0
+        while (j < decimal) {
+          a(i) = (digits(j) + '0').toChar
+          i += 1
+          j += 1
+        }
+        i += 1
+        while (j < digits.length) {
+          a(i) = (digits(j) + '0').toChar
+          i += 1
+          j += 1
+        }
+        new String(a)
+      }
+
+      /** Only allow equality to other Nums, not any old number or string */
+      override def equals(a: Any) = a match {
+        case n: Num => diffdig(n) > math.max(lagging, n.lagging)
+        case _      => false
+      }
+    }
+    object Num {
+      /** The empty number (NaN) */
+      val empty = new Num(new Array[Byte](0), 0, false)
+
+      /** A canonical encoding of zero */
+      def zero = new Num(new Array[Byte](1), 1, false)
+
+      /** Creates a Num from the String representation of a Double */
+      def apply(x: Double): Num = {
+        if (!x.finite) return empty
+        if (x == 0) return zero
+        val s = new java.math.BigDecimal(x.toString).stripTrailingZeros.toPlainString;
+        val i = s.indexOf('.')
+        val neg = s.charAt(0) == '-'
+        val dig = new Array[Byte](s.length - (if (neg) 1 else 0) - (if (i < 0) 0 else 1))
+        var j = if (neg) 1 else 0
+        var k = 0
+        while (j < i) { dig(k) = (s.charAt(j) - '0').toByte; j += 1; k += 1 }
+        if (j == i) j += 1
+        while (j < s.length) { dig(k) = (s.charAt(j) - '0').toByte; j += 1; k += 1 }
+        new Num(dig, if (i < 0) dig.length else if (neg) i-1 else i, neg)
+      }
+    }
+
+    case class Anchor(a: Num, b: Num, value: Num, inverted: Boolean) {}
+    object Anchor {
+      def apply(a: Double, b: Double): Anchor = {
+        if (a > b) return apply(b,a).copy(inverted = true);
+        if (a == b) return new Anchor(a, b, a.copy, false);
+      }
+    }
+  }
+
   final case class AutoTick(from: Vc, to: Vc, number: Int, left: Float, right: Float, anchor: Float, style: Style, sub: Option[(Int,Style)] = None) extends Shown {
     private[this] def firstDifference(a: String, dota: Int, b: String, dotb: Int): Int = {
       if ((a.charAt(0) == '-') != (b.charAt(0) == '-')) {
@@ -949,10 +1096,12 @@ package chart {
           else s.length-1-i
         }
       }
-      if (nLeading == 0 && nTrailing == 0) s
-      else if (nLeading == 0) s.dropRight(nTrailing)
-      else if (s.charAt(0) != '-') s.slice(nLeading, s.length-nTrailing)
-      else "-" + s.slice(1+nLeading, s.length-nTrailing) 
+      if (nLeading == i0 && nTrailing == 0) s
+      else if (nLeading == i0) s.dropRight(nTrailing)
+      else {
+        val sliced = s.slice(nLeading, s.length-nTrailing)
+        if (i0 == 0) sliced else "-" + sliced
+      }
     }
 
     private[this] lazy val tickInfo: (TickLabels, Option[Ticky]) = {
@@ -983,13 +1132,14 @@ package chart {
         val na = bita.toInt
         val nb = bitb.toInt
         val scores = findScores(na, nb)
+        println(f"$fa $fb $points $stra $dota $strb $dotb $fdif $na $nb")
         val (i0, di, len) = findBestIndices(scores, number)
         val labels = (new Array[Tik](len)): collection.mutable.WrappedArray[Tik]
         var i = i0%di
         var j = 0
         while (i < scores.length) {
           val ni = na + i
-          val text = removePointlessZeros("%s%s%s" . format(
+          val rawtext = "%s%s%s".format(
             if (ni < 0) "-" else "",
             prefix,
             if (fdif == -2)      "%02d.%d".format(ni.abs/10, ni.abs%10)
@@ -998,7 +1148,10 @@ package chart {
               if (ni != 0)       "%03d%s".format(ni.abs, "0"*(-fdif-3))
               else               "0"
             else                 "%03d".format(ni.abs)
-          ))
+          )
+          val text = removePointlessZeros(rawtext)
+          println(rawtext)
+          println(text)
           val value = text.toDouble
           val frac = (value - fa)/(fb - fa)
           labels(j) = Tik(frac.toFloat, text)
