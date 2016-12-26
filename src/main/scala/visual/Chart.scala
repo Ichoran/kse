@@ -324,9 +324,20 @@ package chart {
       val sb = new StringBuilder
       sb ++= "<path d=\""
       i = 0;
-      while (i < math.min(v.length,1)) { sb ++= "M "; sb ++= fm(Vc from v(i)); i += 1 }
-      while (i < math.min(v.length,2)) { sb ++= " L "; sb ++= fm(Vc from v(i)); i += 1 }
-      while (i < v.length) { sb += ' '; sb ++= fm(Vc from v(i)); i += 1 }
+      var i0 = 0
+      var first = true
+      while (i < v.length) {
+        val vi = Vc from v(i)
+        if (!vi.y.finite) { i0 = i + 1 }
+        else {
+          if (first) { sb ++= "M "; first = false }
+          else if (i == i0) sb ++= " M "
+          else if (i == i0+1) sb ++= " L "
+          else sb += ' '
+          sb ++= fm(vi)
+        }
+        i += 1
+      }
       implicit val myMag = Magnification.from(mag, xform, pts)
       sb ++= f"$q$show/>"
       Indent.V(sb.result)
