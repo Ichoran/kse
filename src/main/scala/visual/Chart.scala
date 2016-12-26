@@ -111,9 +111,10 @@ package chart {
         val fmR = fm("r", ur)
         if (cs.length < 100) {
           Indent(f"<g ${showWith(_.generallySolid)}>") +: (
-            us.map{ lu => 
+            us.flatMap{ lu => 
               val u = Vc from lu
-              Indent(f"<circle${fm.vquote(u, "cx", "cy")}$fmR$showSpec/>", 1)
+              if (u.finite) Some(Indent(f"<circle${fm.vquote(u, "cx", "cy")}$fmR$showSpec/>", 1))
+              else None
             }.toVector
           ) :+ Indent("</g>")
         }
@@ -161,7 +162,7 @@ package chart {
               j += 1
             }
           }
-          top.result.foreach(uc => b += Indent(f"<circle${fm.vquote(uc, "cx", "cy")}$fmR$showSpec/>", 1))
+          top.result.foreach(uc => if (uc.finite) b += Indent(f"<circle${fm.vquote(uc, "cx", "cy")}$fmR$showSpec/>", 1))
           b += Indent("</g>")
           b.result
         }
@@ -405,9 +406,10 @@ package chart {
       all += new DataLine(pts, lstyle)
       var i = 0
       while (i < pts.length && i < rs.length) {
+        val vi = new Vc(pts(i))
         val r = rs(i)
-        if (r.finite) {
-          all += Marker.C(new Vc(pts(i)), r, dstyle)
+        if (r.finite && vi.y.finite) {
+          all += Marker.C(vi, r, dstyle)
         }
         i += 1
       }
@@ -455,9 +457,10 @@ package chart {
       all += new DataLine(a, lstyle)
       i = 0
       while (i < a.length && i < rs.length) {
+        val vi = new Vc(a(i))
         val r = h(rs(i))
-        if (r.finite) {
-          all += Marker.C(new Vc(a(i)), r, dstyle)
+        if (r.finite && vi.y.finite) {
+          all += Marker.C(vi, r, dstyle)
         }
         i += 1
       }
@@ -487,9 +490,10 @@ package chart {
       all += new DataLine(a, lstyle)
       i = 0
       while (i < a.length) {
+        val vi = new Vc(a(i))
         val ri = r(i)
-        if (ri.finite) {
-          all += Marker.C(new Vc(a(i)), ri, dstyle)
+        if (ri.finite && vi.y.finite) {
+          all += Marker.C(vi, ri, dstyle)
         }
         i += 1
       }
