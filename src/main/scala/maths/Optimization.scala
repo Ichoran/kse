@@ -9,6 +9,7 @@ import scala.math._
 import kse.flow._
 
 abstract class Approximator {
+  def copy: Approximator
   val parameters: Array[Double]
   def apply(datum: Double): Double
   def computeInPlace(data: Array[Double]) { data(1) = apply(data(0)) }
@@ -71,6 +72,7 @@ object Approximator {
 
   final class Affine(x0: Double, slope: Double) extends Approximator {
     val parameters = Array(x0, slope)
+    def copy = new Affine(parameters(0), parameters(1))
     def apply(t: Double) = parameters(0) + parameters(1)*t
     override def toString = f"x = ${parameters(0)} + ${parameters(1)}*t"
   }
@@ -89,6 +91,7 @@ object Approximator {
 
   final class Quadratic(t0: Double, x0: Double, slopeAtOne: Double) extends Approximator {
     val parameters = Array(t0, x0, slopeAtOne)
+    def copy = new Quadratic(parameters(0), parameters(1), parameters(2))
     def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + parameters(2)*dt*dt }
     override def toString = f"x = ${parameters(1)} + ${parameters(2)}*(t - ${parameters(0)})^2"
   }
@@ -99,6 +102,7 @@ object Approximator {
   final class Exponential(offset: Double, height: Double, slope: Double) extends Approximator {
     // Equation is x = offset + height*exp((slope/height)*t), so that dx/dt(0) = slope
     val parameters = Array(offset, height, slope)
+    def copy = new Exponential(parameters(0), parameters(1), parameters(2))
     def apply(t: Double) = { val h = parameters(1); parameters(0) + (if (h != 0) h*exp(parameters(2)*t/h) else 0.0) }
     override def toString = f"x = ${parameters(0)} + ${parameters(1)}*e^${parameters(2)/parameters(1)}t"
   }
@@ -153,6 +157,7 @@ object Approximator {
 
   final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator {
     val parameters = Array(offset, amplitude, slope)
+    def copy = new Power(parameters(0), parameters(1), parameters(2))
     def exponent =  if (parameters(1) == 0) 0 else parameters(2)/parameters(1)
     def apply(t: Double) = 
       if (t <= 0) { 
@@ -219,11 +224,21 @@ object Approximator {
 
   final class Bilinear(t0: Double, x0: Double, leftSlope: Double, rightSlope: Double) extends Approximator {
     val parameters = Array(t0, x0, leftSlope, rightSlope)
+    def copy = new Bilinear(parameters(0), parameters(1), parameters(2), parameters(3))
     def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + dt*(if (dt < 0) parameters(2) else parameters(3)) }
     override def toString = f"x = ${parameters(1)} + (t - ${parameters(0)})*{ t < ${parameters(0)}: ${parameters(2)}; otherwise ${parameters(3)} }"
   }
   object Bilinear extends ApproximatorCompanion[Bilinear] {
-    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Bilinear] = ???
+    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Bilinear] = Affine.guess(ts, xs, finitize).map{ aff =>
+      var i = ts.length/2
+      while (i < ts.length && !ts(i).finite) i += 1
+      if (i >= ts.length) {
+        i = ts.length/2 - 1
+        while (i >= 0 && !ts(i).finite) i -= 1
+        if (i < 0) i = 0
+      }
+      new Bilinear(ts(i), aff(ts(i)), aff.parameters(1), aff.parameters(1))
+    }
   }
 }
 
