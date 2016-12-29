@@ -25,11 +25,12 @@ package maths {
     final val OverSqrtEight = 0.3535533905932737622
     final val QuarterSqrtPi = 0.44311346272637900682
 
-    // Logarithmic constants
+    // Logarithmic and exponential constants
     final val OverLnTwo = 1.4426950408889634079
     final val LnTwo = 0.69314718055994530942
     final val LnHalf = -0.69314718055994530942
     final val NegOverLnTwo = -1.4426950408889634079
+    final val OverE = 0.36787944117144233
 
     // Constants for statistical distributions; bidirectional conversions chosen so they multiply to 1.
     final val GaussianFWHMToSigma = 0.7413011092528010  // Conversion constant from Mathematica 8: 1/(2*InverseErf[1/2]*Sqrt[2])

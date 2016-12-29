@@ -6,8 +6,6 @@ package optimization
 
 import scala.math._
 
-import kse.flow._
-
 abstract class Approximator {
   def copy: Approximator
   val parameters: Array[Double]
@@ -21,7 +19,7 @@ abstract class Approximator {
   }
 }
 
-trait ApproximatorCompanion[App <: Approximator] {
+trait ApproximatorCompanion[+App <: Approximator] {
   def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean): List[App]
 }
 
@@ -176,7 +174,6 @@ object Approximator {
       val (left, right, fts, fxs, winner) = findCleanLeftRightSlopes(ts, xs, finitize)
       if ((left eq null) || (right eq null) || (fts eq null) || (fxs eq null)) return Nil
       if (fts(0) < 0) return Nil // Powers of negative values are a mess.
-      println(winner)
       val leftly =
         if (winner >= 10) Nil
         else {
@@ -214,7 +211,7 @@ object Approximator {
       if (curvely.size == affly.size) {
         if ((curvely zip affly).forall{ case (l, r) => 
           signum(l.parameters(1)) == signum(r.parameters(1)) &&
-          (l.exponent - 1).abs/(l.exponent.abs + 1) < 0.05/min(100, (fts(fts.length-1)/fts(0)).tap(println))
+          (l.exponent - 1).abs/(l.exponent.abs + 1) < 0.05/min(100, (fts(fts.length-1)/fts(0)))
         }) affly
         else curvely ::: affly
       }
@@ -242,6 +239,164 @@ object Approximator {
   }
 }
 
-abstract class Optimizer {}
+case class Optimized(app: Approximator, error: Double, evaluations: Long) {}
+
+abstract class Optimizer {
+  def verifiedFinite: Boolean
+  def ts: Array[Double]
+  def xs: Array[Double]
+  def apply(initial: Array[Approximator]): List[Optimized]
+  def from(guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =
+    apply(guessers.flatMap(_.guess(ts, xs, !verifiedFinite)).toArray)
+}
+
+trait OptimizerCompanion[+Opt <: Optimizer] {
+  def over(ts: Array[Double], xs: Array[Double]): Opt
+  def optimize(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+    over(ts, xs).from(guessers: _*)
+}
+
 object Optimizer {
+  final class Hyphae(dataTs: Array[Double], dataXs: Array[Double]) extends Optimizer {
+    def verifiedFinite = true
+    val (ts, xs) = if (dataTs.finite && dataXs.finite) (dataTs, dataXs) else Approximator.finiteCopies(dataTs, dataXs)
+    private case class Tip(
+      app: Approximator,
+      scales: Array[Double],
+      scores: Array[Double],
+      budget: Array[Float],
+      ranking: Array[Int],
+      var evals: Long = 0
+    ) {
+      def mse: Double = {
+        var sum = 0.0
+        var i = 0
+        while (i < ts.length) {
+          sum += (app(ts(i)) - xs(i)).sq
+          i += 1
+        }
+        evals += 1
+        sum/ts.length
+      }
+      def mseChanging(index: Int, amount: Double): Double = {
+        val temp = app.parameters(index)
+        app.parameters(index) += amount
+        val ans = mse
+        app.parameters(index) = temp
+        ans
+      }
+      private[this] var bestError = mse
+      def lastError = bestError
+      private[this] def improveOnce(): Int = {
+        var i = 0
+        var improvements = 0
+        while (i < ranking.length) {
+          val j = ranking(i)-1
+          if (budget(j) >= 1) {
+            budget(j) -= 1
+            if (scales(j).abs < 1e-12) scales(j) = math.max(1e-6, 1e-6*app.parameters(j).abs)
+            val eFwd = mseChanging(j, scales(j))
+            var better = bestError
+            if (eFwd < bestError) {
+              better = eFwd
+              val eFwd2 = mseChanging(j, 2*scales(j))
+              if (eFwd2 < eFwd) {
+                better = eFwd2
+                scales(j) *= 2 
+                app.parameters(j) += scales(j)
+              }
+              else {
+                app.parameters(j) += scales(j)
+                scales(j) *= NumericConstants.TwoOverPi     // Reduce step size by a non-integer factor so we don't fall into loops
+              }
+            }
+            else {
+              val eBkw = mseChanging(j, -scales(j))
+              if (eBkw < bestError) {
+                better = eBkw
+                app.parameters(j) -= scales(j)
+                scales(j) = -scales(j)
+              }
+              else {
+                if (eFwd == bestError && eBkw == bestError) scales(j) *= 10  // Arguably just taking too small of steps!
+                else scales(j) *= -NumericConstants.OverE                    // Back up slowly
+              }
+            }
+            scores(j) = (scores(j) + max(0, bestError - better))/2
+            if (better < bestError) {
+              improvements += 1
+              if (i > 0 && scores(j) > scores(ranking(i-1)-1)) {
+                // Reward good performance by bumping up the ranking
+                val jj = ranking(i-1)-1
+                ranking(i-1) = j+1
+                ranking(i) = jj+1
+              }
+            }
+          }
+          i += 1
+        }
+        i = 0
+        while (i < ranking.length) {
+          budget(ranking(i)-1) += (1.0/(i+1.1217010001)).toFloat  // Approximate power law distribution of effort into parameters--weird constant avoids same parameters coming up next to each other over and over again 
+          i += 1
+        }
+        improvements
+      }
+      private[optimization] def improveEpoch(): (Int, Double, Double) = {
+        var n = 0
+        var imp = 0
+        val before = bestError
+        while (n < app.parameters.length) {
+          imp += improveOnce()
+          n += 1
+        }
+        val after = bestError
+        val better = before - after
+        val fracbetter = better.abs / max(before.abs, after.abs)
+        (imp, better, fracbetter)
+      }
+    }
+    def apply(initial: Array[Approximator]): List[Optimized] = {
+      val tips = initial.map{ app => 
+        val np = app.parameters.length
+        Tip(app, Array.fill(np)(0.0), Array.fill(np)(0.0), Array.fill(np)(2f), Array.range(1, np+1), 0)
+      }
+      val aux = new Array[(Int, Double, Double)](tips.length)
+      var n = tips.length
+      var promising = true
+      var epoch = 0
+      while (promising) {
+        epoch += 1
+        var i = 0; while (i < n) { aux(i) = tips(i).improveEpoch(); i += 1 }
+        if (n > 1 && epoch > 10) {
+          var worst = 0
+          i = 1
+          while (i < n) {
+            if (tips(worst).lastError < tips(i).lastError) worst = i
+            i += 1
+          }
+          var excused = false
+          i = 0
+          while (i < n && !excused) {
+            excused = (i != worst) && (aux(i)._2 < aux(worst)._2 || aux(i)._3 < aux(worst)._3)
+            i += 1
+          }
+          if (!excused) {
+            val temp = tips(worst)
+            tips(worst) = tips(n-1)
+            tips(n-1) = temp
+            n -= 1
+          }
+        }
+        var anybetter = false
+        i = 0
+        while (i < aux.length && !anybetter) { anybetter = aux(i)._1 > 0 && aux(i)._3 >= 1e-6; i += 1 }
+        promising = (epoch < 5 || anybetter)
+      }
+      tips.take(n).sortBy(_.lastError).map(tip => Optimized(tip.app, tip.mse, tip.evals)).toList
+    }
+  }
+  object Hyphae extends OptimizerCompanion[Hyphae] {
+    def over(ts: Array[Double], xs: Array[Double]) = new Hyphae(ts, xs)
+  }
 }
