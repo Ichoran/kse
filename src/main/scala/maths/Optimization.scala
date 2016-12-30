@@ -245,6 +245,9 @@ abstract class Optimizer {
   def verifiedFinite: Boolean
   def ts: Array[Double]
   def xs: Array[Double]
+  var smallEnoughError: Double = 1e-4
+  var worthwhileImprovement: Double = 1e-5
+  def setTargets(absolute: Double, improve: Double): this.type = { smallEnoughError = absolute; worthwhileImprovement = improve.abs; this }
   def apply(initial: Array[Approximator]): List[Optimized]
   def from(guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =
     apply(guessers.flatMap(_.guess(ts, xs, !verifiedFinite)).toArray)
@@ -252,6 +255,8 @@ abstract class Optimizer {
 
 trait OptimizerCompanion[+Opt <: Optimizer] {
   def over(ts: Array[Double], xs: Array[Double]): Opt
+  def optimize(absoluteE: Double, improveE: Double, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+    over(ts, xs).setTargets(absoluteE, improveE).from(guessers: _*)
   def optimize(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
     over(ts, xs).from(guessers: _*)
 }
@@ -294,7 +299,27 @@ object Optimizer {
           val j = ranking(i)-1
           if (budget(j) >= 1) {
             budget(j) -= 1
-            if (scales(j).abs < 1e-12) scales(j) = math.max(1e-6, 1e-6*app.parameters(j).abs)
+            if (scales(j).abs < math.max(1e-12, app.parameters(j)*1e-8)) {
+              val initial = math.max(1e-6, 1e-6*app.parameters(j).abs)
+              scales(j) = initial
+              var e = mseChanging(j, scales(j))
+              while ((e closeTo bestError) && scales(j) < initial*2e6) { scales(j) *= 10; e = mseChanging(j, scales(j)) }
+              if (e > bestError) { scales(j) = -scales(j); e = mseChanging(j, scales(j)) }
+              var improving = e < bestError
+              val ever = improving
+              while (improving) {
+                val nu = mseChanging(j, 10*scales(j))
+                if (nu < e) {
+                  scales(j) = 10*scales(j)
+                  e = nu
+                }
+                else improving = false
+              }
+              if (ever) {
+                bestError = e
+                app.parameters(j) += scales(j)
+              }
+            }
             val eFwd = mseChanging(j, scales(j))
             var better = bestError
             if (eFwd < bestError) {
@@ -324,6 +349,7 @@ object Optimizer {
             }
             scores(j) = (scores(j) + max(0, bestError - better))/2
             if (better < bestError) {
+              bestError = better
               improvements += 1
               if (i > 0 && scores(j) > scores(ranking(i-1)-1)) {
                 // Reward good performance by bumping up the ranking
@@ -390,7 +416,10 @@ object Optimizer {
         }
         var anybetter = false
         i = 0
-        while (i < aux.length && !anybetter) { anybetter = aux(i)._1 > 0 && aux(i)._3 >= 1e-6; i += 1 }
+        while (i < aux.length && !anybetter) {
+          anybetter = aux(i)._1 > 0 && aux(i)._3 >= worthwhileImprovement && !(tips(i).lastError < smallEnoughError)
+          i += 1
+        }
         promising = (epoch < 5 || anybetter)
       }
       tips.take(n).sortBy(_.lastError).map(tip => Optimized(tip.app, tip.mse, tip.evals)).toList
