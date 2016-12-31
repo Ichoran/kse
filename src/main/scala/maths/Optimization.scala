@@ -259,7 +259,13 @@ abstract class Optimizer {
   def ws: Array[Double]  // null means all weights are 1!
   var smallEnoughError: Double = 1e-4
   var worthwhileImprovement: Double = 1e-5
-  def setTargets(absolute: Double, improve: Double): this.type = { smallEnoughError = absolute; worthwhileImprovement = improve.abs; this }
+  var iterationBudget: Long = 100000
+  def setTargets(absolute: Double, improve: Double, iterations: Long): this.type = { 
+    if (!absolute.nan) smallEnoughError = absolute
+    if (!improve.nan) worthwhileImprovement = improve.abs
+    if (iterations == 0) iterationBudget = Long.MaxValue else if (iterations > 0) iterationBudget = iterations
+    this
+  }
   def apply(initial: Array[Approximator]): List[Optimized]
   def from(guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =
     apply(guessers.flatMap(_.guess(ts, xs, !verifiedFinite)).toArray)
@@ -268,13 +274,13 @@ abstract class Optimizer {
 trait OptimizerCompanion[+Opt <: Optimizer] {
   def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]): Opt
   def over(ts: Array[Double], xs: Array[Double]): Opt = over(ts, xs, null)
-  def optimize(absoluteE: Double, improveE: Double, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs, ws).setTargets(absoluteE, improveE).from(guessers: _*)
-  def optimize(absoluteE: Double, improveE: Double, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs, null).setTargets(absoluteE, improveE).from(guessers: _*)
-  def optimize(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+    over(ts, xs, ws).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
+  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+    over(ts, xs, null).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
+  def apply(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
     over(ts, xs, ws).from(guessers: _*)
-  def optimize(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+  def apply(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
     over(ts, xs, null).from(guessers: _*)
 }
 
@@ -422,9 +428,11 @@ object Optimizer {
       var n = tips.length
       var promising = true
       var epoch = 0
+      var evals = 0L
       while (promising) {
         epoch += 1
-        var i = 0; while (i < n) { aux(i) = tips(i).improveEpoch(); i += 1 }
+        evals = 0L
+        var i = 0; while (i < n) { aux(i) = tips(i).improveEpoch(); evals += tips(i).evals; i += 1 }
         if (n > 1 && epoch > 10) {
           var worst = 0
           i = 1
@@ -451,7 +459,7 @@ object Optimizer {
           anybetter = aux(i)._1 > 0 && aux(i)._3 >= worthwhileImprovement && !(tips(i).lastError < smallEnoughError)
           i += 1
         }
-        promising = (epoch < 5 || anybetter)
+        promising = (epoch < 5 || anybetter) && !(evals > iterationBudget)
       }
       tips.take(n).sortBy(_.lastError).map(tip => Optimized(tip.app, tip.mse, tip.evals)).toList
     }
