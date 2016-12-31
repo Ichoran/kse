@@ -108,7 +108,7 @@ object Test_Hop extends Test_Kse {
 
   def test_hopOut =
     Seq("fish", "dog").map( x => hopOut[Int]( hop => if (x == "fish") 0 else hop(x.length) ) ) =?= Seq(0, 3) &&
-    Seq("fish", "dog").map( x => hopOut[Long]( hop => if (x == "fish") -1L else hop(x.length.toLong << 33L) ) ) =?= Seq(-1, 3 << 33L) &&
+    Seq("fish", "dog").map( x => hopOut[Long]( hop => if (x == "fish") -1L else hop(x.length.toLong << 33L) ) ) =?= Seq(-1, 3L << 33L) &&
     Seq("fish", "dog").map( x => hopOut[String]( hop => if (x == "fish") x else hop("dogfish") ) ) =?= Seq("fish", "dogfish")
   
   def test_hopOn =
@@ -146,11 +146,11 @@ object Test_Hop extends Test_Kse {
     def hai(implicit hop: HopKey[Int, A]) { hop(1) }
     def hbi(implicit hop: HopKey[Int, B]) { hop(2) }
     def hal(implicit hop: HopKey[Long, A]) { hop(-1L) }
-    def hbl(implicit hop: HopKey[Long, B]) { hop(1 << 33L) }
+    def hbl(implicit hop: HopKey[Long, B]) { hop(1L << 33L) }
     def hao(implicit hop: HopKey[Object, A]) { hop('x) }
     def hbo(implicit hop: HopKey[Object, B]) { hop('yy) }
     Seq("fish", "dog").map(x => hopKeyOut[Int, A]{ implicit hop => hopKeyOut[Int, B]{ implicit hip => if (x=="fish") hai else hbi; 0 } }) =?= Seq(1,2) &&
-    Seq("fish", "dog").map(x => hopKeyOut[Long, A]{ implicit hop => hopKeyOut[Long, B]{ implicit hip => if (x=="fish") hal else hbl; 0L } }) =?= Seq(-1L, 1 << 33L) &&
+    Seq("fish", "dog").map(x => hopKeyOut[Long, A]{ implicit hop => hopKeyOut[Long, B]{ implicit hip => if (x=="fish") hal else hbl; 0L } }) =?= Seq(-1L, 1L << 33L) &&
     Seq("fish", "dog").map(x => hopKeyOut[Object, A]{ implicit hop => hopKeyOut[Object, B]{ implicit hip => if (x=="fish") hao else hbo; "" } }) =?= Seq('x, 'yy) &&
     Seq("fish", "dog").map(x => hopKeyOut[Int, A]{ implicit hop => hopKeyOut[Int, B]{ implicit hup =>
       hopKeyOn[A]((o: Object) => o.toString.length){ implicit hip => hopKeyOn[B]((o: Object) => o.toString.length*2){ implicit hep =>

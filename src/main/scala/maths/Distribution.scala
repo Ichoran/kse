@@ -83,6 +83,8 @@ final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n
   def reset(): this.type = { n = 0; mean = 0; sse = 0; this }
   def result: Double = mean
   def immutable = new Est(n, mean, sse)
+  def sdToErrorInPlace: this.type = { if (n > 1) sse *= n; this }
+  def errorToSDInPlace: this.type = { if (n > 1) sse /= n; this }
   def ++(that: Estimate): EstM = clone ++= that
   def +:(x: Double): EstM = if (!x.nan) this else clone += x
   def :+(x: Double): EstM = if (!x.nan) this else clone += x
@@ -106,6 +108,8 @@ object EstM {
 }
 
 final case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
+  def sdToError = if (n <= 1) this else new Est(n, mean, sse*n)
+  def errorToSD = if (n <= 1) this else new Est(n, mean, sse/n)
   def mutable = new EstM(n, mean, sse)
   def +:(x: Double): Est = (mutable += x).immutable
   def :+(x: Double): Est = (mutable += x).immutable
