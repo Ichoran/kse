@@ -34,6 +34,17 @@ object Approximator {
     while (i < m) { if (ts(i).finite && xs(i).finite) { nts(j) = ts(i); nxs(j) = xs(i); j += 1 }; i += 1 }
     (nts, nxs)
   }
+  def finiteCopies(ts: Array[Double], xs: Array[Double], ws: Array[Double]): (Array[Double], Array[Double], Array[Double]) = {
+    if (ws eq null) return (finiteCopies(ts, xs) match { case (ta, xa) => (ta, xa, ws) })
+    val n = math.min(math.min(ts.length, xs.length), ws.length)
+    var m, i = 0
+    while (i < n) { if (ts(i).finite && xs(i).finite && ws(i).finite) m += 1; i += 1 }
+    val nts, nxs, nws = new Array[Double](m)
+    i = 0
+    var j = 0
+    while (i < m) { if (ts(i).finite && xs(i).finite && ws(i).finite) { nts(j) = ts(i); nxs(j) = xs(i); nws(i) = ws(i); j += 1 }; i += 1 }
+    (nts, nxs, nws)
+  }
 
   private[this] def findCleanLeftRightSlopes(
     ts: Array[Double], xs: Array[Double], finitize: Boolean = true
@@ -245,6 +256,7 @@ abstract class Optimizer {
   def verifiedFinite: Boolean
   def ts: Array[Double]
   def xs: Array[Double]
+  def ws: Array[Double]  // null means all weights are 1!
   var smallEnoughError: Double = 1e-4
   var worthwhileImprovement: Double = 1e-5
   def setTargets(absolute: Double, improve: Double): this.type = { smallEnoughError = absolute; worthwhileImprovement = improve.abs; this }
@@ -254,17 +266,23 @@ abstract class Optimizer {
 }
 
 trait OptimizerCompanion[+Opt <: Optimizer] {
-  def over(ts: Array[Double], xs: Array[Double]): Opt
+  def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]): Opt
+  def over(ts: Array[Double], xs: Array[Double]): Opt = over(ts, xs, null)
+  def optimize(absoluteE: Double, improveE: Double, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+    over(ts, xs, ws).setTargets(absoluteE, improveE).from(guessers: _*)
   def optimize(absoluteE: Double, improveE: Double, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs).setTargets(absoluteE, improveE).from(guessers: _*)
+    over(ts, xs, null).setTargets(absoluteE, improveE).from(guessers: _*)
+  def optimize(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+    over(ts, xs, ws).from(guessers: _*)
   def optimize(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs).from(guessers: _*)
+    over(ts, xs, null).from(guessers: _*)
 }
 
 object Optimizer {
-  final class Hyphae(dataTs: Array[Double], dataXs: Array[Double]) extends Optimizer {
+  final class Hyphae(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends Optimizer {
     def verifiedFinite = true
-    val (ts, xs) = if (dataTs.finite && dataXs.finite) (dataTs, dataXs) else Approximator.finiteCopies(dataTs, dataXs)
+    val (ts, xs, ws) =
+      if (dataTs.finite && dataXs.finite) (dataTs, dataXs, dataWs) else Approximator.finiteCopies(dataTs, dataXs, dataWs)
     private case class Tip(
       app: Approximator,
       scales: Array[Double],
@@ -273,7 +291,7 @@ object Optimizer {
       ranking: Array[Int],
       var evals: Long = 0
     ) {
-      def mse: Double = {
+      private[this] def mseUnweighted: Double = {
         var sum = 0.0
         var i = 0
         while (i < ts.length) {
@@ -283,6 +301,19 @@ object Optimizer {
         evals += 1
         sum/ts.length
       }
+      private[this] def mseWeighted: Double = {
+        var sum = 0.0
+        var W = 0.0
+        var i = 0
+        while (i < ts.length) {
+          W += ws(i)
+          sum += ws(i)*(app(ts(i)) - xs(i)).sq
+          i += 1
+        }
+        evals += 1
+        if (W != 0) sum/W else sum      
+      }
+      def mse = if (ws eq null) mseUnweighted else mseWeighted
       def mseChanging(index: Int, amount: Double): Double = {
         val temp = app.parameters(index)
         app.parameters(index) += amount
@@ -426,6 +457,6 @@ object Optimizer {
     }
   }
   object Hyphae extends OptimizerCompanion[Hyphae] {
-    def over(ts: Array[Double], xs: Array[Double]) = new Hyphae(ts, xs)
+    def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]) = new Hyphae(ts, xs, ws)
   }
 }
