@@ -278,14 +278,22 @@ abstract class Optimizer {
 trait OptimizerCompanion[+Opt <: Optimizer] {
   def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]): Opt
   def over(ts: Array[Double], xs: Array[Double]): Opt = over(ts, xs, null)
-  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+  def candidates(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
     over(ts, xs, ws).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
-  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+  def candidates(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
     over(ts, xs, null).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
-  def apply(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+  def candidates(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
     over(ts, xs, ws).from(guessers: _*)
-  def apply(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
+  def candidates(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
     over(ts, xs, null).from(guessers: _*)
+  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
+    over(ts, xs, ws).setTargets(absoluteE, improveE, iterN).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
+  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
+    over(ts, xs, null).setTargets(absoluteE, improveE, iterN).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
+  def apply(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
+    over(ts, xs, ws).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
+  def apply(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
+    over(ts, xs, null).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
 }
 
 object Optimizer {
