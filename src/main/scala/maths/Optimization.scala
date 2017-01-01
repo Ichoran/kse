@@ -60,7 +60,7 @@ object Approximator {
     var i = 0
     var j = n-1
     var winner = 0
-    while (i < j && winner.abs < 10) {
+    while (i < j && winner.abs < 6) {
       left += (fts(i), fxs(i))
       right += (fts(j), fxs(j))
       if (i > 4) {
@@ -135,7 +135,7 @@ object Approximator {
     def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Exponential] = {
       val (left, right, _, _, winner) = findCleanLeftRightSlopes(ts, xs, finitize)
       if ((left eq null) || (right eq null)) return Nil
-      if (winner.abs < 10) {
+      if (winner.abs < 6) {
         // Can't reliably tell whether it's growing or shrinking, so we'd better return both
         if (signum(left.betaX) != signum(right.betaX)) fromSlopes(left, right, 0) :: fromSlopes(right, left, 0) :: Nil
         else {
@@ -149,11 +149,15 @@ object Approximator {
           // Could choose a same sign as dx or opposite sign
           val rates = (dt :: (-dt) :: Nil).map(t => 1/(big*t))  // Change of dt produces change of about 1/big
           rates.map{ r =>
+            // Pretty flat
             val scale = exp(r*ct)
             val height = big*dx/scale * signum(r)
             val offset = cx - height*scale
             new Exponential(offset, height, height*r)
-          }
+          } ::: List(
+            new Exponential(left.meanX, dx, cs),
+            new Exponential(right.meanX, -dx, -cs)
+          )
         }
       }
       else {
@@ -186,7 +190,7 @@ object Approximator {
       if ((left eq null) || (right eq null) || (fts eq null) || (fxs eq null)) return Nil
       if (fts(0) < 0) return Nil // Powers of negative values are a mess.
       val leftly =
-        if (winner >= 10) Nil
+        if (winner >= 6) Nil
         else {
           val k = 1 + (if (left.betaX * right.betaX > 0) max(-5, log(right.betaX/left.betaX)) else -5)/log(right.meanT/left.meanT)
           val ltPk = pow(left.meanT, k)
@@ -195,7 +199,7 @@ object Approximator {
           new Power(x0, a, k*a) :: Nil
         }
       val rightly =
-        if (winner <= -10) Nil
+        if (winner <= -6) Nil
         else {
           val k = 1 + (if (left.betaX * right.betaX > 0) min(5, log(right.betaX/left.betaX)) else 5)/log(right.meanT/left.meanT)
           val rtPk = pow(right.meanT, k)
@@ -204,7 +208,7 @@ object Approximator {
           new Power(x0, a, k*a) :: Nil
         }
       val affly =
-        if (winner.abs >= 10) Nil
+        if (winner.abs >= 6) Nil
         else {
           Affine.guess(fts, fxs, false).map{ aff =>
             new Power(aff.parameters(0), aff.parameters(1), aff.parameters(1))
