@@ -337,6 +337,7 @@ object Optimizer {
         app.parameters(index) += amount
         val ans = mse
         app.parameters(index) = temp
+        println(f"$index ${app.parameters(index)+amount} ${ans - bestError} $bestError")
         ans
       }
       private[this] var bestError = mse
@@ -417,15 +418,91 @@ object Optimizer {
         }
         improvements
       }
-      private[optimization] def improveEpoch(): (Int, Double, Double) = {
+      // Try to do gradient thing.  Doesn't seem to work very well.  Bugs, maybe?  Or just standard "gradients are myopic"?
+      private[this] def improveAllFrom(old: Array[Double], scratch: Array[Double] = null): Int = {
+        var i = 0
+        val grad = 
+          if ((scratch eq null) || scratch.length < app.parameters.length) java.util.Arrays.copyOf(app.parameters, app.parameters.length)
+          else {
+            System.arraycopy(app.parameters, 0, scratch, 0, app.parameters.length)
+            scratch
+          }
+
+        i = 0
+        while (i < app.parameters.length) { 
+          grad(i) = (grad(i) - old(i))/10
+          old(i) = app.parameters(i)
+          app.parameters(i) += grad(i)
+          i += 1
+        }
+        var multiplier = 1.0
+        var e = mse
+        //val be = bestError
+
+        if (e > bestError) {
+          multiplier = -1.0
+          i = 0; while (i < app.parameters.length) { app.parameters(i) = old(i) - grad(i); i += 1 }
+          val e = mse
+        }
+
+        if (e < bestError) {
+          var lastmult = 0.0
+          var nextmult = multiplier
+          multiplier = 0
+          var laste = bestError
+          var nexte = e
+          e = laste
+          while (nexte >= e) {
+            lastmult = multiplier
+            laste = e
+            multiplier = nextmult
+            e = nexte
+            nextmult = multiplier * 2
+            i = 0; while (i < app.parameters.length) { app.parameters(i) = old(i) + nextmult*grad(i); i += 1 }
+            nexte = mse
+          }
+          // Quadratic fit to best multiplier
+          if (lastmult != multiplier && lastmult != nextmult) {
+            // Assuming form a0*m^2 + a1*m + a2 = 0
+            val qmult = 
+              -(nextmult.sq*(e - laste) - multiplier.sq*(nexte - laste) + lastmult.sq*(nexte - e)) /
+              (2*(nextmult*(e - laste) - multiplier*(nexte - laste) + lastmult*(nexte - e)))
+            i = 0; while (i < app.parameters.length) { app.parameters(i) = old(i) + nextmult*grad(i); i += 1 }
+            val qerr = mse
+            if (qerr < e) bestError = qerr
+            else {
+              i = 0;while (i < app.parameters.length) { app.parameters(i) = old(i) + multiplier*grad(i); i += 1 }
+              bestError = e
+            }
+          }
+          //println(f"$be -> $bestError")
+          //println(f"  ${old.take(app.parameters.length).mkString(",")}")
+          //println(f"  ${app.parameters.mkString(",")}")
+          app.parameters.length
+        }
+        else {
+          System.arraycopy(old, 0, app.parameters, 0, app.parameters.length)
+          //println(f"$e XX $bestError")
+          //println(f"  ${old.take(app.parameters.length).mkString(",")}")
+          //println(f"  ${app.parameters.mkString(",")}")
+          0
+        }
+      }
+      private[optimization] def improveEpoch(scratchOne: Array[Double] = null, scratchTwo: Array[Double] = null): (Int, Double, Double) = {
         var n = 0
         var imp = 0
         val before = bestError
+        val scratch =
+          if ((scratchOne eq null) || scratchOne.length < app.parameters.length) java.util.Arrays.copyOf(app.parameters, app.parameters.length)
+          else {
+            System.arraycopy(app.parameters, 0, scratchOne, 0, app.parameters.length)
+            scratchOne
+          }
         while (n < app.parameters.length) {
           imp += improveOnce()
           n += 1
         }
-        val after = bestError
+        val after = bestError // if (bestError < before) { imp += improveAllFrom(scratch, scratchTwo); bestError } else bestError
         val better = before - after
         val fracbetter = better.abs / max(before.abs, after.abs)
         (imp, better, fracbetter)
