@@ -15,7 +15,7 @@ resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repos
 and add
 
 ```scala
-libraryDependencies += "com.github.ichoran" %% "kse" % "0.4-SNAPSHOT"
+libraryDependencies += "com.github.ichoran" %% "kse" % "0.6-SNAPSHOT"
 ```
 
 If you're using something else, you can probably figure it out from the above.  Or just fork the repository and run `sbt package`.
