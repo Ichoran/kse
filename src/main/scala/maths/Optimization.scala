@@ -337,7 +337,7 @@ object Optimizer {
         app.parameters(index) += amount
         val ans = mse
         app.parameters(index) = temp
-        println(f"$index ${app.parameters(index)+amount} ${ans - bestError} $bestError")
+        //println(f"$index ${app.parameters(index)+amount} ${ans - bestError} $bestError")
         ans
       }
       private[this] var bestError = mse
