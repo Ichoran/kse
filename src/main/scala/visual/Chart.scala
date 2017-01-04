@@ -865,6 +865,25 @@ package chart {
         else new Num(java.util.Arrays.copyOfRange(digits, lz, digits.length - tz), decimal - lz, negative)
       }
 
+      /** Creates a new copy preserving leading and trailing zeros */
+      def copyExactly(): Num = 
+        if (digits.length == 0) this
+        else new Num(java.util.Arrays.copyOf(digits, digits.length), decimal, negative)
+
+      /** Creates a new copy, truncating leading zeros but leaving trailing ones intact. */
+      def copyWithTrailing(): Num = {
+        val lz = leadingZeros
+        if (lz + trailingZeros >= digits.length) Num.zero
+        else new Num(java.util.Arrays.copyOfRange(digits, 0, digits.length), decimal - lz, negative)
+      }
+
+      /** Creates a new copy, truncating trailing zeros but leaving leading ones intact. */
+      def copyWithLeading(): Num = {
+        val tz = math.min(trailingZeros, digits.length - decimal)
+        if (tz + leadingZeros >= digits.length) Num.zero
+        else new Num(java.util.Arrays.copyOf(digits, digits.length - tz), decimal, negative)
+      }
+
       /** Creates a new copy with a specified number of digits after the decimal point */
       def copyToPosition(p: Int, initialZeros: Int = 0, alwaysRound: Int = 0): Num = {
         val lz = leadingZeros
@@ -981,7 +1000,8 @@ package chart {
         val nb = Num(b)
         if (na.negative != nb.negative) return new Anchor(na, nb, Num.zero, false)
         val p = na diffdig nb
-        val v = na.copyToPosition(p, alwaysRound = if (a > 0) 1 else -1)
+        val lead = (nb.leading - na.leading)
+        val v = na.copyToPosition(p, if (seekBetter) max(0, lead) else 0, alwaysRound = if (a > 0) 1 else -1)
         val nbp = nb(p)
         if (seekBetter) {
           if (a < 0) {
@@ -1005,7 +1025,7 @@ package chart {
             }
           }
         }
-        new Anchor(na, nb, v, false)
+        new Anchor(na, nb, if (seekBetter) v.copyWithTrailing else v, false)
       }
 
       def plausible(a: Double, b: Double): Array[Anchor] = {
