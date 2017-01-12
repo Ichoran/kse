@@ -11,10 +11,11 @@ import kse.flow._
 import kse.maths.stochastic._
 
 object Bootstrap {
-  def simple(data: Array[Double], n: Int, r: Prng): (Double, Est) =
+  def simple(data: Array[Double], n: Int, m: Int, r: Prng): (Double, Est) =
     if (data.length == 0) (0, Est(0, 0, 0))
     else if (data.length == 1) (data(0), Est(1, data(0), 0))
     else {
+      val M = if (m <= 0) data.length else m
       val e = new EstM
       e ++= data
       val expected = e.mean
@@ -24,7 +25,7 @@ object Bootstrap {
       while (i < n) {
         ee.reset
         var j = 0
-        while (j < data.length) {
+        while (j < M) {
           ee += data(r % data.length)
           j += 1
         }
@@ -33,14 +34,18 @@ object Bootstrap {
       }
       (expected, e.immutable)
     }
-  def simple(data: Array[Double], n: Int): (Double, Est) = simple(data, n, new ShiftMix64())
-  def simple(data: Array[Double], r: Prng): (Double, Est) = simple(data, 1000, r)
-  def simple(data: Array[Double]): (Double, Est) = simple(data, 1000, new ShiftMix64())
+  def simple(data: Array[Double], n: Int): (Double, Est) = simple(data, n, data.length, new ShiftMix64())
+  def simple(data: Array[Double], r: Prng): (Double, Est) = simple(data, 1000, data.length, r)
+  def simple(data: Array[Double]): (Double, Est) = simple(data, 1000, data.length, new ShiftMix64())
 
-  def simple(data: Array[Float], n: Int = 1000, r: Prng = new ShiftMix64()): (Double, Est) =
+  def subsample(data: Array[Double], m: Int): (Double, Est) = simple(data, 1000, m, new ShiftMix64())
+  def subsample(data: Array[Double], m: Int, r: Prng): (Double, Est) = simple(data, 1000, m, r)
+
+  def simple(data: Array[Float], n: Int = 1000, m: Int, r: Prng = new ShiftMix64()): (Double, Est) =
     if (data.length == 0) (0.0, Est(0, 0, 0))
     else if (data.length == 1) (data(0).toDouble, Est(1, data(0), 0))
     else {
+      val M = if (m <= 0) data.length else m
       val e = new EstM
       e ++= data
       val expected = e.mean
@@ -50,7 +55,7 @@ object Bootstrap {
       while (i < n) {
         ee.reset
         var j = 0
-        while (j < data.length) {
+        while (j < m) {
           ee += data(r % data.length)
           j += 1
         }
@@ -59,9 +64,12 @@ object Bootstrap {
       }
       (expected, e.immutable)
     }
-  def simple(data: Array[Float], n: Int): (Double, Est) = simple(data, n, new ShiftMix64())
-  def simple(data: Array[Float], r: Prng): (Double, Est) = simple(data, 1000, r) 
-  def simple(data: Array[Float]): (Double, Est) = simple(data, 1000, new ShiftMix64())
+  def simple(data: Array[Float], n: Int): (Double, Est) = simple(data, n, data.length, new ShiftMix64())
+  def simple(data: Array[Float], r: Prng): (Double, Est) = simple(data, 1000, data.length, r) 
+  def simple(data: Array[Float]): (Double, Est) = simple(data, 1000, data.length, new ShiftMix64())
+
+  def subsample(data: Array[Float], m: Int): (Double, Est) = simple(data, 1000, m, new ShiftMix64())
+  def subsample(data: Array[Float], m: Int, r: Prng): (Double, Est) = simple(data, 1000, m, r)
 
   def categorized(which: Array[Int], data: Array[Double], n: Int, r: Prng): (Array[Double], Array[Est]) = {
     ???
