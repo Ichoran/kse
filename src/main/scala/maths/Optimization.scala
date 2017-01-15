@@ -558,4 +558,185 @@ object Optimizer {
   object Hyphae extends OptimizerCompanion[Hyphae] {
     def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]) = new Hyphae(ts, xs, ws)
   }
+
+  // Based directly on http://www.caam.rice.edu/tech_reports/1990/TR90-07.pdf, V. Torczon's Ph.D. thesis (1989).
+  final class Torczon(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends Optimizer {
+    val (ts, xs, ws) =
+      if (dataTs.finite && dataXs.finite) (dataTs, dataXs, dataWs) else Approximator.finiteCopies(dataTs, dataXs, dataWs)
+    val ys = new Array[Double](xs.length)
+    def verifiedFinite = true
+    private var evaluations = 0L
+    private class Plex(
+      corners: Array[Array[Double]], edges: Array[Array[Double]], scratch: Array[Array[Double]],
+      values: Array[Double], trials: Array[Double], retrials: Array[Double]
+    ) {
+      var best: Int = 0
+      private def meanSqError: Double = {
+        var i = 0
+        var esq = 0.0
+        var w = 0.0
+        while (i < xs.length) {
+          w += ws(i)
+          val err = xs(i) - ys(i)
+          esq += err*err*ws(i)
+          i += 1
+        }
+        if (w == 0) 0 else esq/w
+      }
+      private def scoreWith(app: Approximator): Double = {
+        app.computeInto(ts, ys)
+        evaluations += 1
+        meanSqError
+      }
+      private def scoresAtVertices(app: Approximator, verts: Array[Array[Double]], scores: Array[Double]): Int = {
+        var i = 0
+        var bmse = Double.PositiveInfinity
+        var bidx = -1 
+        while (i < verts.length) {
+          val vi = verts(i)
+          var j = 0
+          while (j < vi.length) {
+            app.parameters(j) = vi(j)
+            j += 1
+          }
+          val mse = scoreWith(app)
+          scores(i) = mse
+          if (mse < bmse) { bidx = i; bmse = mse }
+          i += 1
+        }
+        bidx
+      }
+      private def walkEdges(scale: Double) {
+        val home = corners(best)
+        var i = 0
+        while (i < corners.length) {
+          val ei = edges(i)
+          val si = scratch(i)
+          var j = 0
+          while (j < home.length) {
+            si(j) = home(j) + scale*ei(j)
+            j += 1
+          }
+          i += 1
+        }
+      }
+      private def acceptScratch() {
+        var k = 0; 
+        while (k < corners.length) {
+          val temp = corners(k)
+          corners(k) = scratch(k)
+          scratch(k) = temp
+          k += 1
+        }
+      }
+      private def reEdge(index: Int, scores: Array[Double]) {
+        val home = corners(index)
+        var i = 0
+        while (i < corners.length) {
+          val ei = edges(i)
+          val ci = corners(i)
+          var j = 0
+          while (j < home.length) {
+            ei(j) = ci(j) - home(j)
+            j += 1
+          }
+          i += 1
+        }
+        if (scores ne values) System.arraycopy(scores, 0, values, 0, scores.length)
+      }
+      def evaluateWith(app: Approximator): Int = { scoresAtVertices(app, corners, values) }
+      def testWith(app: Approximator, scale: Double, scores: Array[Double]): Int = {
+        walkEdges(scale)
+        scoresAtVertices(app, scratch, scores)
+      }
+      def iterateOn(app: Approximator): Double = {
+        val eb = values(best)
+        val i = testWith(app, -1.0, trials)
+        if (i != best) {
+          // New best result!
+          val ei = trials(i)
+          acceptScratch()
+          val i2 = testWith(app, -2.0, retrials)
+          if (retrials(i2) < ei) {
+            acceptScratch()
+            reEdge(i2, retrials)
+          }
+          else reEdge(i, trials)
+        }
+        else {
+          val ih = testWith(app, 0.5, trials)
+          if (trials(ih) < eb) {
+            acceptScratch()
+            reEdge(ih, trials)
+          }
+          else {
+            var k = 0
+            while (k < edges.length) {
+              val ek = edges(k)
+              var l = 0
+              while (l < ek.length) {
+                ek(l) *= 0.5
+                l += 1
+              }
+              values(k) = trials(k)
+              k += 1
+            }
+          }
+        }
+        eb - values(best)
+      }
+      def initializeAt(app: Approximator, minDiff: Double = 1e-5) {
+        System.arraycopy(app.parameters, 0, corners(0), 0, app.parameters.length)
+        var i = 0
+        val e = scoreWith(app)
+        while (i < app.parameters.length) {
+          val pi = app.parameters(i)
+          var diff = 0.0
+          var delta = math.max((app.parameters(i)*minDiff).abs, minDiff.abs)/10
+          while (diff < minDiff && delta.finite) {
+            delta *= 10
+            app.parameters(i) = pi + delta
+            val ep = scoreWith(app)
+            app.parameters(i) = pi - delta
+            val en = scoreWith(app)
+            diff = math.max((ep-e).abs, (en-e).abs)
+          }
+          while (diff > 10*minDiff) {
+            delta *= 0.6
+            app.parameters(i) = pi + delta
+            val ep = scoreWith(app)
+            app.parameters(i) = pi - delta
+            val en = scoreWith(app)
+            diff = math.max((ep-e).abs, (en-e).abs)
+          }
+          System.arraycopy(app.parameters, 0, corners(i+1), 0, app.parameters.length)
+          corners(i+1)(i) += (if (delta.finite) delta else 1 + app.parameters(i)*2)
+        }
+        best = evaluateWith(app)
+      }
+      def bestInto(app: Approximator): app.type = {
+        System.arraycopy(corners(best), 0, app.parameters, 0, app.parameters.length)
+        app
+      }
+      def bestError: Double = values(best)
+      def evals: Long = evaluations
+    }
+    private object Plex {
+      def ofDim(n: Int) = new Plex(
+        Array.fill(n + 1, n)(0.0), Array.fill(n + 1, n)(0.0), Array.fill(n+1, n)(0.0),
+        Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0)
+      )
+    }
+    def apply(app: Approximator): Optimized = {
+      val plex = Plex.ofDim(app.parameters.length)
+      plex initializeAt app
+      // TODO -- actually optimize here
+      plex bestInto app
+      Optimized(app, plex.bestError, plex.evals)
+    }
+    def apply(initial: Array[Approximator]): List[Optimized] = initial.map(app => this apply app).toList
+ }
+  object Torczon extends OptimizerCompanion[Torczon] {
+    def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]) = new Torczon(ts, xs, ws)
+  }
 }
