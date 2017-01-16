@@ -170,6 +170,24 @@ object Approximator {
     }
   }
 
+  final class Biexponential(offset: Double, height: Double, slope: Double, slowHeight: Double, slowSlope: Double) extends Approximator {
+    val parameters = Array(offset, height, slope, slowHeight, slowSlope)
+    def copy = new Biexponential(parameters(0), parameters(1), parameters(2), parameters(3), parameters(4))
+    def apply(t: Double) = { 
+      val h = parameters(1)
+      val sh = parameters(3)
+      parameters(0) + (if (h != 0) h*exp(parameters(2)*t/h) else 0.0) + (if (sh != 0) sh*exp(parameters(4)*t/sh) else 0.0)
+    }
+    override def toString = f"x = ${parameters(0)} + ${parameters(1)}*e^(${parameters(2)/parameters(1)}*t) + ${parameters(3)}*e^(${parameters(4)/parameters(3)}*t)"
+  }
+  object Biexponential extends ApproximatorCompanion[Biexponential] {
+    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Biexponential] = {
+      Exponential.guess(ts, xs, finitize).map{ case ape =>
+        new Biexponential(ape.parameters(0), ape.parameters(1)*0.9, ape.parameters(2)*0.9, ape.parameters(1)*0.1, ape.parameters(2)*0.1)
+      }
+    }
+  }
+
   final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator {
     val parameters = Array(offset, amplitude, slope)
     def copy = new Power(parameters(0), parameters(1), parameters(2))
