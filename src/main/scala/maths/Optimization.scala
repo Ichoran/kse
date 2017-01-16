@@ -568,10 +568,20 @@ object Optimizer {
     private var evaluations = 0L
     private class Plex(
       corners: Array[Array[Double]], edges: Array[Array[Double]], scratch: Array[Array[Double]],
-      values: Array[Double], trials: Array[Double], retrials: Array[Double]
+      values: Array[Double], trials: Array[Double], retrials: Array[Double], oldroot: Array[Double]
     ) {
       var best: Int = 0
       private def meanSqError: Double = {
+        var i = 0
+        var esq = 0.0
+        while (i < xs.length) {
+          val err = xs(i) - ys(i)
+          esq += err*err
+          i += 1
+        }
+        if (i == 0) 0 else esq/i
+      }
+      private def meanSqErrorWeighted: Double = {
         var i = 0
         var esq = 0.0
         var w = 0.0
@@ -586,7 +596,7 @@ object Optimizer {
       private def scoreWith(app: Approximator): Double = {
         app.computeInto(ts, ys)
         evaluations += 1
-        meanSqError
+        if (ws ne null) meanSqErrorWeighted else meanSqError
       }
       private def scoresAtVertices(app: Approximator, verts: Array[Array[Double]], scores: Array[Double]): Int = {
         var i = 0
@@ -606,8 +616,7 @@ object Optimizer {
         }
         bidx
       }
-      private def walkEdges(scale: Double) {
-        val home = corners(best)
+      private def walkEdges(home: Array[Double], scale: Double) {
         var i = 0
         while (i < corners.length) {
           val ei = edges(i)
@@ -642,21 +651,23 @@ object Optimizer {
           }
           i += 1
         }
+        best = index
         if (scores ne values) System.arraycopy(scores, 0, values, 0, scores.length)
       }
       def evaluateWith(app: Approximator): Int = { scoresAtVertices(app, corners, values) }
-      def testWith(app: Approximator, scale: Double, scores: Array[Double]): Int = {
-        walkEdges(scale)
+      def testWith(app: Approximator, home: Array[Double], scale: Double, scores: Array[Double]): Int = {
+        walkEdges(home, scale)
         scoresAtVertices(app, scratch, scores)
       }
       def iterateOn(app: Approximator): Double = {
         val eb = values(best)
-        val i = testWith(app, -1.0, trials)
-        if (i != best) {
+        val i = testWith(app, corners(best), -1.0, trials)
+        if (trials(i) < eb) {
           // New best result!
           val ei = trials(i)
+          System.arraycopy(corners(best), 0, oldroot, 0, oldroot.length)
           acceptScratch()
-          val i2 = testWith(app, -2.0, retrials)
+          val i2 = testWith(app, oldroot, -2.0, retrials)
           if (retrials(i2) < ei) {
             acceptScratch()
             reEdge(i2, retrials)
@@ -664,7 +675,7 @@ object Optimizer {
           else reEdge(i, trials)
         }
         else {
-          val ih = testWith(app, 0.5, trials)
+          val ih = testWith(app, corners(best), 0.5, trials)
           if (trials(ih) < eb) {
             acceptScratch()
             reEdge(ih, trials)
@@ -711,8 +722,10 @@ object Optimizer {
           }
           System.arraycopy(app.parameters, 0, corners(i+1), 0, app.parameters.length)
           corners(i+1)(i) += (if (delta.finite) delta else 1 + app.parameters(i)*2)
+          i += 1
         }
         best = evaluateWith(app)
+        reEdge(best, values)
       }
       def bestInto(app: Approximator): app.type = {
         System.arraycopy(corners(best), 0, app.parameters, 0, app.parameters.length)
@@ -724,13 +737,19 @@ object Optimizer {
     private object Plex {
       def ofDim(n: Int) = new Plex(
         Array.fill(n + 1, n)(0.0), Array.fill(n + 1, n)(0.0), Array.fill(n+1, n)(0.0),
-        Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0)
+        Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0), Array.fill(n)(0.0)
       )
     }
     def apply(app: Approximator): Optimized = {
       val plex = Plex.ofDim(app.parameters.length)
       plex initializeAt app
-      // TODO -- actually optimize here
+      var minimalProgress = -10
+      var err = Double.PositiveInfinity
+      while (minimalProgress < 10 && err > smallEnoughError && plex.evals < iterationBudget) {
+        val improvement = plex iterateOn app
+        if (improvement == 0 || improvement < max(worthwhileImprovement.sq, plex.bestError*worthwhileImprovement)) minimalProgress += 1
+        else minimalProgress = math.min(minimalProgress, 0)
+      }
       plex bestInto app
       Optimized(app, plex.bestError, plex.evals)
     }
