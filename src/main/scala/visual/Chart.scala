@@ -553,6 +553,27 @@ package chart {
     }
   }
 
+  /*
+  final case class DataHist(xs: Array[Float], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
+    val viewedRange = range.getOrElse{ xs => 
+      var lo = Float.PositiveInfinity
+      var hi = Float.NegativeInfinity
+      var i = 0
+      while (i < xs.length && !xs(i).finite) i++;
+      if (i < xs.length) { lo = xs(i); hi = xs(i) }
+      while (i < xs.length) {
+        val xi = xs(i)
+        if (xi.finite) {
+          if (xi < lo) lo = xi
+          else if (xi > hi) hi = xi
+        }
+      }
+      if (lo < hi) (lo, hi) else (0f, 0f)
+    }
+    val centers: Array[Float] = 
+  }
+  */
+
   final case class Shape(corners: Array[Long], marker: Option[Shown], style: Style) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, corners)

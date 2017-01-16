@@ -254,6 +254,80 @@ object Approximator {
       new Bilinear(ts(i), aff(ts(i)), aff.parameters(1), aff.parameters(1))
     }
   }
+
+  /** Decay models a power-law decay process centered at t0.
+    *
+    * In particular, the model is x(t) = A + B*(t - t0)^-alpha
+    *
+    * To form a somewhat reasonable guess for this model, we note that
+    *
+    *   dx(t)/dt = B*(-alpha)*(t-t0)^(-alpha)
+    *
+    * and can roughly match the slope by approximating alpha = 1
+    *
+    */
+  final class Decay(t0: Double, baseline: Double, height: Double, alpha: Double) extends Approximator {
+    val parameters = Array(t0, baseline, height, alpha)
+    def copy = new Decay(parameters(0), parameters(1), parameters(2), parameters(3))
+    def apply(t: Double) = parameters(1) + parameters(2)*math.pow(t - parameters(0), -parameters(3).abs)
+    override def toString = f"x = ${parameters(1)} + ${parameters(2)}*(t - ${parameters(0)})^${-parameters(3)}"
+  }
+  object Decay extends ApproximatorCompanion[Decay] {
+    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Decay] = {
+      val (left, right, fts, fxs, winner) = findCleanLeftRightSlopes(ts, xs, finitize)
+      if ((left eq null) || (right eq null) || (fts eq null) || (fxs eq null)) return Nil
+      val dx = left.meanX - right.meanX
+      if (winner > 4 && left.betaX.abs > right.betaX.abs && left.betaX.abs > 0) {
+        // The ratio of the slopes should be ((tL-t0)/(tR-t0))^(-alpha)
+        val sloperat = if (left.betaX.sign != right.betaX.sign) 0.1 else math.max(0.1, right.betaX/left.betaX)
+        // We could just guess alpha = one
+        def alphaOne = {
+          val t0 = left.meanT - sloperat*(right.meanT - left.meanT)
+          (new Decay(t0, right.meanX, dx*(left.meanT - t0), 1.0)) :: Nil
+        }
+        // If we had a third slope in the middle we could distinguish, so let's build one
+        /*
+        Actually this doesn't distinguish very cleanly so let's leave it out for now
+        val tM = (left.meanT + right.meanT)*0.5
+        val ix = fts.bisect(tM)
+        if (ix.finite) {
+          var iL = math.max(0, ix.floor.toInt - 3)
+          var iR = math.min(fts.length-1, ix.ceil.toInt + 3)
+          val goal = math.min(fts.length/3, math.max(10, fts.length.sqrt.ceil.toInt))
+          var leftok, rightok = false
+          while (
+            iR - iL < goal && 
+            (
+              { leftok = iL > 0 && (tM - left.meanT)*0.5 > (tM - fts(iL-1)); leftok } || 
+              { rightok = iR < fts.length-1 && (right.meanT - tM)*0.5 > (fts(iR+1) - tM); rightok }
+            )
+          ) {
+            if (leftok && rightok) {
+              if (tM - fts(iL-1) <= fts(iR+1) - tM) iL -= 1
+              else iR += 1
+            }
+            else if (leftok) iL -= 1
+            else iR += 1
+          }
+          val middle = new fits.FitTX
+          var i = iL
+          while (i <= iR) { middle += (fts(i), fxs(i)); i += 1 }
+          val sloperat2 = if (middle.betaX.sign != left.betaX.sign) 0.1 else math.max(0.1, middle.betaX/left.betaX)
+          // If we take the log, we have -alpha*log((tL-t0)/(tR-t0)) = -alpha*log(tL-t0) + alpha*log(tR-t0)
+          val logsr1 = math.log(sloperat)
+          // If we take the log, we have -alpha*log((tL-t0)/(tM-t0)) ~= -alpha*log((tL-t0)/(tL+(tR-tL)/2-t0))
+          val logsr2 = math.log(sloperat2)
+          return alphaOne
+        }
+        */
+        alphaOne
+      }
+      else {
+        val t0 = left.meanT - (right.meanT - left.meanT)
+        (new Decay(t0, right.meanX, dx*(left.meanT - t0), 1.0)) :: Nil
+      }
+    }
+  }
 }
 
 case class Optimized(app: Approximator, error: Double, evaluations: Long) {}
