@@ -553,13 +553,14 @@ package chart {
     }
   }
 
-  /*
-  final case class DataHist(xs: Array[Float], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
-    val viewedRange = range.getOrElse{ xs => 
+  final case class DataHist(xs: Array[Float], scale: Option[Either[(Int, Int, Float) => Float, Float]], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
+    override def styled = style.filly
+
+    val viewedRange = range.getOrElse{
       var lo = Float.PositiveInfinity
       var hi = Float.NegativeInfinity
       var i = 0
-      while (i < xs.length && !xs(i).finite) i++;
+      while (i < xs.length && !xs(i).finite) i += 1;
       if (i < xs.length) { lo = xs(i); hi = xs(i) }
       while (i < xs.length) {
         val xi = xs(i)
@@ -567,12 +568,113 @@ package chart {
           if (xi < lo) lo = xi
           else if (xi > hi) hi = xi
         }
+        i += 1
       }
       if (lo < hi) (lo, hi) else (0f, 0f)
     }
-    val centers: Array[Float] = 
+    private def bestBinEstimate = math.max(5, math.pow(xs.length, 0.3).ceil.toInt)
+    val borders: Array[Float] = bins.filter(_ > 1).orElse(if (!range.isEmpty) Some(bestBinEstimate) else None) match {
+      case None =>
+        val b = bestBinEstimate
+        val tik = Tickify.select(viewedRange._1, viewedRange._2, b+1)
+        val decs = tik.map(_._1.toBigDec)
+        val ans = new Array[Float](decs.length + 1)
+        var i = 0
+        while (i < ans.length) {
+          if (i == 0) ans(i) = (decs(0) + (decs(0) - decs(1))/2).toFloat
+          else if (i == ans.length-1) ans(i) = (decs(decs.length-1) + (decs(decs.length-1) - decs(decs.length - 2)/2)).toFloat
+          else ans(i) = (decs(i) + decs(i-1)).toFloat
+          i += 1
+        }
+        ans
+      case Some(b) => 
+        val bigL = BigDecimal(viewedRange._1.toString)
+        val bigR = BigDecimal(viewedRange._2.toString)
+        val bigD = bigR - bigL
+        val ans = new Array[Float](b+1)
+        var i = 0
+        while (i < ans.length) {
+          ans(i) = (if (i <= b/2) bigL + (bigD*i)/b else bigR - (bigD*(b-i))/b).toFloat
+          i += 1
+        }
+        ans
+    }
+    val binnedCounts = {
+      val ans = new Array[Int](borders.length+1)
+      var i = 0
+      while (i < xs.length) {
+        val xi = xs(i)
+        if (xi.finite) {
+          val ix = borders.bisect(xi)
+          if (ix < 0) ans(0) += 1
+          else if (ix >= ans.length) ans(ans.length-1) += 1
+          else ans(ix.floor.toInt) += 1
+        }
+        i += 1
+      }
+      ans
+    }
+    val heightPerCount = scale match {
+      case None => 1f*(borders.last - borders.head)/math.max(1, borders.length-1)
+      case Some(Right(f)) => f
+      case Some(Left(fn)) =>
+        var total = 0
+        var highest = 0
+        var i = 0
+        while (i < binnedCounts.length) {
+          val ci = binnedCounts(i)
+          total += ci
+          if (ci > highest) highest = ci
+          i += 1
+        }
+        fn(total, highest, borders.last - borders.head)
+    }
+    val laidOutCenter = {
+      var contiguousBlock: List[(Array[Float], Array[Float])] = Nil
+      var i = binnedCounts.length - 2
+      while (i > 0) {
+        while (i > 0 && binnedCounts(i) == 0) i -= 1
+        var j = i
+        while (j > 0 && binnedCounts(j) != 0) j -= 1
+        if (j < i) {
+          val xs = new Array[Float](1+i-j)
+          val ys = new Array[Float](i-j)
+          var k = j
+          while (k <= i) {
+            xs(k - j) = borders(k)
+            if (k > j) ys(k - j - 1) = binnedCounts(k) * heightPerCount / (borders(k) - borders(k-1))
+            k += 1
+          }
+          contiguousBlock = ((xs, ys)) :: contiguousBlock
+        }
+        i = j
+      }
+      contiguousBlock.toArray
+    }
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
+      implicit val myMag = Magnification.one
+      val paths = laidOutCenter.map{ case (xs, ys) =>
+        val sb = new StringBuilder
+        sb ++= "<path d=\""
+        sb ++= "M "
+        sb ++= fm(xform(xs(0) vc 0))
+        var i = 0
+        while (i < ys.length) {
+          sb ++= " L"
+          sb ++= fm(xform(xs(i) vc ys(i)))
+          sb ++= " L"
+          sb ++= fm(xform(xs(i+1) vc ys(i)))
+          i += 1
+        }
+        sb ++= " L"
+        sb ++= fm(xform(xs(i) vc 0))
+        sb ++= f" Z$q$show/>"
+        sb.result
+      }
+      if (paths.length == 1) Indent.V(paths.head)
+      else Indent.V( (("<g>" +: paths) :+ "</g>"): _* )
+    }
   }
-  */
 
   final case class Shape(corners: Array[Long], marker: Option[Shown], style: Style) extends Shown {
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
@@ -1634,6 +1736,7 @@ package chartTest {
       val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f)))
       val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4))
       val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f))
+      val hg = DataHist(Array.tabulate(100)(i => 1f/(10+i)), None, None, Some(5), Fill alpha Rgba(0, 1, 0, 0.4f))
       val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2))
       val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10))
       val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5))
@@ -1651,6 +1754,7 @@ package chartTest {
       quick(
         sh, pie, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, pik, Circ(pik.corner, 3, Fill(Rgba.Black)), cbr, dbtl,
         Assembly(0 vc 100, 400f vc 1f, 0 vc 200, None, Opacity(1f), at, at.copy(to = Vc(1.33f, 100))),
+        Assembly(0 vc 0, 800f vc 8f, 350 vc 350, hg),
         tl.copy(to = 100 vc 200, left = -20, right = 0),
         Assembly(
           0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f),
