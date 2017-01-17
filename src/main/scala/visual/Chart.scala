@@ -553,7 +553,7 @@ package chart {
     }
   }
 
-  final case class DataHist(xs: Array[Float], scale: Option[Either[(Int, Int, Float) => Float, Float]], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
+  final case class DataHist(xs: Array[Float], scale: Option[Either[(Int, Int, Float, Int) => Float, Float]], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
     override def styled = style.filly
 
     val viewedRange = range.getOrElse{
@@ -627,7 +627,7 @@ package chart {
           if (ci > highest) highest = ci
           i += 1
         }
-        fn(total, highest, borders.last - borders.head)
+        fn(total, highest, borders.last - borders.head, borders.length - 1)
     }
     val laidOutCenter = {
       var contiguousBlock: List[(Array[Float], Array[Float])] = Nil
