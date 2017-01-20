@@ -274,6 +274,8 @@ object DataShepherd {
 abstract class Approximator {
   def name: String
   def copy: Approximator
+  protected def prettyArgs(inName: String, figs: Int): String
+  def pretty(inName: String, outName: String, figs: Int): String = f"$outName($inName) = ${prettyArgs(inName, figs)}"
   val parameters: Array[Double]
   def apply(datum: Double): Double
   def apply(data: Array[Double]): Array[Double] = computeInto(data, null)
@@ -322,12 +324,19 @@ object Approximator {
 
   final class Constant(x0: Double) extends Approximator {
     def name = "Constant"
+    def prettyArgs(inName: String, figs: Int) = Constant.prettyValue(parameters(0), figs)
     val parameters = Array(x0)
     def copy = new Constant(parameters(0))
     def apply(t: Double) = parameters(0)
     override def toString = f"x = ${parameters(0)}"
   }
   object Constant extends ApproximatorCompanion[Constant] {
+    def prettyValue(value: Double, figs: Int) = {
+      val direct = ("%."+max(0, figs) + "f").format(value).toDouble.toString
+      var i = direct.length - 1
+      while (i > 0 && direct.charAt(i) == '0') i -= 1
+      if (direct.charAt(i) == '.') direct.substring(0, i) else direct
+    }
     def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Constant] = {
       val e = new stats.EstM
       var i = 0
@@ -339,6 +348,10 @@ object Approximator {
 
   final class Affine(x0: Double, slope: Double) extends Approximator {
     def name = "Affine"
+    def prettyArgs(inName: String, figs: Int) =
+      Constant.prettyValue(parameters(0), figs) +
+      (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
+      "*" + inName
     val parameters = Array(x0, slope)
     def copy = new Affine(parameters(0), parameters(1))
     def apply(t: Double) = parameters(0) + parameters(1)*t
@@ -359,6 +372,12 @@ object Approximator {
 
   final class Quadratic(a0: Double, a1: Double, a2: Double) extends Approximator {
     def name = "Quadratic"
+    def prettyArgs(inName: String, figs: Int) =
+      Constant.prettyValue(parameters(0), figs) +
+      (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
+      "*" + inName +
+      (if (parameters(2) < 0) " - " + Constant.prettyValue(-parameters(2), figs) else " + " + Constant.prettyValue(parameters(2), figs)) +
+      "*" + inName + "^2"
     val parameters = Array(a0, a1, a2)
     def copy = new Quadratic(parameters(0), parameters(1), parameters(2))
     def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + parameters(2)*dt*dt }
@@ -424,11 +443,16 @@ object Approximator {
 
   final class Exponential(offset: Double, height: Double, slope: Double) extends Approximator {
     def name = "Exponential"
+    def prettyArgs(inName: String, figs: Int) = {
+      Constant.prettyValue(parameters(0), figs) +
+      (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
+      "*e^(" + (if (parameters(1) == 0) "0" else Constant.prettyValue(parameters(2)/parameters(1), figs)) + "*" + inName + ")"
+    }
     // Equation is x = offset + height*exp((slope/height)*t), so that dx/dt(0) = slope
     val parameters = Array(offset, height, slope)
     def copy = new Exponential(parameters(0), parameters(1), parameters(2))
     def apply(t: Double) = { val h = parameters(1); parameters(0) + (if (h != 0) h*exp(parameters(2)*t/h) else 0.0) }
-    override def toString = f"x = ${parameters(0)} + ${parameters(1)}*e^${parameters(2)/parameters(1)}t"
+    override def toString = f"x = ${parameters(0)} + ${parameters(1)}*e^(${parameters(2)/parameters(1)}*t)"
   }
   object Exponential extends ApproximatorCompanion[Exponential] {
     private[this] def fromSlopes(ours: fits.FitTX, theirs: fits.FitTX, correctionLimit: Double = 0.9) = {
@@ -485,6 +509,13 @@ object Approximator {
 
   final class Biexponential(offset: Double, height: Double, slope: Double, slowHeight: Double, slowSlope: Double) extends Approximator {
     def name = "Biexponential"
+    def prettyArgs(inName: String, figs: Int) = {
+      Constant.prettyValue(parameters(0), figs) +
+      (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
+      "*e^(" + (if (parameters(1) == 0) "0" else Constant.prettyValue(parameters(2)/parameters(1), figs)) + "*" + inName + ")" +
+      (if (parameters(3) < 0) " - " + Constant.prettyValue(-parameters(3), figs) else " + " + Constant.prettyValue(parameters(3), figs)) +
+      "*e^(" + (if (parameters(3) == 0) "0" else Constant.prettyValue(parameters(4)/parameters(3), figs)) + "*" + inName + ")"
+    }
     val parameters = Array(offset, height, slope, slowHeight, slowSlope)
     def copy = new Biexponential(parameters(0), parameters(1), parameters(2), parameters(3), parameters(4))
     def apply(t: Double) = { 
@@ -504,6 +535,19 @@ object Approximator {
 
   final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator {
     def name = "Power"
+    def prettyArgs(inName: String, figs: Int) = {
+      Constant.prettyValue(parameters(0), figs) +
+      (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
+      "*" + inName + "^" +
+      (
+        if (parameters(1) == 0) "0"
+        else {
+          val alpha = parameters(2)/parameters(1)
+          if (alpha < 0) "(" + Constant.prettyValue(alpha, figs) + ")"
+          else Constant.prettyValue(alpha, figs)
+        }
+      )
+    }
     val parameters = Array(offset, amplitude, slope)
     def copy = new Power(parameters(0), parameters(1), parameters(2))
     def exponent =  if (parameters(1) == 0) 0 else parameters(2)/parameters(1)
@@ -571,6 +615,7 @@ object Approximator {
 
   final class Bilinear(t0: Double, x0: Double, leftSlope: Double, rightSlope: Double) extends Approximator {
     def name = "Bilinear"
+    def prettyArgs(inName: String, figs: Int) = toString.dropRight(3).replaceAll("t", inName)
     val parameters = Array(t0, x0, leftSlope, rightSlope)
     def copy = new Bilinear(parameters(0), parameters(1), parameters(2), parameters(3))
     def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + dt*(if (dt < 0) parameters(2) else parameters(3)) }

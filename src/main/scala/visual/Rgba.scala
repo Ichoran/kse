@@ -54,7 +54,7 @@ class Rgba private (_r: Float, _g: Float, _b: Float, _a: Float) {
 
   def opaque = if (a < 1) new Rgba(r, g, b, 1f) else this
   
-  def blend(rgba: Rgba, frac: Float, babble: Boolean = false): Rgba = {
+  def blend(rgba: Rgba, frac: Float): Rgba = {
     require(0 <= frac && frac <= 1, s"Mixing fraction should be in [0, 1] but is $frac")
     // Common gray level
     val p = frac.toDouble
