@@ -332,7 +332,7 @@ object Approximator {
   }
   object Constant extends ApproximatorCompanion[Constant] {
     def prettyValue(value: Double, figs: Int) = {
-      val direct = ("%."+max(0, figs) + "f").format(value).toDouble.toString
+      val direct = ("%."+max(0, figs) + "e").format(value).toDouble.toString
       var i = direct.length - 1
       while (i > 0 && direct.charAt(i) == '0') i -= 1
       if (direct.charAt(i) == '.') direct.substring(0, i) else direct
