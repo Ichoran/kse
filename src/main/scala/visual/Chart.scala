@@ -553,7 +553,19 @@ package chart {
     }
   }
 
-  final case class DataHist(xs: Array[Float], scale: Option[Either[(Int, Int, Float, Int) => Float, Float]], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
+  final case class HistInfo(total: Int, highest: Int, width: Float, avgbin: Float) {}
+  object HistInfo {
+    val unitScale = (h: HistInfo) => { if (h.highest == 0) 0 else (h.avgbin.toDouble/h.highest).toFloat }
+    def sameAs(dh: DataHist) = {
+      val lrg = dh.largestCount
+      val wid = dh.borders.last - dh.borders.head
+      val avgbin = if (dh.borders.length > 1) (wid.toDouble/(dh.borders.length - 1)).toFloat else wid
+      val hpc = dh.heightPerCount
+      (h: HistInfo) => if (avgbin > 0) ((hpc * h.avgbin.toDouble / avgbin)).toFloat else unitScale(h)
+    }
+  }
+
+  final case class DataHist(xs: Array[Float], scale: Option[Either[HistInfo => Float, Float]], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
     override def styled = style.filly
 
     val viewedRange = range.getOrElse{
@@ -614,20 +626,24 @@ package chart {
       }
       ans
     }
+    val (totalCount, largestCount) = {
+      var total = 0
+      var highest = 0
+      var i = 0
+      while (i < binnedCounts.length) {
+        val ci = binnedCounts(i)
+        total += ci
+        if (ci > highest) highest = ci
+        i += 1
+      }
+      (total, highest)
+    }
     val heightPerCount = scale match {
       case None => 1f*(borders.last - borders.head)/math.max(1, borders.length-1)
       case Some(Right(f)) => f
       case Some(Left(fn)) =>
-        var total = 0
-        var highest = 0
-        var i = 0
-        while (i < binnedCounts.length) {
-          val ci = binnedCounts(i)
-          total += ci
-          if (ci > highest) highest = ci
-          i += 1
-        }
-        fn(total, highest, borders.last - borders.head, borders.length - 1)
+        val expanse = borders.last - borders.head
+        fn(HistInfo(totalCount, largestCount, expanse, if (borders.length > 1) expanse/(borders.length - 1) else expanse))
     }
     val laidOutCenter = {
       var contiguousBlock: List[(Array[Float], Array[Float])] = Nil

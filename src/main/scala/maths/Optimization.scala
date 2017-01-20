@@ -6,7 +6,273 @@ package optimization
 
 import scala.math._
 
+object DataShepherd {
+  def ensureFinite(xs: Array[Double]): Array[Double] = {
+    // Keep Double and Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    var i, n = 0
+    while (i < xs.length) { if (xs(i).finite) n += 1; i += 1 }
+    if (i == n) xs
+    else {
+      val fxs = new Array[Double](n)
+      i = 0
+      var j = 0
+      while (j < fxs.length && i < xs.length) {
+        val xi = xs(i)
+        if (xi.finite) {
+          fxs(j) = xi
+          j += 1
+        }
+        i += 1
+      }
+      fxs
+    }
+  }
+  def ensureFinite(xs: Array[Double], ys: Array[Double]): (Array[Double], Array[Double]) = {
+    // Keep Double and Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    var i, n = 0
+    while (i < xs.length && i < ys.length) { if (xs(i).finite && ys(i).finite) n += 1; i += 1 }
+    if (n == xs.length && n == ys.length) (xs, ys)
+    else {
+      val fxs, fys = new Array[Double](n)
+      i = 0
+      var j = 0
+      while (j < fxs.length && i < xs.length && i < ys.length) {
+        val xi = xs(i)
+        val yi = ys(i)
+        if (xi.finite && yi.finite) {
+          fxs(j) = xi
+          fys(j) = yi
+          j += 1
+        }
+        i += 1
+      }
+      (fxs, fys)
+    }
+  }
+  def ensureFinite(xs: Array[Double], ys: Array[Double], zs: Array[Double]): (Array[Double], Array[Double], Array[Double]) = {
+    // Keep Double and Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    var i, n = 0
+    while (i < xs.length && i < ys.length && i < zs.length) { if (xs(i).finite && ys(i).finite && zs(i).finite) n += 1; i += 1 }
+    if (n == xs.length && n == ys.length && n == zs.length) (xs, ys, zs)
+    else {
+      val fxs, fys, fzs = new Array[Double](n)
+      i = 0
+      var j = 0
+      while (j < fxs.length && i < xs.length && i < ys.length && i < zs.length) {
+        val xi = xs(i)
+        val yi = ys(i)
+        val zi = zs(i)
+        if (xi.finite && yi.finite & zi.finite) {
+          fxs(j) = xi
+          fys(j) = yi
+          fzs(j) = zi
+          j += 1
+        }
+        i += 1
+      }
+      (fxs, fys, fzs)
+    }
+  }
+  def ensureFinite(xs: Array[Float]): Array[Float] = {
+    // Keep Double and Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    var i, n = 0
+    while (i < xs.length) { if (xs(i).finite) n += 1; i += 1 }
+    if (i == n) xs
+    else {
+      val fxs = new Array[Float](n)
+      i = 0
+      var j = 0
+      while (j < fxs.length && i < xs.length) {
+        val xi = xs(i)
+        if (xi.finite) {
+          fxs(j) = xi
+          j += 1
+        }
+        i += 1
+      }
+      fxs
+    }
+  }
+  def ensureFinite(xs: Array[Float], ys: Array[Float]): (Array[Float], Array[Float]) = {
+    // Keep Double and Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    var i, n = 0
+    while (i < xs.length && i < ys.length) { if (xs(i).finite && ys(i).finite) n += 1; i += 1 }
+    if (n == xs.length && n == ys.length) (xs, ys)
+    else {
+      val fxs, fys = new Array[Float](n)
+      i = 0
+      var j = 0
+      while (j < fxs.length && i < xs.length && i < ys.length) {
+        val xi = xs(i)
+        val yi = ys(i)
+        if (xi.finite && yi.finite) {
+          fxs(j) = xi
+          fys(j) = yi
+          j += 1
+        }
+        i += 1
+      }
+      (fxs, fys)
+    }
+  }
+  def ensureFinite(xs: Array[Float], ys: Array[Float], zs: Array[Float]): (Array[Float], Array[Float], Array[Float]) = {
+    // Keep Double and Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    var i, n = 0
+    while (i < xs.length && i < ys.length && i < zs.length) { if (xs(i).finite && ys(i).finite && zs(i).finite) n += 1; i += 1 }
+    if (n == xs.length && n == ys.length && n == zs.length) (xs, ys, zs)
+    else {
+      val fxs, fys, fzs = new Array[Float](n)
+      i = 0
+      var j = 0
+      while (j < fxs.length && i < xs.length && i < ys.length && i < zs.length) {
+        val xi = xs(i)
+        val yi = ys(i)
+        val zi = zs(i)
+        if (xi.finite && yi.finite & zi.finite) {
+          fxs(j) = xi
+          fys(j) = yi
+          fzs(j) = zi
+          j += 1
+        }
+        i += 1
+      }
+      (fxs, fys, fzs)
+    }
+  }
+
+  private def ensureCopy(xs: Array[Double], oxs: Array[Double]) =
+    if (xs ne oxs) xs else java.util.Arrays.copyOf(oxs, oxs.length)
+  private def ensureCopy(xs: Array[Float], oxs: Array[Float]) =
+    if (xs ne oxs) xs else java.util.Arrays.copyOf(oxs, oxs.length)
+
+  def copyFinite(xs: Array[Double]): Array[Double] = ensureCopy(ensureFinite(xs), xs)
+  def copyFinite(xs: Array[Double], ys: Array[Double]): (Array[Double], Array[Double]) = { 
+    val (fxs, fys) = ensureFinite(xs, ys)
+    (ensureCopy(fxs, xs), ensureCopy(fys, ys))
+  }
+  def copyFinite(xs: Array[Double], ys: Array[Double], zs: Array[Double]): (Array[Double], Array[Double], Array[Double]) = {
+    val (fxs, fys, fzs) = ensureFinite(xs, ys, zs)
+    (ensureCopy(fxs, xs), ensureCopy(fys, ys), ensureCopy(fzs, zs))
+  }
+  def copyFinite(xs: Array[Float]): Array[Float] = ensureCopy(ensureFinite(xs), xs)
+  def copyFinite(xs: Array[Float], ys: Array[Float]): (Array[Float], Array[Float]) = { 
+    val (fxs, fys) = ensureFinite(xs, ys)
+    (ensureCopy(fxs, xs), ensureCopy(fys, ys))
+  }
+  def copyFinite(xs: Array[Float], ys: Array[Float], zs: Array[Float]): (Array[Float], Array[Float], Array[Float]) = {
+    val (fxs, fys, fzs) = ensureFinite(xs, ys, zs)
+    (ensureCopy(fxs, xs), ensureCopy(fys, ys), ensureCopy(fzs, zs))
+  }
+
+  def bind(xs: Array[Float], ys: Array[Float]): Array[Long] = {
+    val n = math.min(xs.length, ys.length)
+    val xys = new Array[Long](n)
+    var i = 0
+    while (i < n) {
+      xys(i) = Vc(xs(i), ys(i)).underlying
+      i += 1
+    }
+    xys
+  }
+  def bindAsFloat(xs: Array[Double], ys: Array[Double]): Array[Long] = {
+    val n = math.min(xs.length, ys.length)
+    val xys = new Array[Long](n)
+    var i = 0
+    while (i < n) {
+      xys(i) = Vc.from(xs(i), ys(i)).underlying
+      i += 1
+    }
+    xys
+  }
+  def unbind(xys: Array[Long]): (Array[Float], Array[Float]) = {
+    val xs, ys = new Array[Float](xys.length)
+    var i = 0
+    while (i < xys.length) {
+      val xyi = Vc from xys(i)
+      xs(i) = xyi.x
+      ys(i) = xyi.y
+      i += 1
+    }
+    (xs, ys)
+  }
+  def unbindAsDouble(xys: Array[Long]): (Array[Double], Array[Double]) = {
+    val xs, ys = new Array[Double](xys.length)
+    var i = 0
+    while (i < xys.length) {
+      val xyi = Vc from xys(i)
+      xs(i) = xyi.x
+      ys(i) = xyi.y
+      i += 1
+    }
+    (xs, ys)
+  }
+  def bindFinite(xs: Array[Float], ys: Array[Float]): Array[Long] = {
+    val n = math.min(xs.length, ys.length)
+    val xys = new Array[Long](n)
+    var i, j = 0
+    while (i < n) {
+      val xi = xs(i)
+      val yi = ys(i)
+      if (xi.finite && yi.finite) {
+        xys(j) = Vc(xi, yi).underlying
+        j += 1
+      }
+      i += 1
+    }
+    if (j == n) xys else java.util.Arrays.copyOf(xys, xys.length)
+  }
+  def bindFiniteAsFloat(xs: Array[Double], ys: Array[Double]): Array[Long] = {
+    val n = math.min(xs.length, ys.length)
+    val xys = new Array[Long](n)
+    var i, j = 0
+    while (i < n) {
+      val xi = xs(i).toFloat
+      val yi = ys(i).toFloat
+      if (xi.finite && yi.finite) {
+        xys(j) = Vc(xi, yi).underlying
+        j += 1
+      }
+      i += 1
+    }
+    if (j == n) xys else java.util.Arrays.copyOf(xys, j)
+  }
+  def unbindFinite(xys: Array[Long]): (Array[Float], Array[Float]) = {
+    val n = xys.length
+    val xs, ys = new Array[Float](n)
+    var i, j = 0
+    while (i < n) {
+      val xyi = Vc from xys(i)
+      if (xyi.finite) {
+        xs(j) = xyi.x
+        ys(j) = xyi.y
+        j += 1
+      }
+      i += 1
+    }
+    if (j == n) (xs, ys)
+    else (java.util.Arrays.copyOf(xs, j), java.util.Arrays.copyOf(ys, j))
+  }
+  def unbindFiniteAsDouble(xys: Array[Long]): (Array[Double], Array[Double]) = {
+    val n = xys.length
+    val xs, ys = new Array[Double](n)
+    var i, j = 0
+    while (i < n) {
+      val xyi = Vc from xys(i)
+      if (xyi.finite) {
+        xs(j) = xyi.x
+        ys(j) = xyi.y
+        j += 1
+      }
+      i += 1
+    }
+    if (j == n) (xs, ys)
+    else (java.util.Arrays.copyOf(xs, j), java.util.Arrays.copyOf(ys, j))
+  }
+}
+
+
 abstract class Approximator {
+  def name: String
   def copy: Approximator
   val parameters: Array[Double]
   def apply(datum: Double): Double
@@ -26,36 +292,10 @@ trait ApproximatorCompanion[+App <: Approximator] {
 }
 
 object Approximator {
-  def finiteCopies(ts: Array[Double], xs: Array[Double]): (Array[Double], Array[Double]) = {
-    val n = math.min(ts.length, xs.length)
-    var m, i = 0
-    while (i < n) { if (ts(i).finite && xs(i).finite) m += 1; i += 1 }
-    val nts, nxs = new Array[Double](m)
-    i = 0
-    var j = 0
-    while (i < m) { if (ts(i).finite && xs(i).finite) { nts(j) = ts(i); nxs(j) = xs(i); j += 1 }; i += 1 }
-    (nts, nxs)
-  }
-  def finiteCopies(ts: Array[Double], xs: Array[Double], ws: Array[Double]): (Array[Double], Array[Double], Array[Double]) = {
-    if (ws eq null) return (finiteCopies(ts, xs) match { case (ta, xa) => (ta, xa, ws) })
-    val n = math.min(math.min(ts.length, xs.length), ws.length)
-    var m, i = 0
-    while (i < n) { if (ts(i).finite && xs(i).finite && ws(i).finite) m += 1; i += 1 }
-    val nts, nxs, nws = new Array[Double](m)
-    i = 0
-    var j = 0
-    while (i < m) { if (ts(i).finite && xs(i).finite && ws(i).finite) { nts(j) = ts(i); nxs(j) = xs(i); nws(i) = ws(i); j += 1 }; i += 1 }
-    (nts, nxs, nws)
-  }
-
   private[this] def findCleanLeftRightSlopes(
     ts: Array[Double], xs: Array[Double], finitize: Boolean = true
   ): (fits.FitTX, fits.FitTX, Array[Double], Array[Double], Int) = {
-    var fts = ts
-    var fxs = xs
-    if (finitize && (!ts.finite || !xs.finite)) {
-      finiteCopies(ts, xs) match { case (t, x) => fts = t; fxs = x }
-    }
+    val (fts, fxs) = if (finitize) DataShepherd.ensureFinite(ts, xs) else (ts, xs)
     val n = math.min(fts.length, fxs.length)
     if (n <= 0) return (null, null, fts, fxs, 0)
     val left, right = new fits.FitTX
@@ -80,8 +320,25 @@ object Approximator {
     (left, right, fts, fxs, winner)
   }
 
+  final class Constant(x0: Double) extends Approximator {
+    def name = "Constant"
+    val parameters = Array(x0)
+    def copy = new Constant(parameters(0))
+    def apply(t: Double) = parameters(0)
+    override def toString = f"x = ${parameters(0)}"
+  }
+  object Constant extends ApproximatorCompanion[Constant] {
+    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Constant] = {
+      val e = new stats.EstM
+      var i = 0
+      while (i < xs.length) { e += xs(i); i += 1 }
+      if (e.n > 0) (new Constant(e.value)) :: Nil else Nil
+    }
+  }
+
 
   final class Affine(x0: Double, slope: Double) extends Approximator {
+    def name = "Affine"
     val parameters = Array(x0, slope)
     def copy = new Affine(parameters(0), parameters(1))
     def apply(t: Double) = parameters(0) + parameters(1)*t
@@ -93,24 +350,80 @@ object Approximator {
       if (n <= 0) return Nil
       var ftx = fits.FitTX(ts, xs, 0, math.min(ts.length, xs.length))
       if (finitize && !ftx(0).finite) {
-        val (nts, nxs) = finiteCopies(ts, xs)
+        val (nts, nxs) = DataShepherd.copyFinite(ts, xs)
         guess(nts, nxs, false)
       }
       else new Affine(ftx(0), ftx.betaX) :: Nil
     }
   }
 
-  final class Quadratic(t0: Double, x0: Double, slopeAtOne: Double) extends Approximator {
-    val parameters = Array(t0, x0, slopeAtOne)
+  final class Quadratic(a0: Double, a1: Double, a2: Double) extends Approximator {
+    def name = "Quadratic"
+    val parameters = Array(a0, a1, a2)
     def copy = new Quadratic(parameters(0), parameters(1), parameters(2))
     def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + parameters(2)*dt*dt }
-    override def toString = f"x = ${parameters(1)} + ${parameters(2)}*(t - ${parameters(0)})^2"
+    override def toString = f"x = ${parameters(0)} + ${parameters(1)}*t + ${parameters(2)}*t^2"
   }
   object Quadratic extends ApproximatorCompanion[Quadratic] {
-    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Quadratic] = ???
+    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Quadratic] = {
+      val (fts, fxs) = if (finitize) DataShepherd.ensureFinite(ts, xs) else (ts, xs)
+      if (fts.length == 0) Nil
+      else if (fts.length == 1) (new Quadratic(fxs(0), 0, 0)) :: Nil
+      else if (fts.length == 2) Affine.guess(fts, fxs, false).map{ a => new Quadratic(a.parameters(0), a.parameters(1), 0) }
+      else {
+        val elt, elx, ect, ecx, ert, erx = new stats.EstM
+        var i = 0
+        while (i*3 < fts.length) {
+          elt += fts(i)
+          elx += fxs(i)
+          i += 1
+        }
+        while ((i*3)/2 < fts.length) {
+          ect += fts(i)
+          ecx += fxs(i)
+          i += 1
+        }
+        while (i < fts.length) {
+          ert += fts(i)
+          erx += fxs(i)
+          i += 1
+        }
+        val tl = elt.value
+        val tc = ect.value
+        val tr = ert.value
+        val xl = elx.value
+        val xc = ecx.value
+        val xr = erx.value
+        if ((xc closeTo xl) && (xc closeTo xr)) (new Quadratic(xc, 0, 0)) :: Nil
+        else if ((xc-xl)/(tc-tl) closeTo (xr-xc)/(tr-tc)) {
+          val slope = (xr -xl)/(tr - tl)
+          // Must have xc = a0 + tc*slope
+          if (slope closeTo 0) (new Quadratic(xc, 0, 0)) :: Nil
+          else (new Quadratic(xc - tc*slope, slope, 0)) :: Nil
+        }
+        else {
+          // Nondegenerate
+          // xl = a0 + a1*tl + a2*tl^2
+          // xr = a0 + a1*tr + a2*tr^2
+          // xc - xl = a1*(tc - tl) + a2*(tc - tl)*(tc + tl)
+          // (xc - xl)*(tr - tc) - (xr - xc)*(tc - tl) = a2*((tc - tl)*(tc + tl)*(tr - tc) - (tr - tc)*(tr + tc)*(tc - tl))
+          val trc = tr - tc
+          val xrc = xr - xc
+          val tcl = tc - tl
+          val xcl = xc - xl
+          val a2 = (xcl*trc - xrc*tcl)/(trc*tcl*(tl - tr))
+          // Now that we have a2, use (xr - xl) = a1*(tr - tl) + a2*(tr - tl)*(tr + tl)
+          val a1 = ((xr - xl) - a2*(tr-tl)*(tr+tl))/(tr - tl)
+          // Now that we have a1, just use center point to find offset
+          val a0 = xc - a1*tc - a2*tc*tc
+          (new Quadratic(a0, a1, a2)) :: Nil
+        }
+      }
+    }
   }
 
   final class Exponential(offset: Double, height: Double, slope: Double) extends Approximator {
+    def name = "Exponential"
     // Equation is x = offset + height*exp((slope/height)*t), so that dx/dt(0) = slope
     val parameters = Array(offset, height, slope)
     def copy = new Exponential(parameters(0), parameters(1), parameters(2))
@@ -171,6 +484,7 @@ object Approximator {
   }
 
   final class Biexponential(offset: Double, height: Double, slope: Double, slowHeight: Double, slowSlope: Double) extends Approximator {
+    def name = "Biexponential"
     val parameters = Array(offset, height, slope, slowHeight, slowSlope)
     def copy = new Biexponential(parameters(0), parameters(1), parameters(2), parameters(3), parameters(4))
     def apply(t: Double) = { 
@@ -189,6 +503,7 @@ object Approximator {
   }
 
   final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator {
+    def name = "Power"
     val parameters = Array(offset, amplitude, slope)
     def copy = new Power(parameters(0), parameters(1), parameters(2))
     def exponent =  if (parameters(1) == 0) 0 else parameters(2)/parameters(1)
@@ -255,6 +570,7 @@ object Approximator {
   }
 
   final class Bilinear(t0: Double, x0: Double, leftSlope: Double, rightSlope: Double) extends Approximator {
+    def name = "Bilinear"
     val parameters = Array(t0, x0, leftSlope, rightSlope)
     def copy = new Bilinear(parameters(0), parameters(1), parameters(2), parameters(3))
     def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + dt*(if (dt < 0) parameters(2) else parameters(3)) }
@@ -277,6 +593,7 @@ object Approximator {
 case class Optimized(app: Approximator, error: Double, evaluations: Long) {}
 
 abstract class Optimizer {
+  def name: String
   def verifiedFinite: Boolean
   def ts: Array[Double]
   def xs: Array[Double]
@@ -316,11 +633,16 @@ trait OptimizerCompanion[+Opt <: Optimizer] {
     over(ts, xs, null).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
 }
 
+abstract class VerifiedOptimizer(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends Optimizer {
+  def verifiedFinite = true
+  val (ts, xs, ws) =
+    if ((dataWs eq null) || dataWs.length == 0) { val (nts, nxs) = DataShepherd.ensureFinite(dataTs, dataXs); (nts, nxs, dataWs) }
+    else DataShepherd.ensureFinite(dataTs, dataXs, dataWs)
+}
+
 object Optimizer {
-  final class Hyphae(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends Optimizer {
-    def verifiedFinite = true
-    val (ts, xs, ws) =
-      if (dataTs.finite && dataXs.finite) (dataTs, dataXs, dataWs) else Approximator.finiteCopies(dataTs, dataXs, dataWs)
+  final class Hyphae(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends VerifiedOptimizer(dataTs, dataXs, dataWs) {
+    def name = "Hyphae"
     private case class Tip(
       app: Approximator,
       scales: Array[Double],
@@ -578,11 +900,9 @@ object Optimizer {
   }
 
   // Based directly on http://www.caam.rice.edu/tech_reports/1990/TR90-07.pdf, V. Torczon's Ph.D. thesis (1989).
-  final class Torczon(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends Optimizer {
-    val (ts, xs, ws) =
-      if (dataTs.finite && dataXs.finite) (dataTs, dataXs, dataWs) else Approximator.finiteCopies(dataTs, dataXs, dataWs)
+  final class Torczon(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends VerifiedOptimizer(dataTs, dataXs, dataWs) {
+    def name = "Torczon"
     val ys = new Array[Double](xs.length)
-    def verifiedFinite = true
     private var evaluations = 0L
     private class Plex(
       corners: Array[Array[Double]], edges: Array[Array[Double]], scratch: Array[Array[Double]],
