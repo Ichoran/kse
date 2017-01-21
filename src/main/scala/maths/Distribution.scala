@@ -75,6 +75,12 @@ abstract class MutableEstimate(var n: Int, var mean: Double, var sse: Double) ex
     mean = (nold*mean + that.mean*that.n)/n
     sse += that.sse + (mold - that.mean).sq*nold*that.n.toDouble / n    
   }
+  final protected def disincorporate(x: Double) {
+    val mold = mean
+    mean = if (n == 1) mean - x else (n*mean - x)/(n-1)
+    sse -= (x - mold)*(x - mean)
+    n -= 1
+  }
 }
 
 final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n0, mean0, sse0) with Accumulates[Double, Double] {
@@ -100,6 +106,7 @@ final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n
     while (i < xs.length) { this += xs(i); i += 1 }
     this
   }
+  def -=(x: Double): this.type = { if (!x.nan) disincorporate(x); this }
   override def toString = f"$mean +- $error (n=$n)"
 }
 object EstM {

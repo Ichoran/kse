@@ -95,6 +95,7 @@ object DataShepherd {
   }
   def ensureFinite(xs: Array[Float], ys: Array[Float]): (Array[Float], Array[Float]) = {
     // Keep Double and Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    // Also keep this and Array[Long] implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
     var i, n = 0
     while (i < xs.length && i < ys.length) { if (xs(i).finite && ys(i).finite) n += 1; i += 1 }
     if (n == xs.length && n == ys.length) (xs, ys)
@@ -139,11 +140,33 @@ object DataShepherd {
       (fxs, fys, fzs)
     }
   }
+  def ensureFinite(xys: Array[Long]): Array[Long] = {
+    // Keep this and Float,Float implementations perfectly in sync!  YOU HAVE TO DO THIS MANUALLY!!
+    var i, n = 0
+    while (i < xys.length) { if (Vc.from(xys(i)).finite) n += 1; i += 1 }
+    if (i == n) xys
+    else {
+      val fxys = new Array[Long](n)
+      i = 0
+      var j = 0
+      while (j < fxys.length && i < xys.length) {
+        val xyi = xys(i)
+        if (Vc.from(xyi).finite) {
+          fxys(j) = xyi
+          j += 1
+        }
+        i += 1
+      }
+      fxys
+    }
+  }
 
   private def ensureCopy(xs: Array[Double], oxs: Array[Double]) =
     if (xs ne oxs) xs else java.util.Arrays.copyOf(oxs, oxs.length)
   private def ensureCopy(xs: Array[Float], oxs: Array[Float]) =
     if (xs ne oxs) xs else java.util.Arrays.copyOf(oxs, oxs.length)
+  private def ensureCopy(xys: Array[Long], oxys: Array[Long]) =
+    if (xys ne oxys) xys else java.util.Arrays.copyOf(oxys, oxys.length)
 
   def copyFinite(xs: Array[Double]): Array[Double] = ensureCopy(ensureFinite(xs), xs)
   def copyFinite(xs: Array[Double], ys: Array[Double]): (Array[Double], Array[Double]) = { 
@@ -163,6 +186,7 @@ object DataShepherd {
     val (fxs, fys, fzs) = ensureFinite(xs, ys, zs)
     (ensureCopy(fxs, xs), ensureCopy(fys, ys), ensureCopy(fzs, zs))
   }
+  def copyFinite(xys: Array[Long]): Array[Long] = ensureCopy(ensureFinite(xys), xys)
 
   def bind(xs: Array[Float], ys: Array[Float]): Array[Long] = {
     val n = math.min(xs.length, ys.length)
@@ -267,6 +291,75 @@ object DataShepherd {
     }
     if (j == n) (xs, ys)
     else (java.util.Arrays.copyOf(xs, j), java.util.Arrays.copyOf(ys, j))
+  }
+
+  def clobberHugeOutliers(xs: Array[Double]): Boolean = {
+    val ixs = Array.range(0, xs.length).sortBy{ i =>
+      val xi = xs(i)
+      if (xi.finite) xi else Double.PositiveInfinity
+    }
+    var j0 = 0
+    var jN = ixs.length
+    while (jN > 0 && !xs(ixs(jN-1)).finite) jN -= 1
+    if (jN - j0 > 20) {
+      // Enough points so we can entertain the idea that there are outliers
+      val e = new stats.EstM
+      var j = j0
+      while (j < jN) { e += xs(ixs(j)); j += 1 }
+      var changed = true
+      while (changed && jN - j0 > 20) {
+        val ecutL = e.clone
+        var kl = j0
+        var saneL = true
+        var xx = xs(ixs(kl))
+        while (kl < j0+10 && saneL) {
+          val x = xx
+          xx = xs(ixs(kl+1))
+          ecutL -= x
+          if ((x - xx).sq > 3*ecutL.variance) saneL = false
+          kl += 1
+        }
+        val ecutR = e.clone
+        var kr = jN-1
+        var saneR = true
+        xx = xs(ixs(kr))
+        while (kr >= jN-10 && saneR) {
+          val x = xx
+          xx = xs(ixs(kr-1))
+          ecutR -= x
+          if ((x - xx).sq > 3*ecutR.variance) saneR = false
+          kr -= 1
+        }
+        if (!saneL) j0 = kl
+        if (!saneR) jN = kr+1
+        changed = !(saneL && saneR)
+      }
+    }
+    if ((jN - j0)*1.05 <= xs.length) { j0 = 0; jN = xs.length }
+    if (j0 > 0) { var j = 0; while (j < j0) { xs(ixs(j)) = Double.NaN; j += 1 } }
+    if (jN < xs.length) { var j = xs.length - 1; while (j >= jN) { xs(ixs(j)) = Double.NaN; j -= 1 } }
+    !(j0 == 0 && jN == xs.length)
+  }
+  def clobberHugeOutliers(xs: Array[Float]): Boolean = {
+    val big = xs.toDoubles
+    val ans = clobberHugeOutliers(big)
+    if (ans) {
+      var i = 0
+      while (i < xs.length) { if (big(i).nan) xs(i) = Float.NaN; i += 1 }
+    }
+    ans
+  }
+  def clobberHugeOutliers(xys: Array[Long]): Boolean = {
+    val (bigx, bigy) = unbindAsDouble(xys)
+    val ansx = clobberHugeOutliers(bigx)
+    val ansy = clobberHugeOutliers(bigy)
+    val ans = ansx || ansy
+    if (ans) {
+      var i = 0
+      val lNaN = Vc(Float.NaN, Float.NaN).underlying
+      while (i < xys.length) { if (bigx(i).nan || bigy(i).nan) xys(i) = lNaN; i += 1 }
+    }
+    ans
   }
 }
 
