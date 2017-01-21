@@ -620,7 +620,7 @@ package chart {
           val ix = borders.bisect(xi)
           if (ix < 0) ans(0) += 1
           else if (ix >= ans.length) ans(ans.length-1) += 1
-          else ans(ix.floor.toInt) += 1
+          else ans(ix.floor.toInt + 1) += 1
         }
         i += 1
       }
