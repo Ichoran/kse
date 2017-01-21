@@ -293,7 +293,7 @@ object DataShepherd {
     else (java.util.Arrays.copyOf(xs, j), java.util.Arrays.copyOf(ys, j))
   }
 
-  def clobberHugeOutliers(xs: Array[Double]): Boolean = {
+  def clobberHugeOutliers(xs: Array[Double], sdsep: Double, sdabs: Double): Boolean = {
     val ixs = Array.range(0, xs.length).sortBy{ i =>
       val xi = xs(i)
       if (xi.finite) xi else Double.PositiveInfinity
@@ -316,7 +316,7 @@ object DataShepherd {
           val x = xx
           xx = xs(ixs(kl+1))
           ecutL -= x
-          if ((x - xx).sq > 3*ecutL.variance) saneL = false
+          if ((x - xx).sq > sdsep*ecutL.variance || (x - ecutL.value).sq > sdabs*ecutL.variance) saneL = false
           kl += 1
         }
         val ecutR = e.clone
@@ -327,7 +327,7 @@ object DataShepherd {
           val x = xx
           xx = xs(ixs(kr-1))
           ecutR -= x
-          if ((x - xx).sq > 3*ecutR.variance) saneR = false
+          if ((x - xx).sq > sdsep*ecutR.variance || (x - ecutR.value).sq > sdabs*ecutR.variance) saneR = false
           kr -= 1
         }
         if (!saneL) j0 = kl
@@ -340,19 +340,19 @@ object DataShepherd {
     if (jN < xs.length) { var j = xs.length - 1; while (j >= jN) { xs(ixs(j)) = Double.NaN; j -= 1 } }
     !(j0 == 0 && jN == xs.length)
   }
-  def clobberHugeOutliers(xs: Array[Float]): Boolean = {
+  def clobberHugeOutliers(xs: Array[Float], sdsep: Double, sdabs: Double): Boolean = {
     val big = xs.toDoubles
-    val ans = clobberHugeOutliers(big)
+    val ans = clobberHugeOutliers(big, sdsep, sdabs)
     if (ans) {
       var i = 0
       while (i < xs.length) { if (big(i).nan) xs(i) = Float.NaN; i += 1 }
     }
     ans
   }
-  def clobberHugeOutliers(xys: Array[Long]): Boolean = {
+  def clobberHugeOutliers(xys: Array[Long], sdsep: Double, sdabs: Double): Boolean = {
     val (bigx, bigy) = unbindAsDouble(xys)
-    val ansx = clobberHugeOutliers(bigx)
-    val ansy = clobberHugeOutliers(bigy)
+    val ansx = clobberHugeOutliers(bigx, sdsep, sdabs)
+    val ansy = clobberHugeOutliers(bigy, sdsep, sdabs)
     val ans = ansx || ansy
     if (ans) {
       var i = 0
@@ -361,6 +361,9 @@ object DataShepherd {
     }
     ans
   }
+  def clobberHugeOutliers(xs: Array[Double]): Boolean = clobberHugeOutliers(xs, 2, 10)
+  def clobberHugeOutliers(xs: Array[Float]): Boolean = clobberHugeOutliers(xs, 2, 10)
+  def clobberHugeOutliers(xys: Array[Long]): Boolean = clobberHugeOutliers(xys, 2, 10)
 }
 
 
