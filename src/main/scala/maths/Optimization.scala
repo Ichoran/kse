@@ -476,7 +476,7 @@ object Approximator {
       "*" + inName + "^2"
     val parameters = Array(a0, a1, a2)
     def copy = new Quadratic(parameters(0), parameters(1), parameters(2))
-    def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + parameters(2)*dt*dt }
+    def apply(t: Double) = { parameters(0) + parameters(1)*t + parameters(2)*t*t }
     override def toString = f"x = ${parameters(0)} + ${parameters(1)}*t + ${parameters(2)}*t^2"
   }
   object Quadratic extends ApproximatorCompanion[Quadratic] {
