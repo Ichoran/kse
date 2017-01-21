@@ -1044,7 +1044,11 @@ package chart {
             i += 1
           }
           if (i < digits.length - tz) {
-            val roundup = !(alwaysRound < 0) && (alwaysRound > 0 || digits(i) > 5 || (digits(i) == 5 && i + 1 < digits.length - tz))
+            if (j > a.length) j = a.length
+            val roundup = 
+              !(alwaysRound < 0) && 
+              (j > i+1) && 
+              (alwaysRound > 0 || digits(i) > 5 || (digits(i) == 5 && i + 1 < digits.length - tz))
             if (roundup) {
               j -= 1
               var overflow = a(j) >= 9
@@ -1314,6 +1318,7 @@ package chart {
 
 
   final case class Letters(anchor: Vc, text: String, rotate: Float, style: Style) extends Shown {
+    val safeText = Letters.safeEncode(text)
     override def styled = style.defaultTo(FontSize(12))
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       implicit val myMag = Magnification.from(mag, xform, anchor)
@@ -1331,10 +1336,38 @@ package chart {
       }
       Indent.V(
         if (rotate closeTo 0)
-          f"<text${fm.vquote(u,"x","y")}$show>$text</text>"
+          f"<text${fm.vquote(u,"x","y")}$show>$safeText</text>"
         else 
-          f"<text${fm.vquote(u,"x","y")} transform=${q}rotate(${fm(rot)} ${fm comma u})${q}$show>$text</text>"
+          f"<text${fm.vquote(u,"x","y")} transform=${q}rotate(${fm(rot)} ${fm comma u})${q}$show>$safeText</text>"
       )
+    }
+  }
+  object Letters {    
+    private[this] val safeMapping = {
+      val m = new collection.mutable.LongMap[String]
+      for (i <- 0 until ' ') { m += (i.toChar, f"&#$i;") }
+      m += ('<', "&lt;")
+      m += ('>', "&gt;")
+      m += ('&', "&amp;")
+    }
+    def safeEncode(s: String): String = {
+      var i = 0
+      var fine = true
+      while (i < s.length && fine) {
+        val c = s(i)
+        if (safeMapping contains c) fine = false
+        else i += 1
+      }
+      if (i >= s.length) return s
+      val sb = new java.lang.StringBuilder
+      if (i > 0) sb.append(s, 0, i)
+      while (i < s.length) {
+        val c = s(i)
+        val cc = safeMapping.getOrNull(c)
+        if (cc eq null) sb.append(c) else sb.append(cc)
+        i += 1
+      }
+      sb.toString
     }
   }
 

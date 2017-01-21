@@ -316,7 +316,7 @@ object DataShepherd {
           val x = xx
           xx = xs(ixs(kl+1))
           ecutL -= x
-          if ((x - xx).sq > sdsep*ecutL.variance || (x - ecutL.value).sq > sdabs*ecutL.variance) saneL = false
+          if ((x - xx).sq > sdsep.sq*ecutL.variance || (x - ecutL.value).sq > sdabs.sq*ecutL.variance) saneL = false
           kl += 1
         }
         val ecutR = e.clone
@@ -327,7 +327,7 @@ object DataShepherd {
           val x = xx
           xx = xs(ixs(kr-1))
           ecutR -= x
-          if ((x - xx).sq > sdsep*ecutR.variance || (x - ecutR.value).sq > sdabs*ecutR.variance) saneR = false
+          if ((x - xx).sq > sdsep.sq*ecutR.variance || (x - ecutR.value).sq > sdabs.sq*ecutR.variance) saneR = false
           kr -= 1
         }
         if (!saneL) j0 = kl
