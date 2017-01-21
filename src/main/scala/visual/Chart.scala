@@ -1294,7 +1294,8 @@ package chart {
         val newscore = scorifyTup(x)
         if (newscore._2 > scored._2) newscore else scored
       }
-      best._1.map(n => (n, (if (b > a) (n.toDouble - a)/(b - a) else (n.toDouble - b)/(a - b)).clip(0, 1)))
+      def clipIfClose(d: Double) = if (d < 0 && d > -1e-5) 0 else if (d > 1 && d < 1 + 1e-5) 1 else d
+      best._1.map(n => (n, clipIfClose(if (b > a) (n.toDouble - a)/(b - a) else (n.toDouble - b)/(a - b))))
     }
   }
 
@@ -1305,7 +1306,7 @@ package chart {
       else {
         val (fa, fb) = if (delta.x.abs >= delta.y.abs) (from.x, to.x) else (from.y, to.y)
         val subdivs = Tickify.select(fa, fb, number)
-        val labels = subdivs.map{ case (num, frac) => Tik(frac.toFloat, num.toString) }
+        val labels = subdivs.collect{ case (num, frac) if frac == frac.clip(-0.001, 1.001) => Tik(frac.toFloat, num.toString) }
         (TickLabels(from, to, labels, left, right, anchor, style), None)
       }
     }

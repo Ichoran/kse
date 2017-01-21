@@ -711,7 +711,12 @@ object Approximator {
 
   final class Bilinear(t0: Double, x0: Double, leftSlope: Double, rightSlope: Double) extends Approximator {
     def name = "Bilinear"
-    def prettyArgs(inName: String, figs: Int) = toString.dropRight(3).replaceAll("t", inName)
+    def prettyArgs(inName: String, figs: Int) =
+      Constant.prettyValue(parameters(1), figs) + " + (" + inName +
+      (if (parameters(0) < 0) " + " + Constant.prettyValue(-parameters(0), figs) else " - " + Constant.prettyValue(parameters(0), figs)) +
+      ")*{<0: " + Constant.prettyValue(parameters(2), figs) +
+      "; >0: " + Constant.prettyValue(parameters(3), figs) +
+      "}"
     val parameters = Array(t0, x0, leftSlope, rightSlope)
     def copy = new Bilinear(parameters(0), parameters(1), parameters(2), parameters(3))
     def apply(t: Double) = { val dt = t - parameters(0); parameters(1) + dt*(if (dt < 0) parameters(2) else parameters(3)) }
