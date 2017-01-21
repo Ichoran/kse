@@ -1077,10 +1077,21 @@ package chart {
 
       /** String representation */
       override def toString = {
-        val a = new Array[Char](digits.length + (if (negative) 1 else 0) + (if (decimal < digits.length) 1 else 0))
+        val negN = (if (negative) 1 else 0)
+        val dpN  = (if (decimal < digits.length) 1 else 0)
+        val padN = (if (decimal < 1) 1-decimal else 0)
+        val a = new Array[Char](digits.length + negN + dpN + padN)
         if (negative) a(0) = '-'
-        if (decimal < digits.length) a(decimal + (if (negative) 1 else 0)) = '.'
-        var i = if (negative) 1 else 0
+        if (dpN > 0) {
+          if (decimal >= 1) a(decimal + negN) = '.'
+          else a(1 + negN) = '.'
+        }
+        if (padN > 0) {
+          a(0 + negN) = '0'
+          var i = 1
+          while (i < padN) { a(1 + i + negN) = '0'; i += 1 }
+        }
+        var i = negN + padN
         var j = 0
         while (j < decimal) {
           a(i) = (digits(j) + '0').toChar
