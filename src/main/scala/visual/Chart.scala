@@ -1039,7 +1039,7 @@ package chart {
           var i = lz
           var j = newbefore - before
           while (i < digits.length - tz && j < a.length) {
-            a(j) = digits(i + lz)
+            a(j) = digits(i)
             j += 1
             i += 1
           }
@@ -1212,11 +1212,19 @@ package chart {
     val trialGapsAsDouble = Array(7.5, 5, 4, 3, 2.5, 2, 1.5, 1)
     val trialGaps = trialGapsAsDouble.map(x => BigDecimal(x))
 
-    val typicalScorer: (Array[Num], Int, Double) => Double = (ns, target, avg) =>
+    val typicalScorer: (Array[Num], Double, Int, Double) => Double = (ns, position, target, avg) =>
       if (target <= 0) { if (ns.length == 0) 1e9*avg else if (ns.length == 1) avg else 0 }
-      else avg*((target + 1.0 - 2.0*(target - ns.length).abs)/(target + 1.0)).sqrt
+      else {
+        val badBounds = 
+          if (position < -0.05 || position > 1.05) 0
+          else if (position < -0.001) -0.01/(position-0.01)
+          else if (position > 1.001) 0.01/(position-0.99)
+          else 1.0
+        val score = avg*((target + 1.0 - 2.0*(target - ns.length).abs)/(target + 1.0)).sqrt
+        if (score == 0) 1-badBounds else score*badBounds
+      }
 
-    def select(a: Double, b: Double, number: Int, scorer: (Array[Num], Int, Double) => Double = typicalScorer): Array[(Num, Double)] = {
+    def select(a: Double, b: Double, number: Int, scorer: (Array[Num], Double, Int, Double) => Double = typicalScorer): Array[(Num, Double)] = {
       if (number == 0) return new Array[(Num,Double)](0)
       if (number == 1) {
         val anch = Anchor(a, b, true)
@@ -1229,7 +1237,7 @@ package chart {
         val right = (b-v).abs
         var multiplier = 1.0
         var shift = 0
-        // Order of these two is importantbecause we want to overshoot before finding low bound!
+        // Order of these two is important because we want to overshoot before finding low bound!
         while (1 + (multiplier*left).floor + (multiplier*right).floor > number) { shift += 1; multiplier /= 10 }
         while (1 + (multiplier*left).floor + (multiplier*right).floor < number) { shift -= 1; multiplier *= 10 }
         var index = trialGapsAsDouble.length - 2
@@ -1297,8 +1305,9 @@ package chart {
       }
       def scorify(anch: Anchor, sh: Int, ix: Int): (Array[Num], Double) = {
         val e = elaborate(anch, sh, ix)
+        val worstBound = e.map(_.toDouble).sortBy(x => -(x-0.5).abs).headOption.getOrElse(0.5)
         val av = avscore(e, if (plausibles.length == 1) Some(lastDigitScore(plausibles.head.value)) else None)
-        (e, scorer(e, number, av))
+        (e, scorer(e, worstBound, number, av))
       }
       def scorifyTup(asi: (Anchor, Int, Int)) = scorify(asi._1, asi._2, asi._3)
       val best = (scorifyTup(check.head) /: check.tail){ (scored, x) => 

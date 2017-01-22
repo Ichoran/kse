@@ -376,7 +376,10 @@ abstract class Approximator {
   def apply(datum: Double): Double
   def apply(data: Array[Double]): Array[Double] = computeInto(data, null)
   def apply(data: Array[Float]): Array[Float] = computeInto(data.toDoubles, null).toFloats
-  def computeInPlace(data: Array[Double]) { data(1) = apply(data(0)) }
+  def computeInPlace(data: Array[Double]) {
+    var i = 0
+    while (i < data.length) { data(i) = apply(data(i)); i += 1 }
+  }
   def computeInto(data: Array[Double], target: Array[Double]): Array[Double] = {
     val a = if ((target eq null) || target.length < data.length) new Array[Double](data.length) else target
     var i = 0
