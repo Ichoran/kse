@@ -1030,7 +1030,7 @@ package chart {
         val before = decimal - lz
         val after = digits.length - decimal - tz
         val newbefore = math.max(1, before + math.max(0, initialZeros))
-        val newafter = math.max(0, -p)
+        val newafter = math.max(1-newbefore, -p)
         var a = new Array[Byte](newbefore + newafter)
         if (lz + tz >= digits.length) {
           new Num(a, newbefore, negative)
@@ -1079,8 +1079,9 @@ package chart {
       override def toString = {
         val negN = (if (negative) 1 else 0)
         val dpN  = (if (decimal < digits.length) 1 else 0)
+        val ezN  = (if (decimal > digits.length) decimal - digits.length else 0)
         val padN = (if (decimal < 1) 1-decimal else 0)
-        val a = new Array[Char](digits.length + negN + dpN + padN)
+        val a = new Array[Char](digits.length + negN + dpN + padN + ezN)
         if (negative) a(0) = '-'
         if (dpN > 0) {
           if (decimal >= 1) a(decimal + negN) = '.'
@@ -1093,16 +1094,24 @@ package chart {
         }
         var i = negN + padN
         var j = 0
-        while (j < decimal) {
+        while (j < decimal && j < digits.length) {
           a(i) = (digits(j) + '0').toChar
           i += 1
           j += 1
         }
-        i += 1
-        while (j < digits.length) {
-          a(i) = (digits(j) + '0').toChar
+        if (j == decimal) {
           i += 1
-          j += 1
+          while (j < digits.length) {
+            a(i) = (digits(j) + '0').toChar
+            i += 1
+            j += 1
+          }
+        }
+        else {
+          while (i < a.length) {
+            a(i) = '0'
+            i += 1
+          }
         }
         new String(a)
       }
