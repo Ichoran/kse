@@ -946,9 +946,11 @@ package chart {
     }
   }
 
-  object Tickify{
+  // This is the third attempt at this kind of thing and it is HORRIBLE
+  // Throw it all away and rewrite it properly once you have time!!!
+  object Tickify {
     case class Num(digits: Array[Byte], decimal: Int, negative: Boolean) {
-      /** Read a single digits */
+      /** Read a single digit */
       def apply(position: Int) = {
         if (position >= decimal) 0
         else if (position >= 0) digits(decimal - position - 1)
@@ -961,7 +963,6 @@ package chart {
         val v = (if (value < 0) 0 else if (value > 9) 9 else value).toByte
         digits(decimal - position - 1) = v
       }
-
 
       /** Number of leading zeros */
       def leadingZeros = {
@@ -1013,7 +1014,7 @@ package chart {
       def copyWithTrailing(): Num = {
         val lz = leadingZeros
         if (lz + trailingZeros >= digits.length) Num.zero
-        else new Num(java.util.Arrays.copyOfRange(digits, 0, digits.length), decimal - lz, negative)
+        else new Num(java.util.Arrays.copyOfRange(digits, lz, digits.length), decimal - lz, negative)
       }
 
       /** Creates a new copy, truncating trailing zeros but leaving leading ones intact. */
@@ -1024,7 +1025,7 @@ package chart {
       }
 
       /** Creates a new copy with a specified number of digits after the decimal point */
-      def copyToPosition(p: Int, initialZeros: Int = 0, alwaysRound: Int = 0): Num = {
+      def copyToPosition(p: Int, initialZeros: Int, roundUp: Boolean): Num = {
         val lz = leadingZeros
         val tz = math.min(trailingZeros, digits.length - decimal)
         val before = decimal - lz
@@ -1045,11 +1046,7 @@ package chart {
           }
           if (i < digits.length - tz) {
             if (j > a.length) j = a.length
-            val roundup = 
-              !(alwaysRound < 0) && 
-              (j > i+1) && 
-              (alwaysRound > 0 || digits(i) > 5 || (digits(i) == 5 && i + 1 < digits.length - tz))
-            if (roundup) {
+            if (roundUp) {
               j -= 1
               var overflow = a(j) >= 9
               while (overflow && j > 0) {
@@ -1164,7 +1161,7 @@ package chart {
         if (na.negative != nb.negative) return new Anchor(na, nb, Num.zero, false)
         val p = na diffdig nb
         val lead = (nb.leading - na.leading)
-        val v = na.copyToPosition(p, if (seekBetter) max(0, lead) else 0, alwaysRound = if (a > 0) 1 else -1)
+        val v = na.copyToPosition(p, if (seekBetter) max(0, lead) else 0, a > 0)
         val nbp = nb(p)
         if (seekBetter) {
           if (a < 0) {
