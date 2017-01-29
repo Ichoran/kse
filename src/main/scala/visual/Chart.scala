@@ -563,6 +563,15 @@ package chart {
       val hpc = dh.heightPerCount
       (h: HistInfo) => if (avgbin > 0) ((hpc * h.avgbin.toDouble / avgbin)).toFloat else unitScale(h)
     }
+    def leastOf(dhs: Seq[DataHist]) = {
+      val lrgs = dhs.map(_.largestCount)
+      val wids = dhs.map(dh => dh.borders.last - dh.borders.head)
+      val avgbins = (dhs zip wids).map{ case (dh, wid) => if (dh.borders.length > 1) wid.toDouble/(dh.borders.length - 1) else wid }
+      val hpcs = dhs.map(_.heightPerCount)
+      val rats = (avgbins zip hpcs).map{ case (avgbin, hps) => if (avgbin > 0) hps / avgbin else 0 }
+      val smallestRat = if (rats.length == 0) 0 else rats.min
+      (h: HistInfo) => if (smallestRat > 0) h.avgbin.toDouble * smallestRat else unitScale(h)
+    }
   }
 
   final case class DataHist(xs: Array[Float], scale: Option[Either[HistInfo => Float, Float]], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
