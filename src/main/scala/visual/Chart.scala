@@ -555,28 +555,26 @@ package chart {
 
   final case class HistInfo(total: Int, highest: Int, width: Float, avgbin: Float) {}
   object HistInfo {
-    val unitScale = (h: HistInfo) => { if (h.highest == 0) 0 else (h.avgbin.toDouble/h.highest).toFloat }
-    def sameAs(dh: DataHist) = {
+    val unitScale: HistInfo => Float = h => { if (h.highest == 0) 0 else (h.avgbin.toDouble/h.highest).toFloat }
+    def sameAs(dh: DataHist): HistInfo => Float = {
       val lrg = dh.largestCount
       val wid = dh.borders.last - dh.borders.head
       val avgbin = if (dh.borders.length > 1) (wid.toDouble/(dh.borders.length - 1)).toFloat else wid
       val hpc = dh.heightPerCount
       (h: HistInfo) => if (avgbin > 0) ((hpc * h.avgbin.toDouble / avgbin)).toFloat else unitScale(h)
     }
-    def leastOf(dhs: Seq[DataHist]) = {
+    def leastOf(dhs: Seq[DataHist]): HistInfo => Float = {
       val lrgs = dhs.map(_.largestCount)
       val wids = dhs.map(dh => dh.borders.last - dh.borders.head)
       val avgbins = (dhs zip wids).map{ case (dh, wid) => if (dh.borders.length > 1) wid.toDouble/(dh.borders.length - 1) else wid }
       val hpcs = dhs.map(_.heightPerCount)
       val rats = (avgbins zip hpcs).map{ case (avgbin, hps) => if (avgbin > 0) hps / avgbin else 0 }
       val smallestRat = if (rats.length == 0) 0 else rats.min
-      (h: HistInfo) => if (smallestRat > 0) h.avgbin.toDouble * smallestRat else unitScale(h)
+      (h: HistInfo) => if (smallestRat > 0) (h.avgbin.toDouble * smallestRat).toFloat else unitScale(h)
     }
   }
 
   final case class DataHist(xs: Array[Float], scale: Option[Either[HistInfo => Float, Float]], range: Option[(Float, Float)], bins: Option[Int], style: Style) extends Shown {
-    override def styled = style.filly
-
     val viewedRange = range.getOrElse{
       var lo = Float.PositiveInfinity
       var hi = Float.NegativeInfinity
@@ -693,7 +691,7 @@ package chart {
         }
         sb ++= " L"
         sb ++= fm(xform(xs(i) vc 0))
-        sb ++= f" Z$q$show/>"
+        sb ++= f"$q$show/>"
         sb.result
       }
       if (paths.length == 1) Indent.V(paths.head)
@@ -1821,7 +1819,7 @@ package chartTest {
       val b = Bar(200 vc 200, 10 vc 80, Fill(Rgba(1, 0.3f, 0.3f)))
       val dl = DataLine(Array(Vc(50, 300).underlying, Vc(90, 240).underlying, Vc(130, 280).underlying, Vc(170, 260).underlying), Stroke(Rgba(1, 0, 1), 4))
       val dr = DataRange(Array(90, 130, 170, 210), Array(230, 220, 240, 210), Array(270, 310, 270, 260), Fill alpha Rgba(0, 0, 1, 0.3f))
-      val hg = DataHist(Array.tabulate(100)(i => 1f/(10+i)), None, None, Some(5), Fill alpha Rgba(0, 1, 0, 0.4f))
+      val hg = DataHist(Array.tabulate(100)(i => 1f/(10+i)), None, None, Some(5), Fill.alpha(Rgba(0, 1, 0, 0.4f)) ++ Stroke(Rgba(0,0.5f,0), 1.5f))
       val ea = ErrorBarYY(150, 95, 115, 7, 0, Stroke(Rgba(1, 0, 0), 2))
       val eb = ErrorBarYY(150, 395, 445, 10, -0.5f, Stroke.alpha(Rgba(1, 0, 0, 0.5f), 10))
       val aa = Arrow(50 vc 200, 200 vc 100, 0.1f, None, Stroke(Rgba(0.5f, 0, 1), 5))
