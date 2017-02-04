@@ -630,6 +630,37 @@ object Approximator {
         new Biexponential(ape.parameters(0), ape.parameters(1)*0.9, ape.parameters(2)*0.9, ape.parameters(1)*0.1, ape.parameters(2)*0.1)
       }
     }
+    // Approximator for things that rise at once, then fall gradually
+    object RiseFall extends ApproximatorCompanion[Biexponential] {
+      def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean): List[Approximator.Biexponential] = {
+        if (ts.length < 1 || xs.length != ts.length) return Nil
+        var xmax = xs(0)
+        var xmin = xs(0)
+        var imax, imin = 0
+        var i = 1
+        while (i < xs.length) {
+          if (xs(i).finite) {
+            if (xs(i) > xmax) {
+              imax = i
+              xmax = xs(i)
+            }
+            else if (xs(i) < xmin) {
+              imin = i
+              xmin = xs(i)
+            }
+          }
+          i += 1
+        }
+        val x0 = xs(0)
+        val x1 = xs(xs.length - 1)
+        val xA = if (imax == 0) xmin else xmax
+        val t0 = ts(0)
+        val tA = ts(if (imax == 0) imin else imax)
+        val t1 = ts(ts.length - 1)
+        val tc1 = if (tA == t0) 0f else (1/(tA - t0)).toFloat
+        new Approximator.Biexponential(x1, x0-xA, -tc1*(x0-xA), xA-x1, -(tc1/2)*(xA-x1)) :: Nil
+      }
+    }
   }
 
   final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator {
