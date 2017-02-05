@@ -371,7 +371,8 @@ abstract class Approximator {
   def name: String
   def copy: Approximator
   protected def prettyArgs(inName: String, figs: Int): String
-  def pretty(inName: String, outName: String, figs: Int): String = f"$outName($inName) = ${prettyArgs(inName, figs)}"
+  def pretty(inName: String, outName: String, figs: Int, argName: String = ""): String = 
+    f"$outName(${if (argName.isEmpty) inName else argName}) = ${prettyArgs(inName, figs)}"
   val parameters: Array[Double]
   def apply(datum: Double): Double
   def apply(data: Array[Double]): Array[Double] = computeInto(data, null)
