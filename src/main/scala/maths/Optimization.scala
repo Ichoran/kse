@@ -370,6 +370,7 @@ object DataShepherd {
 abstract class Approximator {
   def name: String
   def copy: Approximator
+  def normalize: this.type = this
   protected def prettyArgs(inName: String, figs: Int): String
   def pretty(inName: String, outName: String, figs: Int, argName: String = ""): String = 
     f"$outName(${if (argName.isEmpty) inName else argName}) = ${prettyArgs(inName, figs)}"
@@ -543,6 +544,7 @@ object Approximator {
 
   final class Exponential(offset: Double, height: Double, slope: Double) extends Approximator {
     def name = "Exponential"
+    override def normalize = { if (parameters(1) closeTo 0) { parameters(1) = 0; parameters(2) = 0 }; this }
     def prettyArgs(inName: String, figs: Int) = {
       Constant.prettyValue(parameters(0), figs) +
       (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
@@ -609,6 +611,21 @@ object Approximator {
 
   final class Biexponential(offset: Double, height: Double, slope: Double, slowHeight: Double, slowSlope: Double) extends Approximator {
     def name = "Biexponential"
+    override def normalize = {
+      if (parameters(1) closeTo 0) { parameters(1) = 0; parameters(2) = 0 }
+      if (parameters(3) closeTo 0) { parameters(3) = 0; parameters(4) = 0 }
+      if (parameters(3) != 0) {
+        if (parameters(1) == 0 || parameters(4)/parameters(3) > parameters(2)/parameters(1)) {
+          val h = parameters(1)
+          val s = parameters(2)
+          parameters(1) = parameters(3)
+          parameters(2) = parameters(4)
+          parameters(3) = h
+          parameters(4) = s
+        }
+      }
+      this
+    }
     def prettyArgs(inName: String, figs: Int) = {
       Constant.prettyValue(parameters(0), figs) +
       (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
@@ -666,6 +683,7 @@ object Approximator {
 
   final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator {
     def name = "Power"
+    override def normalize = { if (parameters(1) closeTo 0) { parameters(1) = 0; parameters(2) = 0 }; this }
     def prettyArgs(inName: String, figs: Int) = {
       Constant.prettyValue(parameters(0), figs) +
       (if (parameters(1) < 0) " - " + Constant.prettyValue(-parameters(1), figs) else " + " + Constant.prettyValue(parameters(1), figs)) +
@@ -1073,7 +1091,7 @@ object Optimizer {
         }
         promising = (epoch < 5 || anybetter) && !(evals > iterationBudget)
       }
-      tips.take(n).sortBy(_.lastError).map(tip => Optimized(tip.app, tip.mse, tip.evals)).toList
+      tips.take(n).sortBy(_.lastError).map(tip => Optimized(tip.app.normalize, tip.mse, tip.evals)).toList
     }
   }
   object Hyphae extends OptimizerCompanion[Hyphae] {
@@ -1270,7 +1288,7 @@ object Optimizer {
         else minimalProgress = math.min(minimalProgress, 0)
       }
       plex bestInto app
-      Optimized(app, plex.bestError, plex.evals)
+      Optimized(app.normalize, plex.bestError, plex.evals)
     }
     def apply(initial: Array[Approximator]): List[Optimized] = initial.map(app => this apply app).toList
  }
