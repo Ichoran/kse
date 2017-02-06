@@ -615,7 +615,7 @@ object Approximator {
       if (parameters(1) closeTo 0) { parameters(1) = 0; parameters(2) = 0 }
       if (parameters(3) closeTo 0) { parameters(3) = 0; parameters(4) = 0 }
       if (parameters(3) != 0) {
-        if (parameters(1) == 0 || parameters(4)/parameters(3) > parameters(2)/parameters(1)) {
+        if (parameters(1) == 0 || (parameters(4)/parameters(3)).abs > (parameters(2)/parameters(1)).abs) {
           val h = parameters(1)
           val s = parameters(2)
           parameters(1) = parameters(3)
@@ -840,6 +840,67 @@ abstract class VerifiedOptimizer(dataTs: Array[Double], dataXs: Array[Double], d
 }
 
 object Optimizer {
+  def simpleConvex(t0: Double, t1: Double, tol: Double = 1e-8, expandLeft: Boolean = false, expandRight: Boolean = false)(f: Double => Double) = {
+    var tA = t0
+    var tD = t1
+    var tB = (2*t0 + t1)/3
+    var tC = (t0 + 2*t1)/3
+    var xA = f(tA)
+    var xB = f(tB)
+    var xC = f(tC)
+    var xD = f(tD)
+    if (expandLeft || expandRight) {
+      while (xA < xB && xA < xC && xA < xD && expandLeft && tA > -1e300) {
+        tA += tA - tD
+        tB = (2*tA + tD)/3
+        tC = (tA + 2*tD)/3
+        xA = f(tA)
+        xB = f(tB)
+        xC = f(tC)
+      }
+      while (xD < xC && xD < xB && xD < xA && expandRight && tD < 1e300) {
+        tD += tD - tA
+        tB = (2*tA + tD)/3
+        tC = (tA + 2*tD)/3
+        xD = f(tD)
+        xB = f(tB)
+        xC = f(tC)
+      }
+    }
+    while ((tD - tA) > tol && 2*(tD - tA) > tol*(tD.abs + tA.abs)) {
+      val m = math.min(xB, xC)
+      if (m <= xA && m <= xD) {
+        if (xB < xC) {
+          xD = xC
+          tD = tC
+        }
+        else if (xC < xB) {
+          xA = xB
+          tA = tB
+        }
+        else {
+          xA = xB
+          xD = xC
+          tA = tB
+          tD = tC
+        }
+      }
+      else if (xA < xD) {
+        xD = xB
+        tD = tB
+      }
+      else {
+        xA = xC
+        tA = tC
+      }
+      tB = (2*tA + tD)/3
+      tC = (tA + 2*tD)/3
+      xB = f(tB)
+      xC = f(tC)
+    }
+    (tA + tD)/2
+  }
+
   final class Hyphae(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends VerifiedOptimizer(dataTs, dataXs, dataWs) {
     def name = "Hyphae"
     private case class Tip(
