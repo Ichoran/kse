@@ -4,7 +4,10 @@
 package kse.maths
 package optimization
 
+import scala.reflect.ClassTag
 import scala.math._
+
+import kse.coll.Copy
 
 object DataShepherd {
   def ensureFinite(xs: Array[Double]): Array[Double] = {
@@ -367,7 +370,7 @@ object DataShepherd {
 }
 
 
-abstract class Approximator {
+abstract class Approximator extends Copy[Approximator] {
   def name: String
   def copy: Approximator
   def normalize: this.type = this
@@ -389,6 +392,7 @@ abstract class Approximator {
     a
   }
 }
+
 
 trait ApproximatorCompanion[+App <: Approximator] {
   def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean): List[App]
@@ -423,7 +427,7 @@ object Approximator {
     (left, right, fts, fxs, winner)
   }
 
-  final class Constant(x0: Double) extends Approximator {
+  final class Constant(x0: Double) extends Approximator with Copy[Constant] {
     def name = "Constant"
     def prettyArgs(inName: String, figs: Int) = Constant.prettyValue(parameters(0), figs)
     val parameters = Array(x0)
@@ -447,7 +451,7 @@ object Approximator {
   }
 
 
-  final class Affine(x0: Double, slope: Double) extends Approximator {
+  final class Affine(x0: Double, slope: Double) extends Approximator with Copy[Affine] {
     def name = "Affine"
     def prettyArgs(inName: String, figs: Int) =
       Constant.prettyValue(parameters(0), figs) +
@@ -471,7 +475,7 @@ object Approximator {
     }
   }
 
-  final class Quadratic(a0: Double, a1: Double, a2: Double) extends Approximator {
+  final class Quadratic(a0: Double, a1: Double, a2: Double) extends Approximator with Copy[Quadratic] {
     def name = "Quadratic"
     def prettyArgs(inName: String, figs: Int) =
       Constant.prettyValue(parameters(0), figs) +
@@ -542,7 +546,7 @@ object Approximator {
     }
   }
 
-  final class Exponential(offset: Double, height: Double, slope: Double) extends Approximator {
+  final class Exponential(offset: Double, height: Double, slope: Double) extends Approximator with Copy[Exponential] {
     def name = "Exponential"
     override def normalize = { if (parameters(1) closeTo 0) { parameters(1) = 0; parameters(2) = 0 }; this }
     def prettyArgs(inName: String, figs: Int) = {
@@ -609,7 +613,7 @@ object Approximator {
     }
   }
 
-  final class Biexponential(offset: Double, height: Double, slope: Double, slowHeight: Double, slowSlope: Double) extends Approximator {
+  final class Biexponential(offset: Double, height: Double, slope: Double, slowHeight: Double, slowSlope: Double) extends Approximator with Copy[Biexponential] {
     def name = "Biexponential"
     override def normalize = {
       if (parameters(1) closeTo 0) { parameters(1) = 0; parameters(2) = 0 }
@@ -681,7 +685,7 @@ object Approximator {
     }
   }
 
-  final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator {
+  final class Power(offset: Double, amplitude: Double, slope: Double) extends Approximator with Copy[Power] {
     def name = "Power"
     override def normalize = { if (parameters(1) closeTo 0) { parameters(1) = 0; parameters(2) = 0 }; this }
     def prettyArgs(inName: String, figs: Int) = {
@@ -762,7 +766,7 @@ object Approximator {
     }
   }
 
-  final class Bilinear(t0: Double, x0: Double, leftSlope: Double, rightSlope: Double) extends Approximator {
+  final class Bilinear(t0: Double, x0: Double, leftSlope: Double, rightSlope: Double) extends Approximator with Copy[Bilinear] {
     def name = "Bilinear"
     def prettyArgs(inName: String, figs: Int) =
       Constant.prettyValue(parameters(1), figs) + " + (" + inName +
@@ -789,7 +793,7 @@ object Approximator {
   }
 }
 
-case class Optimized(app: Approximator, error: Double, evaluations: Long) {}
+case class Optimized[+A <: Approximator](app: A, error: Double, evaluations: Long) {}
 
 abstract class Optimizer {
   def name: String
@@ -806,30 +810,52 @@ abstract class Optimizer {
     if (iterations == 0) iterationBudget = Long.MaxValue else if (iterations > 0) iterationBudget = iterations
     this
   }
-  def apply(initial: Array[Approximator]): List[Optimized]
-  def from(guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =
+  def apply[A <: Approximator](initial: Array[A]): List[Optimized[A]]
+  def from[A <: Approximator : ClassTag](guessers: ApproximatorCompanion[A]*): List[Optimized[A]] =
     apply(guessers.flatMap(_.guess(ts, xs, !verifiedFinite)).toArray)
 }
 
 trait OptimizerCompanion[+Opt <: Optimizer] {
   def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]): Opt
   def over(ts: Array[Double], xs: Array[Double]): Opt = over(ts, xs, null)
-  def candidates(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs, ws).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
-  def candidates(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs, null).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
-  def candidates(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs, ws).from(guessers: _*)
-  def candidates(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): List[Optimized] =  
-    over(ts, xs, null).from(guessers: _*)
-  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
-    over(ts, xs, ws).setTargets(absoluteE, improveE, iterN).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
-  def apply(absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
-    over(ts, xs, null).setTargets(absoluteE, improveE, iterN).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
-  def apply(ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
-    over(ts, xs, ws).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
-  def apply(ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[Approximator]*): Option[Optimized] =  
-    over(ts, xs, null).from(guessers: _*).reduceOption((l,r) => if (l.error <= r.error) l else r)
+
+  def candidates[A <: Approximator : ClassTag](
+    absoluteE: Double, improveE: Double, iterN: Long,
+    ts: Array[Double], xs: Array[Double], ws: Array[Double],
+    guessers: ApproximatorCompanion[A]*
+  ): List[Optimized[A]] =  over(ts, xs, ws).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
+
+  def candidates[A <: Approximator : ClassTag](
+    absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[A]*
+  ): List[Optimized[A]] =  over(ts, xs, null).setTargets(absoluteE, improveE, iterN).from(guessers: _*)
+
+  def candidates[A <: Approximator : ClassTag](
+    ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[A]*
+  ): List[Optimized[A]] = over(ts, xs, ws).from(guessers: _*)
+
+  def candidates[A <: Approximator : ClassTag](
+    ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[A]*
+  ): List[Optimized[A]] = over(ts, xs, null).from(guessers: _*)
+
+  private def bestOf[A <: Approximator](os: List[Optimized[A]]) = os.reduceOption((l, r) => if (l.error <= r.error) l else r)
+
+  def apply[A <: Approximator : ClassTag](
+    absoluteE: Double, improveE: Double, iterN: Long,
+    ts: Array[Double], xs: Array[Double], ws: Array[Double],
+    guessers: ApproximatorCompanion[A]*
+  ): Option[Optimized[A]] =  bestOf(candidates(absoluteE, improveE, iterN, ts, xs, ws, guessers: _*))
+
+  def apply[A <: Approximator : ClassTag](
+    absoluteE: Double, improveE: Double, iterN: Long, ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[A]*
+  ): Option[Optimized[A]] = bestOf(candidates(absoluteE, improveE, iterN, ts, xs, guessers: _*))
+
+  def apply[A <: Approximator : ClassTag](
+    ts: Array[Double], xs: Array[Double], ws: Array[Double], guessers: ApproximatorCompanion[A]*
+  ): Option[Optimized[A]] = bestOf(candidates(ts, xs, ws, guessers: _*))
+
+  def apply[A <: Approximator : ClassTag](
+    ts: Array[Double], xs: Array[Double], guessers: ApproximatorCompanion[A]*
+  ): Option[Optimized[A]] = bestOf(candidates(ts, xs, guessers: _*))
 }
 
 abstract class VerifiedOptimizer(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends Optimizer {
@@ -903,8 +929,8 @@ object Optimizer {
 
   final class Hyphae(dataTs: Array[Double], dataXs: Array[Double], dataWs: Array[Double]) extends VerifiedOptimizer(dataTs, dataXs, dataWs) {
     def name = "Hyphae"
-    private case class Tip(
-      app: Approximator,
+    private case class Tip[A <: Approximator](
+      app: A,
       scales: Array[Double],
       scores: Array[Double],
       budget: Array[Float],
@@ -1110,7 +1136,7 @@ object Optimizer {
         (imp, better, fracbetter)
       }
     }
-    def apply(initial: Array[Approximator]): List[Optimized] = {
+    def apply[A <: Approximator](initial: Array[A]): List[Optimized[A]] = {
       val tips = initial.map{ app => 
         val np = app.parameters.length
         Tip(app, Array.fill(np)(0.0), Array.fill(np)(0.0), Array.fill(np)(2f), Array.range(1, np+1), 0)
@@ -1338,7 +1364,7 @@ object Optimizer {
         Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0), Array.fill(n + 1)(0.0), Array.fill(n)(0.0)
       )
     }
-    def apply(app: Approximator): Optimized = {
+    def apply[A <: Approximator](app: A): Optimized[A] = {
       val plex = Plex.ofDim(app.parameters.length)
       plex initializeAt app
       var minimalProgress = -10
@@ -1351,7 +1377,7 @@ object Optimizer {
       plex bestInto app
       Optimized(app.normalize, plex.bestError, plex.evals)
     }
-    def apply(initial: Array[Approximator]): List[Optimized] = initial.map(app => this apply app).toList
+    def apply[A <: Approximator](initial: Array[A]): List[Optimized[A]] = initial.map(app => this apply app).toList
  }
   object Torczon extends OptimizerCompanion[Torczon] {
     def over(ts: Array[Double], xs: Array[Double], ws: Array[Double]) = new Torczon(ts, xs, ws)

@@ -26,6 +26,10 @@ package coll {
     def from[@specialized A](a: => A): Itself[A] = new Itself[A] { def itself = a }
   }
 
+  /** A trait that expresses that a class can copy itself. */
+  trait Copy[+A <: Copy[_]] {
+    def copy: A
+  }
 
   /** A general way to defer a computation but cache the result. */
   class Lazy[A](gen: => A) {
