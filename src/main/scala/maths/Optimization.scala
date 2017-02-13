@@ -367,6 +367,35 @@ object DataShepherd {
   def clobberHugeOutliers(xs: Array[Double]): Boolean = clobberHugeOutliers(xs, 2, 10)
   def clobberHugeOutliers(xs: Array[Float]): Boolean = clobberHugeOutliers(xs, 2, 10)
   def clobberHugeOutliers(xys: Array[Long]): Boolean = clobberHugeOutliers(xys, 2, 10)
+
+  def pearson(xys: Array[Long]): Double = {
+    var sx, sxx, sy, syy, sxy = 0.0
+    var n = 0
+    var i = 0
+    while (i < xys.length) {
+      val v = Vc from xys(i)
+      if (v.finite) {
+        val x = v.x.toDouble
+        val y = v.y.toDouble
+        sx += x
+        sxx += x*x
+        sy += y
+        syy += y*y
+        sxy += x*y
+        n += 1
+      }
+      i += 1
+    }
+    if (n < 2) 0
+    else {
+      val Vx = sxx/n - (sx/n).sq
+      val Vy = syy/n - (sy/n).sq
+      if ((Vx closeTo 0) || (Vy closeTo 0)) 0
+      else math.max(-1, math.min(1, ((sxy/n) - (sx/n)*(sy/n))/math.sqrt(Vx*Vy) ))
+    }
+  }
+  def pearson(xs: Array[Float], ys: Array[Float]): Double = pearson(bind(xs, ys))
+  def pearson(xs: Array[Double], ys: Array[Double]): Double = pearson(bindAsFloat(xs, ys))
 }
 
 
