@@ -795,6 +795,24 @@ object Approximator {
     }
   }
 
+  final class Affexp(offset: Double, slope: Double, amplitude: Double, rate: Double) extends Approximator with Copy[Affexp] {
+    def name = "Affexp"
+    def prettyArgs(inName: String, figs: Int) =
+      Constant.prettyValue(parameters(0), figs) + " + " +
+      Constant.prettyValue(parameters(1), figs) + "*" + inName + " + " +
+      Constant.prettyValue(parameters(2), figs) +
+      " * e^(" + Constant.prettyValue(parameters(3), figs) + "*" + inName + ")"
+    val parameters = Array(offset, slope, amplitude, rate)
+    def copy = new Affexp(parameters(0), parameters(1), parameters(2), parameters(3))
+    def apply(t: Double) = parameters(0) + parameters(1)*t + parameters(2)*math.exp(parameters(3)*t)
+    override def toString = f"x = ${parameters(0)} + ${parameters(1)}*t + ${parameters(2)}*e^(${parameters(3)}*t)"
+  }
+  object Affexp extends ApproximatorCompanion[Affexp] {
+    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Affexp] = Exponential.guess(ts, xs, finitize).map{ e =>
+      new Affexp(e.parameters(0), e.parameters(1), if (e.parameters(1) closeTo 0) -1e-10 else e.parameters(2)/e.parameters(1), 1.0)
+    }
+  }
+
   final class Powexp(offset: Double, amplitude: Double, rate: Double, alpha: Double) extends Approximator with Copy[Powexp] {
     def name = "Powexp"
     def prettyArgs(inName: String, figs: Int) =
@@ -810,7 +828,8 @@ object Approximator {
       )
     val parameters = Array(offset, amplitude, rate, alpha)
     def copy = new Powexp(parameters(0), parameters(1), parameters(2), parameters(3))
-    def apply(t: Double) = parameters(0) + parameters(1) * math.exp(rate * (if (parameters(3)==1) t else math.pow(math.abs(t), parameters(3))))
+    def apply(t: Double) = 
+      parameters(0) + parameters(1) * math.exp(parameters(2) * (if (parameters(3)==1) t else math.pow(math.abs(t), parameters(3))))
     override def toString = f"x = ${parameters(0)} + ${parameters(1)}*e^[${parameters(2)}*t^(${parameters(3)})]"
   }
   object Powexp extends ApproximatorCompanion[Powexp] {
