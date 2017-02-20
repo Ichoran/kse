@@ -795,6 +795,30 @@ object Approximator {
     }
   }
 
+  final class Powexp(offset: Double, amplitude: Double, rate: Double, alpha: Double) extends Approximator with Copy[Powexp] {
+    def name = "Powexp"
+    def prettyArgs(inName: String, figs: Int) =
+      Constant.prettyValue(parameters(0), figs) + " + " + Constant.prettyValue(parameters(1), figs) +
+      (
+        if (parameters(3) == 1) " * e^(" + Constant.prettyValue(parameters(2), figs) + "*" + inName + ")"
+        else
+          " * e^[" + Constant.prettyValue(parameters(2), figs) + " * |" + inName + "|^" + 
+          (
+            if (parameters(3) < 0) "(" + Constant.prettyValue(parameters(3), figs) + ")"
+            else Constant.prettyValue(parameters(3), figs)
+          ) + "]"
+      )
+    val parameters = Array(offset, amplitude, rate, alpha)
+    def copy = new Powexp(parameters(0), parameters(1), parameters(2), parameters(3))
+    def apply(t: Double) = parameters(0) + parameters(1) * math.exp(rate * (if (parameters(3)==1) t else math.pow(math.abs(t), parameters(3))))
+    override def toString = f"x = ${parameters(0)} + ${parameters(1)}*e^[${parameters(2)}*t^(${parameters(3)})]"
+  }
+  object Powexp extends ApproximatorCompanion[Powexp] {
+    def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Powexp] = Exponential.guess(ts, xs, finitize).map{ e =>
+      new Powexp(e.parameters(0), e.parameters(1), if (e.parameters(1) closeTo 0) -1e-10 else e.parameters(2)/e.parameters(1), 1.0)
+    }
+  }
+
   final class Bilinear(t0: Double, x0: Double, leftSlope: Double, rightSlope: Double) extends Approximator with Copy[Bilinear] {
     def name = "Bilinear"
     def prettyArgs(inName: String, figs: Int) =

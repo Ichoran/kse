@@ -6,7 +6,9 @@ package stochastic
 
 import scala.math._
 
-abstract class Prng {
+import kse.coll.Copy
+
+abstract class Prng extends Copy[Prng] {
   def Z: Boolean = (L & 0x1) != 0
   def B: Byte = L.toByte
   def S: Short = L.toShort
@@ -223,7 +225,7 @@ object Prng {
   }
 }
 
-abstract class PrngState64 extends Prng {
+abstract class PrngState64 extends Prng with Copy[PrngState64] {
   def state64: Long
   def state = {
     val a = new Array[Byte](8)
@@ -258,8 +260,9 @@ abstract class PrngState64 extends Prng {
 }
 
 // From public domain code by Sebastiano Vigna
-final class ShiftMix64(state0: Long = java.lang.System.nanoTime) extends PrngState64 {
+final class ShiftMix64(state0: Long = java.lang.System.nanoTime) extends PrngState64 with Copy[ShiftMix64] {
   private[this] var myState = state0
+  def copy: ShiftMix64 = new ShiftMix64(myState)
   def state64 = myState
   def setFrom(l: Long): Boolean = { myState = l; true }
   final def L = {
@@ -271,8 +274,9 @@ final class ShiftMix64(state0: Long = java.lang.System.nanoTime) extends PrngSta
 }
 
 // Algorithm taken from PCG generators by Melissa O'Niell (Apache 2 license); RXS M XS 64 variant (one sequence)
-final class Pcg64(state0: Long = java.lang.System.nanoTime) extends PrngState64 {
+final class Pcg64(state0: Long = java.lang.System.nanoTime) extends PrngState64 with Copy[Pcg64] {
   private[this] var myState = state0
+  def copy: Pcg64 = new Pcg64(myState)
   def state64 = myState
   def setFrom(l: Long): Boolean = { myState = l; true }
   final def L = {
