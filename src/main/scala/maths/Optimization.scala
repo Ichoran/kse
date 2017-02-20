@@ -809,7 +809,7 @@ object Approximator {
   }
   object Affexp extends ApproximatorCompanion[Affexp] {
     def guess(ts: Array[Double], xs: Array[Double], finitize: Boolean = true): List[Affexp] = Exponential.guess(ts, xs, finitize).map{ e =>
-      new Affexp(e.parameters(0), e.parameters(1), if (e.parameters(1) closeTo 0) -1e-10 else e.parameters(2)/e.parameters(1), 1.0)
+      new Affexp(e.parameters(0), 0, e.parameters(1), if (e.parameters(1) closeTo 0) -1e-10 else e.parameters(2)/e.parameters(1))
     }
   }
 
