@@ -1809,6 +1809,12 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       */
     def transformValues(f: (String, Json) => Json): Obj
 
+    /** Create a new JSON object with the same keys but different values. 
+      *
+      * The new object will be backed by the same type of collection as the old object.
+      */
+    def mapValues(f: (String, Json) => Json): Obj
+
     /** Counts keys for validation purposes.  Optionally takes a set of keys to consider; otherwise will count all of them. */
     def countKeys(keyset: Option[collection.Set[String]] = None): collection.Map[String, Int]
 
@@ -1962,6 +1968,17 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       }
       else myMap.foreach{ case (k,v) => f(k,v) }
     }
+    def mapValues(f: (String, Json) => Json): Obj =
+      if (myMap ne null) new AtomicObj(null, myMap.map{ case (k,v) => (k, f(k,v)) })
+      else {
+        val a = java.util.Arrays.copyOf(underlying, underlying.length)
+        var i = 0
+        while (i+1 < a.length) {
+          a(i+1) = f(a(i).asInstanceOf[String], a(i+1).asInstanceOf[Json])
+          i += 1
+        }
+        new AtomicObj(a, null)
+      }
     def transformValues(f: (String, Json) => Json): Obj = {
       if (myMap eq null) {
         get() match {
