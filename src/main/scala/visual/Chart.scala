@@ -761,6 +761,68 @@ package chart {
     }
   }
 
+  /** This is just a rotated version of ErrorBarYY.
+    * Note: `vhbias` is (vertical bar width - horizontal bar width)/(horz width + vert width).
+    * The wider of the two is drawn at the stroke width; the other, narrower.
+    */
+  final case class ErrorBarXX(lo: Float, hi: Float, y: Float, across: Float, vhbias: Float, style: Style) extends Shown {
+    override def styled = style.stroky.promoteStrokeOpacity
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
+      implicit val myMag = Magnification.from(mag, xform, Vc(lo, y), Vc(hi, y))
+      val l = xform(Vc(lo, y))
+      val u = xform(Vc(hi, y))
+      val ll = xform(Vc(lo, y-across))
+      val lr = xform(Vc(lo, y+across))
+      val ul = xform(Vc(hi, y-across))
+      val ur = xform(Vc(hi, y+across))
+      if (vhbias >= 0.9995)
+        Indent.V(f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}$show/>") // Entirely horizontal
+      else if (vhbias <= -0.9995) 
+        Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}$show/>")  // Entirely vertical
+      else if (vhbias in (-0.005f, 0.005f))
+        Indent.V(f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)} M ${fm(l)} L ${fm(u)}${q}$show/>")  // All same thickness
+      else {
+        // Lines of different thickness
+        val mcross = if (vhbias >= 0) 1f else (1 + vhbias)/(1 - vhbias)
+        val mriser = if (vhbias <= 0) 1f else (1 - vhbias)/(1 + vhbias)
+        Indent.V(
+          f"<g${showWith(_.generally)}>",
+          f"<path d=${q}M ${fm(ll)} L ${fm(lr)} M ${fm(ul)} L ${fm(ur)}${q}${showWith(_.specifically.scale(mcross))}/>",
+          f"<path d=${q}M ${fm(l)} L ${fm(u)}${q}${showWith(_.specifically.scale(mriser))}/>",
+          f"</g>"
+        )
+      }
+    }
+  }
+
+  final case class ErrorArc(c: Vc, edge: Vc, lo: Vc, hi: Vc, crosswidths: Float, style: Style) extends Shown {
+    override def styled = style.stroky.promoteStrokeOpacity
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
+      implicit val myMag = Magnification.from(mag, xform, c, edge)
+      val cu = xform(c)
+      val eu = xform(edge)
+      val r = (cu dist eu).toFloat
+      val lou = (xform(lo) - cu).hat
+      val hiu = (xform(hi) - cu).hat
+      val arclo = cu + lou*r
+      val archi = cu + hiu*r
+      val arcpart = f"M ${fm(arclo)} A ${fm comma Vc(r,r)} 0 0,0 ${fm comma archi}"
+      if (crosswidths > 0) {
+        val w = crosswidths * style.elements.collectFirst{ case StrokeWidth(x) => x }.getOrElse(1f);
+        val lobarA = arclo - w*lou
+        val lobarB = arclo + w*lou
+        val hibarA = archi - w*hiu
+        val hibarB = archi + w*hiu
+        Indent.V(
+          f"<path d=${q}M ${fm(lobarA)} L ${fm(lobarB)} M ${fm(hibarA)} L ${fm(hibarB)} $arcpart${q}$show/>"
+        )
+      }
+      else Indent.V(
+        f"<path d=${q}$arcpart${q}$show/>"
+      )
+    }
+  }
+
 
   trait Arrowhead {
     def setback: Float
@@ -1813,6 +1875,7 @@ package chartTest {
     {
       import kse.flow._, kse.coll._, kse.coll.packed._, kse.maths._, kse.maths.stats._, kse.maths.stochastic._, kse.jsonal._, JsonConverters._, kse.eio._, kse.visual._, kse.visual.chart._
       val tga, xga, yga = -0.1f
+      val earc = ErrorArc(177 vc 277, 197 vc 297, 197 vc 277, 177 vc 297, 2, Stroke.alpha(Rgba.Black.aTo(0.6f), 3))
       val ah = Option(LineArrow((math.Pi/180).toFloat*30, 3, 0.71f))
       val pie = Pie(Vector(Piece(15, "red", Rgba.Red), Piece(5, "green", Rgba.Green, Rgba.DarkGreen), Piece(0.1f, "gold", Rgba.Gold), Piece(0.3f, "logically blue", Rgba.Empty, Rgba.Blue)), 150 vc 350, 20, Style.empty, Some(math.Pi.toFloat/12))
       val c = Circ(100 vc 100, 20, Fill(Rgba(0, 0.8f, 0)))
@@ -1843,7 +1906,7 @@ package chartTest {
           0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f),
           c, pa, pie.copy(pieces = pie.pieces.dropRight(1).map(p => p.copy(legend = ""))), cbr.copy(ticks = Some((5, 3f, 5f, 0.5f)))
         ),
-        gr
+        gr, earc
       )
     }
   }
