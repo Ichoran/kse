@@ -242,3 +242,102 @@ final class BspTree[A: Tag](minx: Float, miny: Float, nmax: Int, coord: A => Vc)
     }
   }
 }
+
+object Geometric {
+  private def lteqV(a: Vc, b: Vc): Boolean = a.x < b.x || (a.x == b.x && a.y <= b.y)
+
+  private def distinctInPlace(pts: Array[Long]): Int = {
+    var i = 1
+    var n = 0
+    while (i < pts.length) {
+      if (new Vc(pts(i)) != new Vc(pts(n))) {
+        n += 1
+        if (n != i) pts(n) = pts(i)
+      }
+      i += 1
+    }
+    n + 1
+  }
+
+  // To be called _only_ with array of length 3
+  private def fixHullOrder(points: Array[Long]): Array[Long] = {
+    val p0 = new Vc(points(0))
+    val p1 = new Vc(points(1))
+    val p2 = new Vc(points(2))
+    ((p1 - p0) X (p2 - p0)) match {
+      case 0 => return Array(p0.underlying, p2.underlying)
+      case x if x < 0 => points(1) = p2.underlying; points(2) = p1.underlying
+      case _ =>
+    }
+    points
+  }
+
+  /*  In:
+        dir is +- 1
+        end is the last element
+        pts are Vcs
+        pi is the last index in pts that was a potential hull point (must not be end)
+        outer stores the possible outer hull points so far
+        oi is the length so far
+      Out:
+        outer(oi) is set to the next plausible hull point
+        return value is the new pi, i.e. how far we got to find the next hull point
+      How it works:
+        Advance one point.
+        Try advancing another and use cross product to tell if it's more rightwards.
+        If no, stop.
+        If yes, make that be our hull point, and repeat.
+  */
+  private def myHullAdvance(dir: Int, end: Int, pts: Array[Long], pi: Int, outer: Array[Long], oi: Int): Int = {
+    val a = new Vc(pts(pi))
+    var b = new Vc(pts(pi + dir))
+    var qi = pi + dir
+    var more = true
+    while (more && qi != end) {
+      qi += dir
+      val c = new Vc(pts(qi))
+      if (((b - a) X (c - a)) <= 0) b = c
+      else { more = false; qi -= dir }
+    }
+    outer(oi) = b.underlying
+    qi
+  }
+
+  @annotation.tailrec
+  private def myHullConsolidate(outer: Array[Long], oi: Int): Int = {
+    if (oi < 3) oi
+    else {
+      val v = new Vc(outer(oi-3))
+      if (((new Vc(outer(oi-2)) - v) X (new Vc(outer(oi-1)) - v)) > 0) oi
+      else {
+        outer(oi-2) = outer(oi-1)
+        myHullConsolidate(outer, oi-1) 
+      }
+    }
+  }
+
+  /** Computes the convex hull of the array of points using the Andrew method */
+  def hull(points: Array[Long]): Array[Long] = {
+    if (points.length == 0) return points
+    if (points.length == 1) return java.util.Arrays.copyOf(points, points.length)
+
+    val pts = points.sortWith((u, v) => lteqV(new Vc(u), new Vc(v)))
+    val n = distinctInPlace(pts)
+    if (n < 3) return java.util.Arrays.copyOf(pts, n)
+    if (n == 3) return fixHullOrder(pts)
+
+    val outer = new Array[Long](n+1)
+    outer(0) = pts(0)
+    outer(1) = pts(1)
+    var i, j = 1
+    while (i != n - 1) {
+      i = myHullAdvance(1, n - 1, pts, i, outer, j)
+      j = myHullConsolidate(outer, j+1)
+    }
+    while (i != 0) {
+      i = myHullAdvance(-1, 0, pts, i, outer, j)
+      j = myHullConsolidate(outer, j+1)
+    }
+    java.util.Arrays.copyOf(outer, j-1)  // j-1 drops the last point, which is equal to the first one
+    }
+}

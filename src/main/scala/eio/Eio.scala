@@ -19,6 +19,7 @@ import kse.jsonal._
 package object eio {
   import java.io._
   import java.nio._
+  import java.nio.file.{Path, Files, FileSystem, FileSystems, Paths}
   import java.util.zip._
   
   implicit class ConvertSafelyFromByte(private val underlying: Byte) extends AnyVal {
@@ -139,6 +140,12 @@ package object eio {
   implicit class StringAsFile(private val underlying: String) extends AnyVal {
     def file = new File(underlying)
     def \:(parent: File) = new File(parent, underlying)
+  }
+
+  implicit class StringAsPath(private val underlying: String) extends AnyVal {
+    def path = try { Some(FileSystems.getDefault.getPath(underlying)) } catch { case ipe: file.InvalidPathException => None }
+    def getPath = FileSystems.getDefault.getPath(underlying)
+    def grabPath(implicit oops: Oops): Path = try { FileSystems.getDefault.getPath(underlying) } catch { case ipe: file.InvalidPathException => OOPS }
   }
   
   implicit class ZipEntryProperPaths(private val underlying: ZipEntry) extends AnyVal {
