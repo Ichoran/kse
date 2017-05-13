@@ -196,6 +196,30 @@ abstract class Prng extends Copy[Prng] {
     }
     a
   }
+  def shuffle(a: Array[Byte]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
+  def shuffle(a: Array[Short]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
+  def shuffle(a: Array[Char]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
+  def shuffle(a: Array[Int]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
+  def shuffle(a: Array[Float]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
+  def shuffle(a: Array[Long]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
+  def shuffle(a: Array[Double]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
+  def shuffle[A <: AnyRef](a: Array[A]) {
+    var i = a.length - 1; while (i > 0) { val j = this % (i+1); if (j != i) { val x = a(j); a(j) = a(i); a(i) = x }; i -= 1 }
+  }
   def state: Array[Byte]
   def bits: Int
   def setFrom(bin: Array[Byte]): Boolean
