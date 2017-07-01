@@ -409,6 +409,117 @@ package coll {
       def value = op(a.value, b.value, c.value, d.value, e.value, f.value, g.value, h.value, i.value)
     }
   }
+
+  /*
+  sealed abstract class RingBuffer[@specialized(Int, Long, Float, Double) A] {
+    protected var underlying: Array[A] = null
+    protected var i0: Int = -1
+    protected var i1: Int = -1
+    final def internalIndex(i: Int): Int =
+      if (i0 < 0) -1
+      else if (i < 0) i1 + i + 1 match {
+        case x if x < 0 =>
+          if (i0 <= i1) -1
+          else {
+            val y = x + underlying.length
+            if (y >= i0) y else -1
+          }
+        case x          =>
+          if (i0 > i1 || x >= i0) x else -1
+      }
+      else i0 + i match {
+        case x if x >= underlying.length =>
+          if (i0 <= i1) -1
+          else {
+            val y = x - underlying.length
+            if (y <= i1) y else -1
+          }
+        case x =>
+          if (i0 > i1 || x <= i1) x else -1
+      }
+    def intoArray(a: Array[A]): Unit
+    def makeArray(n: Int): Array[A]
+    final def embiggen(): this.type = {
+      val m = length
+      val n = 0x7FFFFFE & ((m << 1) | m | 4)
+      val a = makeArray(n)
+      intoArray(a)
+      underlying = a
+      my0 = if (m == 0) -1 else 0
+      my1 = m-1
+      this
+    }
+    final def shrinkwrap(): this.type = {
+      val m = length
+      if (m == underlying.length) this
+      else {
+        val a = makeArray(m)
+        intoArray(a)
+        underlying = a
+        my0 = if (m == 0) -1 else 0
+        my1 = m - 1
+        this
+      }
+    }
+    def apply(i: Int): A
+    def update(i: Int, a: A): Unit
+    def push(a: A): this.type
+    def pop(): A
+    def prepush(a: Int): this.type
+    def prepop(): A
+    final def isEmpty = i0 < 0
+    final def length: Int = if (i0 < 0) 0 else if (i1 >= i0) 1+i1-i0 else underlying.length-(i1-i0+1)
+    def iterator(): Iterator[A] = new collection.AbstractIterator[A] {
+      var i = i0
+      val stop = i1
+      val buf = underlying
+      def hasNext = i >= 0
+      def next = {
+        val ans = buf(i)
+        if (i == i1) i = -1
+        else {
+          i += 1
+          if (i >= buf.length) i = 0
+        }
+        ans
+      }
+    }
+    def map[@specialized(Int, Long, Float, Double) B](f: A => B)(implicit tag: reflect.ClassTag[B]): RingBuffer[B]
+    def filterMe(f: A => Boolean, sense: Boolean = true): this.type
+    def mapMe(f: A => A): this.type
+    def toArray: Array[A]
+  }
+  object RingBuffer {
+    final class RingOfInt private (initialBuffer: Array[Int], initial0: Int, initial1: Int) extends RingBuffer[Int] {
+      underlying = initialBuffer
+      i0 = initial0
+      i1 = initial1
+      def intoArray(a: Array[Int]) {
+        if (i0 <= i1) System.arraycopy(myBuffer, i0, a, 0, m)
+        else {
+          System.arraycopy(myBuffer, i0, a, 0, myBuffer.length - i0)
+          System.arraycopy(myBuffer, 0, a, myBuffer.length - i0, i1 + 1)
+        }
+      }
+      def apply(i: Int) = myBuffer(internalIndex(i))
+      def update(i: Int, a: Int) { myBuffer(internalIndex(i)) = a }
+      def push(a: Int): this.type = {
+        var i = i1+1
+        if (i == myBuffer.length) i = 0
+        if (i == i0) {
+          embiggen()
+          i1 += 1
+        }
+        else i1 = i
+        myBuffer(i1) = a
+        this
+      }
+      def pop(a: Int): Int = {
+        ???
+      }
+    }
+  }
+  */
 }
 
 package object coll {

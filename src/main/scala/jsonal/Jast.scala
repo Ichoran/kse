@@ -2569,7 +2569,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       /** Adds to this JSON object the contents of another JSON object. */
       def ~~(o: Obj): this.type = {
         val ao = o.asInstanceOf[AtomicObj]
-        if (ao.underlying ne null) { ao.foreach{ case (k,v) => this ~ (k,v) }; this }
+        if (ao.underlying eq null) { ao.foreach{ case (k,v) => this ~ (k,v) }; this }
         else appendFrom(ao.underlying, 0, ao.size)
       }
     }
