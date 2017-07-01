@@ -2474,9 +2474,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
             var k = a.length
             while (i >= k - m && k < 0x7FFFFFFE) k = ((k << 1) | k) & 0x7FFFFFFE
             a = java.util.Arrays.copyOf(a, k)
-            System.arraycopy(that, i0, a, i, m)
-            i += m
           }
+          System.arraycopy(that, i0, a, i, m)
+          i += m
         }
         this
       }
