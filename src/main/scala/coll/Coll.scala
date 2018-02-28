@@ -762,4 +762,42 @@ package object coll {
       (bfa.result(), bfb.result(), bfc.result(), bfd.result(), bfe.result(), bff.result())
     }
   }
+
+  implicit class CanSplitWithIndicator[A, CC[A]](xs: CC[A])(implicit trav: CC[A] => collection.TraversableOnce[A]) {
+    import collection.generic.CanBuildFrom
+    def equivalenceSplit[B](indicator: A => B)(implicit cbf: CanBuildFrom[CC[A], A, CC[A]], cbf2: CanBuildFrom[CC[A], CC[A], CC[CC[A]]]): CC[CC[A]] = {
+      val ccb = cbf2()
+      var first = true
+      var last = null.asInstanceOf[B]
+      var cb: collection.mutable.Builder[A, CC[A]] = null
+      trav(xs).foreach{ x =>
+        val i = indicator(x)
+        if (first || last != i) {
+          if (!first) ccb += cb.result()
+          else first = false
+          cb = cbf()
+          cb += x
+          last = i
+        }
+        else cb += x
+      }
+      if (cb != null) ccb += cb.result()
+      ccb.result()
+    }
+  }
+  implicit class StringCanSplitWithIndicator(xs: String) {
+    import collection.generic.CanBuildFrom
+    def equivalenceSplit[B](indicator: Char => B): Array[String] = {
+      val sb = Array.newBuilder[String]
+      var i = 0
+      while (i < xs.length) {
+        val c = xs.charAt(i)
+        var j = i + 1
+        while (j < xs.length && xs.charAt(j) == c) j += 1
+        sb += xs.substring(i, j)
+        i = j
+      }
+      sb.result()
+    }
+  }
 }

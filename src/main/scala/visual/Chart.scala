@@ -1548,6 +1548,35 @@ package chart {
     }
   }
 
+  final case class Literal(literal: String) extends Shown {
+    def style = Style.empty
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
+      val offset = xform(Vc(0, 0))
+      val xcol   = xform(Vc(1, 0)) - offset
+      val ycol   = xform(Vc(0, 1)) - offset
+      val unscaled =
+        (xcol.x-1).abs < 1e-4 && xcol.y.abs < 1e-6 &&
+        ycol.x.abs < 1e-6 && (ycol.y-1).abs < 1e-4
+      val boring = offset.x.abs < 1e-6 && offset.y.abs < 1e-6 && unscaled
+
+      val indent = literal.lines.map(line => if (boring) Indent(line) else Indent(line, 1))
+      (
+        if (boring) indent
+        else {
+          Iterator(Indent(
+            """<g transform="""" + {
+              if (unscaled) f"translate(${offset.x}%.6f ${offset.y}%.6f)"
+              else "matrix(%.6f %.6f %.6f %.6f %.6f %.6f)".format(xcol.x, ycol.x, offset.x, xcol.y, ycol.y, offset.y)
+            } +
+            """">"""
+          )) ++
+          indent ++
+          Iterator(Indent("</g>"))
+        }
+      ).toVector
+    }
+  }
+
   final case class Grouping(stuff: Seq[InSvg]) extends Shown {
     def style = Style.empty
     def this(thing: InSvg, morestuff: InSvg*) = this(thing +: morestuff)
