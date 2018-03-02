@@ -94,6 +94,8 @@ final class Vc(val underlying: Long) extends AnyVal {
   def toPoint = new java.awt.Point(math.round(x), math.round(y))
   def toPoint2D = new java.awt.geom.Point2D.Float(x, y)
   def toDimension = new java.awt.Dimension(math.round(x), math.round(y))
+
+  def L: Long = underlying
 }
 
 object Vc {

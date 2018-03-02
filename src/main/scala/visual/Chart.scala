@@ -17,6 +17,16 @@ import kse.eio._
 package object chart {
   private[chart] val q = "\""
 
+  /** Produce SVG with a standard conversion factor of 96 pixels per inch */
+  def svgMm(size: Vc, stuff: InSvg*): Vector[Indent] =
+    Vector(
+      """<svg xmlns="http://www.w3.org/2000/svg" width="%.2fmm" height="%.2fmm" viewBox="0 0 %.2f %.2f">""".
+        format(size.x*96/25.4, size.y*96/25.4, size.x, size.y),
+      "<g>"
+    ).map(x => Indent(x)) ++
+    stuff.flatMap(_.inSvg(Xform.flipy(size.y), None)(DefaultFormatter)).map(x => x.in) ++
+    Vector("</g>", "</svg>").map(x => Indent(x))
+
   def svg(size: Vc, stuff: InSvg*): Vector[Indent] =
     Vector("""<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f">""".format(size.x, size.y), "<g>").map(x => Indent(x)) ++
     stuff.flatMap(_.inSvg(Xform.flipy(size.y), None)(DefaultFormatter)).map(x => x.in) ++
@@ -1548,25 +1558,29 @@ package chart {
     }
   }
 
-  final case class Literal(literal: String) extends Shown {
+  final case class Literal(literal: String, inverted: Boolean = true, rooted: Vc = Vc(0, 0)) extends Shown {
     def style = Style.empty
     def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter): Vector[Indent] = {
       val offset = xform(Vc(0, 0))
       val xcol   = xform(Vc(1, 0)) - offset
       val ycol   = xform(Vc(0, 1)) - offset
+      val ocol   = offset - (if (inverted) Vc(rooted.x, -rooted.y) else rooted)
       val unscaled =
         (xcol.x-1).abs < 1e-4 && xcol.y.abs < 1e-6 &&
         ycol.x.abs < 1e-6 && (ycol.y-1).abs < 1e-4
-      val boring = offset.x.abs < 1e-6 && offset.y.abs < 1e-6 && unscaled
+      val boring = ocol.x.abs < 1e-6 && ocol.y.abs < 1e-6 && unscaled
 
-      val indent = literal.lines.map(line => if (boring) Indent(line) else Indent(line, 1))
+      val indent = literal.lines.map(line => if (boring && !inverted) Indent(line) else Indent(line, 1))
       (
-        if (boring) indent
+        if (boring && !inverted) indent
         else {
           Iterator(Indent(
             """<g transform="""" + {
-              if (unscaled) f"translate(${offset.x}%.6f ${offset.y}%.6f)"
-              else "matrix(%.6f %.6f %.6f %.6f %.6f %.6f)".format(xcol.x, ycol.x, offset.x, xcol.y, ycol.y, offset.y)
+              if (unscaled && !inverted) f"translate(${ocol.x}%.6f ${ocol.y}%.6f)"
+              else {
+                val inv = if (inverted) -1 else 1
+                "matrix(%.6f %.6f %.6f %.6f %.6f %.6f)".format(xcol.x, xcol.y, ycol.x*inv, ycol.y*inv, ocol.x, ocol.y)
+              }
             } +
             """">"""
           )) ++
@@ -1623,6 +1637,8 @@ package chart {
       new Assembly(translate, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
     def apply(stuff: InSvg*) =
       new Assembly(0 vc 0, 1 vc 1, 0 vc 0, None, Style.empty, stuff)
+    def at(newOrigin: Vc, stuff: InSvg*) =
+      new Assembly(0 vc 0, 1 vc 1, newOrigin, None, Style.empty, stuff)
   }
 
   final case class Titling(
