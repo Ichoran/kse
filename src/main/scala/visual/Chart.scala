@@ -17,14 +17,14 @@ import kse.eio._
 package object chart {
   private[chart] val q = "\""
 
-  /** Produce SVG with a standard conversion factor of 96 pixels per inch */
-  def svgMm(size: Vc, stuff: InSvg*): Vector[Indent] =
+  /** Produce SVG with a user-specified conversion factor between mm and pixels */
+  def svgMm(sizeInMm: Vc, pixelsPerMm: Float, stuff: InSvg*): Vector[Indent] =
     Vector(
       """<svg xmlns="http://www.w3.org/2000/svg" width="%.2fmm" height="%.2fmm" viewBox="0 0 %.2f %.2f">""".
-        format(size.x*96/25.4, size.y*96/25.4, size.x, size.y),
+        format(sizeInMm.x, sizeInMm.y, sizeInMm.x*pixelsPerMm, sizeInMm.y*pixelsPerMm),
       "<g>"
     ).map(x => Indent(x)) ++
-    stuff.flatMap(_.inSvg(Xform.flipy(size.y), None)(DefaultFormatter)).map(x => x.in) ++
+    stuff.flatMap(_.inSvg(Xform.flipy(sizeInMm.y*pixelsPerMm), None)(DefaultFormatter)).map(x => x.in) ++
     Vector("</g>", "</svg>").map(x => Indent(x))
 
   def svg(size: Vc, stuff: InSvg*): Vector[Indent] =
@@ -192,6 +192,22 @@ package chart {
       Indent.V(
         f"<circle${fm.vquote(ctr, "cx", "cy")}${fm("r", rad)}$show/>"
       )
+    }
+  }
+
+  final case class Oval(c: Vc, ab: Vc, style: Style) extends Shown {
+    override def styled = style.shapely
+    def inSvg(xform: Xform, mag: Option[Float => Float])(implicit fm: Formatter = DefaultFormatter): Vector[Indent] = {
+      if (!ab.finite || !c.finite) return Vector.empty
+      val ctr = xform(c)
+      val rad = Vc((xform(c + Vc(ab.x, 0))-ctr).len.toFloat, (xform(c + Vc(0, ab.y))-ctr).len.toFloat)
+      implicit val myMag = Magnification.from(mag, xform, c)
+      if (!rad.finite || (rad.x == 0 && rad.y == 0) || !ctr.finite)
+        Vector.empty
+      else if (rad.x == 0 || rad.y == 0)
+        Indent.V(f"<line${fm.vquote(ctr-rad, "x1", "y1")}${fm.vquote(ctr+rad, "x2", "y2")}$show/>")
+      else
+        Indent.V(f"<ellipse${fm.vquote(ctr, "cx", "cy")}${fm.vquote(rad, "rx", "ry")}$show/>")
     }
   }
 
