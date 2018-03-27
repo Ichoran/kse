@@ -161,6 +161,24 @@ object JsonConverters extends PriorityTwoJsonConverters {
              jf.jsonize(x._6) ~ jg.jsonize(x._7) ~ jh.jsonize(x._8) ~ ji.jsonize(x._9) ~ Json
   }
 
+  implicit val jsonFromJson: FromJson[Json] = new FromJson[Json] {
+    def parse(js: Json): Either[JastError, Json] = Right(js)
+  }
+
+  implicit val jsonObjFromJson: FromJson[Json.Obj] = new FromJson[Json.Obj] {
+    def parse(js: Json): Either[JastError, Json.Obj] = js match {
+      case o: Json.Obj => Right(o)
+      case _ => Left(JastError("Not a JSON object"))
+    }
+  }
+
+  implicit val jsonArrFromJson: FromJson[Json.Arr] = new FromJson[Json.Arr] {
+    def parse(js: Json): Either[JastError, Json.Arr] = js match {
+      case a: Json.Arr => Right(a)
+      case _ => Left(JastError("Not a JSON array"))
+    }
+  }
+
   implicit val booleanFromJson: FromJson[Boolean] = new FromJson[Boolean] {
     def parse(js: Json): Either[JastError, Boolean] = js.bool match {
       case None => Left(JastError("Not a boolean"))
