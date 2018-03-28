@@ -27,9 +27,23 @@ package object chart {
     stuff.flatMap(_.inSvg(Xform.flipy(sizeInMm.y*pixelsPerMm), None)(DefaultFormatter)).map(x => x.in) ++
     Vector("</g>", "</svg>").map(x => Indent(x))
 
+  def svgMmInvertedY(sizeInMm: Vc, pixelsPerMm: Float, stuff: InSvg*): Vector[Indent] =
+    Vector(
+      """<svg xmlns="http://www.w3.org/2000/svg" width="%.2fmm" height="%.2fmm" viewBox="0 0 %.2f %.2f">""".
+        format(sizeInMm.x, sizeInMm.y, sizeInMm.x*pixelsPerMm, sizeInMm.y*pixelsPerMm),
+      "<g>"
+    ).map(x => Indent(x)) ++
+    stuff.flatMap(_.inSvg(Xform.identity, None)(DefaultFormatter)).map(x => x.in) ++
+    Vector("</g>", "</svg>").map(x => Indent(x))
+
   def svg(size: Vc, stuff: InSvg*): Vector[Indent] =
     Vector("""<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f">""".format(size.x, size.y), "<g>").map(x => Indent(x)) ++
     stuff.flatMap(_.inSvg(Xform.flipy(size.y), None)(DefaultFormatter)).map(x => x.in) ++
+    Vector("</g>", "</svg>").map(x => Indent(x))
+
+  def svgInvertedY(size: Vc, stuff: InSvg*): Vector[Indent] =
+    Vector("""<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f">""".format(size.x, size.y), "<g>").map(x => Indent(x)) ++
+    stuff.flatMap(_.inSvg(Xform.identity, None)(DefaultFormatter)).map(x => x.in) ++
     Vector("</g>", "</svg>").map(x => Indent(x))
 
   def svgHtml(size: Vc, bg: Rgba, stuff: InSvg*): Vector[String] = (
@@ -39,6 +53,14 @@ package object chart {
   ).map(_.toString)
 
   def svgHtml(size: Vc, stuff: InSvg*): Vector[String] = svgHtml(size, Rgba.Empty, stuff: _*)
+
+  def svgHtmlInvertedY(size: Vc, bg: Rgba, stuff: InSvg*): Vector[String] = (
+    Vector(Indent("<html>"), Indent(f"<body${if (!(bg.a closeTo 0)) f" bgcolor=$q${DefaultFormatter(bg)}$q" else ""}>")) ++
+    svgInvertedY(size, stuff: _*).map(x => x.in) ++
+    Vector(Indent("</body>"), Indent("</html>"))
+  ).map(_.toString)
+
+  def svgHtmlInvertedY(size: Vc, stuff: InSvg*): Vector[String] = svgHtmlInvertedY(size, Rgba.Empty, stuff: _*)
 
   def quick(i: InSvg*) {
     val svg = 
@@ -548,6 +570,18 @@ package chart {
     def dotted[A](xyrs: Array[A], color: Rgba, size: Float)(f: A => Float, g: A => Float, h: A => Float): Grouping = dotted(xyrs, Stroke.alpha(color, size), Fill.alpha(color))(f, g, h)
     def dotted(n: Int, x: Int => Float, y: Int => Float, r: Float, color: Rgba, size: Float): Grouping = dotted(n, x, y, r, Stroke.alpha(color, size), Fill.alpha(color))
     def dotted(n: Int, x: Int => Float, y: Int => Float, r: Int => Float, color: Rgba, size: Float): Grouping = dotted(n, x, y, r, Stroke.alpha(color, size), Fill.alpha(color))
+  }
+  object Line {
+    def apply(v0: Vc, v1: Vc, style: Style): DataLine =
+      new DataLine(Array(v0.underlying, v1.underlying), style)
+    def apply(v0: Vc, v1: Vc, v2: Vc, style: Style): DataLine =
+      new DataLine(Array(v0.underlying, v1.underlying, v2.underlying), style)
+    def apply(v0: Vc, v1: Vc, v2: Vc, v3: Vc, style: Style): DataLine =
+      new DataLine(Array(v0.underlying, v1.underlying, v2.underlying, v3.underlying), style)
+    def apply(v0: Vc, v1: Vc, v2: Vc, v3: Vc, v4: Vc, style: Style): DataLine =
+      new DataLine(Array(v0.underlying, v1.underlying, v2.underlying, v3.underlying, v4.underlying), style)
+    def apply(v0: Vc, v1: Vc, v2: Vc, v3: Vc, v4: Vc, v5: Vc, style: Style): DataLine =
+      new DataLine(Array(v0.underlying, v1.underlying, v2.underlying, v3.underlying, v4.underlying, v5.underlying), style)
   }
 
   final case class DataRange(xs: Array[Float], ylos: Array[Float], yhis: Array[Float], style: Style) extends Shown {

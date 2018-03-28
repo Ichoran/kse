@@ -242,6 +242,8 @@ package flow {
     implicit val impl_HopSpec2LongInt: HopSpecAdapter2[Long, Int] = new HopSpec2LongInt
     implicit val impl_HopSpec2LongLong: HopSpecAdapter2[Long, Long] = new HopSpec2LongLong
   }
+
+  sealed trait FunctionArgument {}
 }
 
 /** A nice tutorial should go here.  For now, just browse everything. */
@@ -655,4 +657,87 @@ package object flow extends Priority1HopSpecs {
   
   /** The same as `safeHop` but uses a type key for the hop instance. */
   def safeHopKey[X] = GenericSafeDispatcher.asInstanceOf[SafeDispatcher[X]]
+
+
+  implicit final case object FnArg1 extends FunctionArgument { def from[A, Z](f: A => Z) = f }
+  implicit final case object FnArg2 extends FunctionArgument { def from[A, B, Z](f: (A, B) => Z) = f }
+  implicit final case object FnArg3 extends FunctionArgument { def from[A, B, C, Z](f: (A, B, C) => Z) = f }
+  implicit final case object FnArg4 extends FunctionArgument { def from[A, B, C, D, Z](f: (A, B, C, D) => Z) = f }
+  implicit final case object FnArg5 extends FunctionArgument { def from[A, B, C, D, E, Z](f: (A, B, C, D, E) => Z) = f }
+  implicit final case object FnArg6 extends FunctionArgument { def from[A, B, C, D, E, F, Z](f: (A, B, C, D, E, F) => Z) = f }
+  implicit final case object FnArg7 extends FunctionArgument { def from[A, B, C, D, E, F, G, Z](f: (A, B, C, D, E, F, G) => Z) = f }
+  implicit final case object FnArg8 extends FunctionArgument { def from[A, B, C, D, E, F, G, H, Z](f: (A, B, C, D, E, F, G, H) => Z) = f }
+  implicit final case object FnArg9 extends FunctionArgument { def from[A, B, C, D, E, F, G, H, I, Z](f: (A, B, C, D, E, F, G, H, I) => Z) = f }
+
+  implicit class PartiallyApplyFunction1[A, Z](private val function: A => Z) extends AnyVal {
+    def fix(default: A): () => Z = () => function(default)
+  }
+
+  implicit class PartiallyApplyFunction2[A, B, Z](private val function: (A, B) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): B => Z = (b: B) => function(default, b)
+    def fix(default: B)(implicit arg: FnArg2.type): A => Z = (a: A) => function(a, default)
+  }
+
+  implicit class PartiallyApplyFunction3[A, B, C, Z](private val function: (A, B, C) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): (B, C) => Z = (b: B, c: C) => function(default, b, c)
+    def fix(default: B)(implicit arg: FnArg2.type): (A, C) => Z = (a: A, c: C) => function(a, default, c)
+    def fix(default: C)(implicit arg: FnArg3.type): (A, B) => Z = (a: A, b: B) => function(a, b, default)
+  }
+
+  implicit class PartiallyApplyFunction4[A, B, C, D, Z](private val function: (A, B, C, D) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): (B, C, D) => Z = (b: B, c: C, d: D) => function(default, b, c, d)
+    def fix(default: B)(implicit arg: FnArg2.type): (A, C, D) => Z = (a: A, c: C, d: D) => function(a, default, c, d)
+    def fix(default: C)(implicit arg: FnArg3.type): (A, B, D) => Z = (a: A, b: B, d: D) => function(a, b, default, d)
+    def fix(default: D)(implicit arg: FnArg4.type): (A, B, C) => Z = (a: A, b: B, c: C) => function(a, b, c, default)
+  }
+
+  implicit class PartiallyApplyFunction5[A, B, C, D, E, Z](private val function: (A, B, C, D, E) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): (B, C, D, E) => Z = (b: B, c: C, d: D, e: E) => function(default, b, c, d, e)
+    def fix(default: B)(implicit arg: FnArg2.type): (A, C, D, E) => Z = (a: A, c: C, d: D, e: E) => function(a, default, c, d, e)
+    def fix(default: C)(implicit arg: FnArg3.type): (A, B, D, E) => Z = (a: A, b: B, d: D, e: E) => function(a, b, default, d, e)
+    def fix(default: D)(implicit arg: FnArg4.type): (A, B, C, E) => Z = (a: A, b: B, c: C, e: E) => function(a, b, c, default, e)
+    def fix(default: E)(implicit arg: FnArg5.type): (A, B, C, D) => Z = (a: A, b: B, c: C, d: D) => function(a, b, c, d, default)
+  }
+
+  implicit class PartiallyApplyFunction6[A, B, C, D, E, F, Z](private val function: (A, B, C, D, E, F) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): (B, C, D, E, F) => Z = (b: B, c: C, d: D, e: E, f: F) => function(default, b, c, d, e, f)
+    def fix(default: B)(implicit arg: FnArg2.type): (A, C, D, E, F) => Z = (a: A, c: C, d: D, e: E, f: F) => function(a, default, c, d, e, f)
+    def fix(default: C)(implicit arg: FnArg3.type): (A, B, D, E, F) => Z = (a: A, b: B, d: D, e: E, f: F) => function(a, b, default, d, e, f)
+    def fix(default: D)(implicit arg: FnArg4.type): (A, B, C, E, F) => Z = (a: A, b: B, c: C, e: E, f: F) => function(a, b, c, default, e, f)
+    def fix(default: E)(implicit arg: FnArg5.type): (A, B, C, D, F) => Z = (a: A, b: B, c: C, d: D, f: F) => function(a, b, c, d, default, f)
+    def fix(default: F)(implicit arg: FnArg6.type): (A, B, C, D, E) => Z = (a: A, b: B, c: C, d: D, e: E) => function(a, b, c, d, e, default)
+  }
+
+  implicit class PartiallyApplyFunction7[A, B, C, D, E, F, G, Z](private val function: (A, B, C, D, E, F, G) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): (B, C, D, E, F, G) => Z = (b: B, c: C, d: D, e: E, f: F, g: G) => function(default, b, c, d, e, f, g)
+    def fix(default: B)(implicit arg: FnArg2.type): (A, C, D, E, F, G) => Z = (a: A, c: C, d: D, e: E, f: F, g: G) => function(a, default, c, d, e, f, g)
+    def fix(default: C)(implicit arg: FnArg3.type): (A, B, D, E, F, G) => Z = (a: A, b: B, d: D, e: E, f: F, g: G) => function(a, b, default, d, e, f, g)
+    def fix(default: D)(implicit arg: FnArg4.type): (A, B, C, E, F, G) => Z = (a: A, b: B, c: C, e: E, f: F, g: G) => function(a, b, c, default, e, f, g)
+    def fix(default: E)(implicit arg: FnArg5.type): (A, B, C, D, F, G) => Z = (a: A, b: B, c: C, d: D, f: F, g: G) => function(a, b, c, d, default, f, g)
+    def fix(default: F)(implicit arg: FnArg6.type): (A, B, C, D, E, G) => Z = (a: A, b: B, c: C, d: D, e: E, g: G) => function(a, b, c, d, e, default, g)
+    def fix(default: G)(implicit arg: FnArg7.type): (A, B, C, D, E, F) => Z = (a: A, b: B, c: C, d: D, e: E, f: F) => function(a, b, c, d, e, f, default)
+  }
+
+  implicit class PartiallyApplyFunction8[A, B, C, D, E, F, G, H, Z](private val function: (A, B, C, D, E, F, G, H) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): (B, C, D, E, F, G, H) => Z = (b: B, c: C, d: D, e: E, f: F, g: G, h: H) => function(default, b, c, d, e, f, g, h)
+    def fix(default: B)(implicit arg: FnArg2.type): (A, C, D, E, F, G, H) => Z = (a: A, c: C, d: D, e: E, f: F, g: G, h: H) => function(a, default, c, d, e, f, g, h)
+    def fix(default: C)(implicit arg: FnArg3.type): (A, B, D, E, F, G, H) => Z = (a: A, b: B, d: D, e: E, f: F, g: G, h: H) => function(a, b, default, d, e, f, g, h)
+    def fix(default: D)(implicit arg: FnArg4.type): (A, B, C, E, F, G, H) => Z = (a: A, b: B, c: C, e: E, f: F, g: G, h: H) => function(a, b, c, default, e, f, g, h)
+    def fix(default: E)(implicit arg: FnArg5.type): (A, B, C, D, F, G, H) => Z = (a: A, b: B, c: C, d: D, f: F, g: G, h: H) => function(a, b, c, d, default, f, g, h)
+    def fix(default: F)(implicit arg: FnArg6.type): (A, B, C, D, E, G, H) => Z = (a: A, b: B, c: C, d: D, e: E, g: G, h: H) => function(a, b, c, d, e, default, g, h)
+    def fix(default: G)(implicit arg: FnArg7.type): (A, B, C, D, E, F, H) => Z = (a: A, b: B, c: C, d: D, e: E, f: F, h: H) => function(a, b, c, d, e, f, default, h)
+    def fix(default: H)(implicit arg: FnArg8.type): (A, B, C, D, E, F, G) => Z = (a: A, b: B, c: C, d: D, e: E, f: F, g: G) => function(a, b, c, d, e, f, g, default)
+  }
+
+  implicit class PartiallyApplyFunction9[A, B, C, D, E, F, G, H, I, Z](private val function: (A, B, C, D, E, F, G, H, I) => Z) extends AnyVal {
+    def fix(default: A)(implicit arg: FnArg1.type): (B, C, D, E, F, G, H, I) => Z = (b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I) => function(default, b, c, d, e, f, g, h, i)
+    def fix(default: B)(implicit arg: FnArg2.type): (A, C, D, E, F, G, H, I) => Z = (a: A, c: C, d: D, e: E, f: F, g: G, h: H, i: I) => function(a, default, c, d, e, f, g, h, i)
+    def fix(default: C)(implicit arg: FnArg3.type): (A, B, D, E, F, G, H, I) => Z = (a: A, b: B, d: D, e: E, f: F, g: G, h: H, i: I) => function(a, b, default, d, e, f, g, h, i)
+    def fix(default: D)(implicit arg: FnArg4.type): (A, B, C, E, F, G, H, I) => Z = (a: A, b: B, c: C, e: E, f: F, g: G, h: H, i: I) => function(a, b, c, default, e, f, g, h, i)
+    def fix(default: E)(implicit arg: FnArg5.type): (A, B, C, D, F, G, H, I) => Z = (a: A, b: B, c: C, d: D, f: F, g: G, h: H, i: I) => function(a, b, c, d, default, f, g, h, i)
+    def fix(default: F)(implicit arg: FnArg6.type): (A, B, C, D, E, G, H, I) => Z = (a: A, b: B, c: C, d: D, e: E, g: G, h: H, i: I) => function(a, b, c, d, e, default, g, h, i)
+    def fix(default: G)(implicit arg: FnArg7.type): (A, B, C, D, E, F, H, I) => Z = (a: A, b: B, c: C, d: D, e: E, f: F, h: H, i: I) => function(a, b, c, d, e, f, default, h, i)
+    def fix(default: H)(implicit arg: FnArg8.type): (A, B, C, D, E, F, G, I) => Z = (a: A, b: B, c: C, d: D, e: E, f: F, g: G, i: I) => function(a, b, c, d, e, f, g, default, i)
+    def fix(default: I)(implicit arg: FnArg9.type): (A, B, C, D, E, F, G, H) => Z = (a: A, b: B, c: C, d: D, e: E, f: F, g: G, h: H) => function(a, b, c, d, e, f, g, h, default)
+  }
 }
