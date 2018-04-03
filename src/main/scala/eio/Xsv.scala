@@ -6,11 +6,11 @@ import kse.flow._
 abstract class Xsv(val separators: String, val newline: String) {
   val quotables = {
     var i = 0
-    while (separators.charAt(i) < '\n') i += 1
+    while (i < separators.length && separators.charAt(i) < '\n') i += 1
     var j = i
-    while (separators.charAt(j) < '\r') j += 1
+    while (j < separators.length && separators.charAt(j) < '\r') j += 1
     var k = i
-    while (separators.charAt(k) < '"') k += 1
+    while (k < separators.length && separators.charAt(k) < '"') k += 1
     if (k == 0) "\n\r\"" + separators
     else if (i == separators.length) separators + "\n\r\""
     else {
