@@ -13,10 +13,64 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 package hashing {
 
-  trait IncrementalHash {
+  trait SimpleIncrementalHash {
     def begin(): this.type
     def append(bb: ByteBuffer): this.type
-    def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A]
+    def resultAs[R](implicit tag: scala.reflect.ClassTag[R]): Option[R]
+    def resultAsLong(): Long
+  }
+
+  trait IncrementalHash[A, Z] extends SimpleIncrementalHash {
+    def begin(): this.type
+    def begin(seed: A): this.type
+    def append(bb: ByteBuffer): this.type
+    def resultAs[R](implicit tag: scala.reflect.ClassTag[R]): Option[R]
+    def result(): Z
+    def resultAsLong(): Long
+    def cached(): CachedIncrementalHash[A, Z] = new CachedIncrementalHash(this)
+  }
+
+  /** Caching with helper methods.  TODO: use this only for hashers that don't contain their own cache. */
+  final class CachedIncrementalHash[A, Z](underlying: IncrementalHash[A, Z]) extends IncrementalHash[A, Z] {
+    private[this] val cache = ByteBuffer.wrap(new Array[Byte](16))
+    cache.order(ByteOrder.LITTLE_ENDIAN)
+
+    def begin() = { underlying.begin(); this }
+    def begin(seed: A) = { underlying.begin(seed); this }
+    def append(bb: ByteBuffer): this.type = { 
+      if (cache.remaining <= bb.remaining) cache.put(bb)
+      else {
+        cache.flip()
+        underlying.append(cache)
+        cache.clear()
+        underlying.append(bb)
+      }
+      this
+    }
+    def resultAs[R](implicit tag: scala.reflect.ClassTag[R]) = {
+      if (cache.position > 0) { cache.flip; underlying.append(cache); cache.clear() }
+      underlying.resultAs[R](tag)
+    }
+    def result() = {
+      if (cache.position > 0) { cache.flip; underlying.append(cache); cache.clear() }
+      underlying.result()
+    }
+    def resultAsLong() = {
+      if (cache.position > 0) { cache.flip; underlying.append(cache); cache.clear() }
+      underlying.resultAsLong()
+    }
+    override def cached() = this
+
+    private[this] final def ensure(n: Int) { if (cache.remaining < n) { cache.flip; underlying.append(cache); cache.clear() } }
+    def append(z: Boolean): this.type = { ensure(1); cache.put(if (z) (1: Byte) else (0: Byte)); this }
+    def append(b: Byte): this.type =    { ensure(1); cache.put(b);                               this }
+    def append(s: Short): this.type =   { ensure(2); cache.putShort(s);                          this }
+    def append(c: Char): this.type =    { ensure(2); cache.putChar(c);                           this }
+    def append(i: Int): this.type =     { ensure(4); cache.putInt(i);                            this }
+    def append(l: Long): this.type =    { ensure(8); cache.putLong(l);                           this }
+    def append(f: Float): this.type =   { ensure(4); cache.putFloat(f);                          this }
+    def append(d: Double): this.type =  { ensure(8); cache.putDouble(d);                         this }
+    def append(s: String): this.type =  { var i = 0; while (i < s.length) { append(s.charAt(i)); i += 1 }; this }
   }
 
   trait FullHash32 {
@@ -24,13 +78,14 @@ package hashing {
     final def hash32(bb: ByteBuffer): Int = hash32(bb, 0)
   }
 
-  trait Hash32 extends FullHash32 with IncrementalHash {
+  trait Hash32 extends FullHash32 with IncrementalHash[Int, Int] {
     def hash32(bb: ByteBuffer, seed: Int): Int = begin(seed).result(bb)
     def begin(): this.type = begin(0)
     def begin(seed: Int): this.type
     def append(bb: ByteBuffer): this.type
     def result(bb: ByteBuffer): Int
     def result(): Int
+    final def resultAsLong() = result() & 0xFFFFFFFFL
     def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A] = {
       tag.unapply(0: Int) match {
         case Some(_) => tag.unapply(result())
@@ -45,13 +100,14 @@ package hashing {
     final def hash64(bb: ByteBuffer): Long = hash64(bb, 0L)
   }
 
-  trait Hash64 extends FullHash64 with IncrementalHash {
+  trait Hash64 extends FullHash64 with IncrementalHash[Long, Long] {
     def hash64(bb: ByteBuffer, seed: Long): Long = begin(seed).result(bb)
     def begin(): this.type = begin(0L)
     def begin(seed: Long): this.type
     def append(bb: ByteBuffer): this.type
     def result(bb: ByteBuffer): Long
     def result(): Long
+    final def resultAsLong() = result()
     def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A] = {
       tag.unapply(0: Long) match {
         case Some(_) => tag.unapply(result())
@@ -61,26 +117,30 @@ package hashing {
   }
 
 
-  trait FullHash128 {
-    def hash128(bb: ByteBuffer, seed0: Long, seed1: Long): Array[Long]
-    final def hash128(bb: ByteBuffer): Array[Long] = hash128(bb, 0L, 0L)
+  case class HashCode128(hash0: Long, hash1: Long) {
+    def toArray: Array[Long] = { val a = new Array[Long](2); a(0) = hash0; a(1) = hash1; a }
+    def toVector: Vector[Long] = Vector(hash0, hash1)
+  }
+  object HashCode128 {
+    val empty = new HashCode128(0, 0)
   }
 
-  trait Hash128 extends FullHash128 with IncrementalHash {
-    def hash128(bb: ByteBuffer, seed0: Long, seed1: Long): Array[Long] = begin(seed0, seed1).results(bb)
+  trait FullHash128 {
+    def hash128(bb: ByteBuffer, seed0: Long, seed1: Long): HashCode128
+    final def hash128(bb: ByteBuffer, seed: HashCode128): HashCode128 = hash128(bb, seed.hash0, seed.hash1)
+    final def hash128(bb: ByteBuffer): HashCode128 = hash128(bb, 0L, 0L)
+  }
+
+  trait Hash128 extends FullHash128 with IncrementalHash[HashCode128, HashCode128] {
+    def hash128(bb: ByteBuffer, seed0: Long, seed1: Long): HashCode128 = begin(seed0, seed1).result(bb)
     def begin(): this.type = begin(0L, 0L)
     def begin(seed0: Long, seed1: Long): this.type
     def append(bb: ByteBuffer): this.type
-    final def results(bb: ByteBuffer): Array[Long] = { val a = new Array[Long](2); resultInto(bb, a, 0) }
-    final def results(): Array[Long] = { val a = new Array[Long](2); resultInto(a, 0) }
-    def resultInto(bb: ByteBuffer, target: Array[Long], index: Int): Array[Long]
-    def resultInto(target: Array[Long], index: Int): Array[Long]
-    def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A] = {
-      tag.unapply(Hash128.emptyArrayLong).flatMap{ _ => tag.unapply(results()) }
-    }
-  }
-  object Hash128 {
-    private[hashing] val emptyArrayLong = new Array[Long](0)
+    def result(bb: ByteBuffer): HashCode128
+    def result(): HashCode128
+    def resultAsLong(): Long
+    def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A] =
+      tag.unapply(HashCode128.empty).flatMap{ _ => tag.unapply(result()) }
   }
 
 
@@ -199,7 +259,8 @@ package hashing {
       complete()
     }
     def result(): Int = {
-      if ((myBuffer ne null) && myBuffer.hasRemaining) {
+      if ((myBuffer ne null) && myBuffer.position > 0) {
+        myBuffer.flip
         counting(myBuffer.remaining)
         while (myBuffer.remaining >= 4) trailing(myBuffer.getInt)
         while (myBuffer.remaining >= 1) trailing(myBuffer.get)
@@ -346,7 +407,8 @@ package hashing {
       complete()
     }
     def result(): Long = {
-      if ((myBuffer ne null) && myBuffer.hasRemaining) {
+      if ((myBuffer ne null) && (myBuffer.position > 0)) {
+        myBuffer.flip
         counting(myBuffer.remaining)
         while (myBuffer.remaining >= 8) trailing(myBuffer.getLong)
         if (myBuffer.remaining >= 4) trailing(myBuffer.getInt)
@@ -580,7 +642,7 @@ package hashing {
     }
   }
 
-  final class Murmur128 extends Hash64 with Hash128 with IncrementalHash {
+  final class Murmur128 extends Hash128 with IncrementalHash[HashCode128, HashCode128] {
     private[this] var state0, state1 = 0L
     private[this] var partial0, partial1 = 0L
     private[this] var partialN = 0
@@ -596,6 +658,7 @@ package hashing {
       n = 0
       this
     }
+    def begin(seed: HashCode128): this.type = begin(seed.hash0, seed.hash1)
     def appendLx2(la: Long, lb: Long) = {
       n += 16
       val x0 = state0 ^ (0x4CF5AD432745937FL * rotl64(la * 0x87C37B91114253D5L, 31))
@@ -655,8 +718,18 @@ package hashing {
       }
       this
     }
-    def result(bb: ByteBuffer): Long = append(bb).result()
-    def result(): Long = {
+    def result(bb: ByteBuffer): HashCode128 = append(bb).result()
+    def result(): HashCode128 = {
+      if (partialN > 0) {
+        appendLastLx2(partial0, partial1, partialN)
+        partial0 = 0
+        partial1 = 0
+        partialN = 0
+      }
+      finalizer()
+      new HashCode128(state0, state1)
+    }
+    def resultAsLong(): Long = {
       if (partialN > 0) {
         appendLastLx2(partial0, partial1, partialN)
         partial0 = 0
@@ -665,29 +738,6 @@ package hashing {
       }
       finalizer()
       state0
-    }
-    def resultInto(bb: ByteBuffer, target: Array[Long], index: Int): Array[Long] =
-      append(bb).resultInto(target, index)
-    def resultInto(target: Array[Long], index: Int): Array[Long] = {
-      if (partialN > 0) {
-        appendLastLx2(partial0, partial1, partialN)
-        partial0 = 0
-        partial1 = 0
-        partialN = 0
-      }
-      finalizer()
-      target(index) = state0
-      target(index+1) = state1
-      target
-    }
-    override def resultAs[A](implicit tag: scala.reflect.ClassTag[A]): Option[A] = {
-      tag.unapply(0L) match {
-        case Some(_) => tag.unapply(result())
-        case None    => tag.unapply(Hash128.emptyArrayLong) match {
-          case Some(_) => tag.unapply(results())
-          case None    => None
-        }
-      }
     }
   }
 

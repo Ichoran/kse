@@ -290,12 +290,12 @@ package object eio {
     }
 
     private[this] def myHashWith(
-      h0: IncrementalHash, h1: IncrementalHash, hmore: Seq[IncrementalHash]
+      h0: SimpleIncrementalHash, h1: SimpleIncrementalHash, hmore: Seq[SimpleIncrementalHash]
     ): Ok[String, Array[Any]] =
       okay[String]{ fail =>
         if (underlying.isDirectory) fail(s"${underlying.getPath} is a directory")
         var sz = try { underlying.length } catch { case t if NonFatal(t) => fail(s"Could not read length of ${underlying.getPath}") }
-        val h = new Array[IncrementalHash](hmore.length + (if (h1 eq null) 0 else 1) + (if (h0 eq null) 0 else 1))
+        val h = new Array[SimpleIncrementalHash](hmore.length + (if (h1 eq null) 0 else 1) + (if (h0 eq null) 0 else 1))
         var i = 0
         if (h0 ne null) { h(i) = h0.begin(); i += 1 }
         if (h1 ne null) { h(i) = h1.begin(); i += 1 }

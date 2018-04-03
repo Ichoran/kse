@@ -547,19 +547,21 @@ object Test_Maths_Hashing extends Test_Kse {
       pairsame(Vector(
         XX.hash32(ByteBuffer wrap a),
         xx32.hash32(ByteBuffer wrap a),
-        xx32.hash32(ByteBuffer wrap a),
+        xx32.begin(0).append(ByteBuffer wrap a).result(),
         xx32.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
         xx32.begin(0).result(ByteBuffer wrap a),
         xx32.hash32(ByteBuffer wrap a)
       ), f"xx32 $i ${b.length}\n${a.toVector}\n") &&
       pairsame(Vector(
         mh32.hash32(ByteBuffer wrap a),
+        mh32.begin(0).append(ByteBuffer wrap a).result(),
         mh32.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
         mh32.begin(0).result(ByteBuffer wrap a),
         mh32.hash32(ByteBuffer wrap a)
       ), f"mh32 $i ${b.length}\n${a.toVector}\n") &&
       pairsame(Vector(
         cs32.hash32(ByteBuffer wrap a),
+        cs32.begin(0).append(ByteBuffer wrap a).result(),
         cs32.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
         cs32.begin(0).result(ByteBuffer wrap a),
         cs32.hash32(ByteBuffer wrap a)
@@ -567,21 +569,24 @@ object Test_Maths_Hashing extends Test_Kse {
       pairsame(Vector(
         XX.hash64(ByteBuffer wrap a),
         xx64.hash64(ByteBuffer wrap a),
+        xx64.begin(0).append(ByteBuffer wrap a).result(),
         xx64.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
         xx64.begin(0).result(ByteBuffer wrap a),
         xx64.hash64(ByteBuffer wrap a)
       ), f"xx64 $i ${b.length}") &&
       pairsame(Vector(
         cs64.hash64(ByteBuffer wrap a),
+        cs64.begin(0).append(ByteBuffer wrap a).result(),
         cs64.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
         cs64.begin(0).result(ByteBuffer wrap a),
         cs64.hash64(ByteBuffer wrap a)
       ), f"cs64 $i ${b.length}\n${a.toVector}\n") &&
       pairsame(Vector(
-        mh128.hash128(ByteBuffer wrap a).toVector,
-        mh128.begin(0).append(ByteBuffer wrap b).results(ByteBuffer wrap c).toVector,
-        mh128.begin(0).results(ByteBuffer wrap a).toVector,
-        mh128.hash128(ByteBuffer wrap a).toVector
+        mh128.hash128(ByteBuffer wrap a),
+        mh128.begin(0).append(ByteBuffer wrap a).result(),
+        mh128.begin(0).append(ByteBuffer wrap b).result(ByteBuffer wrap c),
+        mh128.begin(0).result(ByteBuffer wrap a),
+        mh128.hash128(ByteBuffer wrap a)
       ), f"mh128 $i ${b.length}\n${a.toVector}\n")
     }
   }
