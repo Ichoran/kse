@@ -166,11 +166,12 @@ class Bitmap(val packed: Array[Int], val offset: Int, val stride: Int, val w: In
   def toDataURI = {
     val baos = new ByteArrayOutputStream
     javax.imageio.ImageIO.write(toImage, "png", baos)
-    "data:image/png;base64," + base64.DataURI.encode(baos.toByteArray)
+    Bitmap.dataURIPrefix + base64.DataURI.encode(baos.toByteArray)
   }
 }
 
 object Bitmap{
+  final val dataURIPrefix = "data:image/png;base64,"
   def apply(im: BufferedImage): Bitmap = {
     val h = im.getHeight
     val w = im.getWidth
@@ -193,4 +194,16 @@ object Bitmap{
   def from(f: File): Ok[String, Bitmap] =
     safe{ apply(javax.imageio.ImageIO.read(f)) }.
       mapNo(e => f"Could not read image from ${f.getPath}\n${e.toString}")
+
+  def fromDataURI(data: String): Ok[String, Bitmap] =
+    if (!data.startsWith(dataURIPrefix)) No("Does not start with "+dataURIPrefix+"; starts with "+data.take(dataURIPrefix.length))
+    else probably{ implicit oops => base64.DataURI.decode(data.drop(dataURIPrefix.length)) } match {
+      case Some(bytes) =>
+        val bais = new ByteArrayInputStream(bytes)
+        safe{ javax.imageio.ImageIO.read(bais) } match {
+          case Yes(png) => Yes(apply(png))
+          case No(e) => No("Exception while converting to PNG: " + e.toString)
+        }
+      case _ => No("Malformed Base64")
+    }
 }
