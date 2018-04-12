@@ -50,6 +50,88 @@ class Bitmap(val packed: Array[Int], val offset: Int, val stride: Int, val w: In
 
   def size = w*h
 
+  def scale(level: Int) =
+    if (level < -1) {
+      val mult = -level
+      val nw = w*mult
+      val nh = w*mult
+      val data = new Array[Int](nw * nh)
+      var ny = 0
+      var oy = 0
+      while (oy < h) {
+        var nx = 0
+        var ox = 0
+        while (ox < w) {
+          val i = packed(oy*stride + offset+ ox)
+          var y = 0
+          while (y < mult) {
+            val yidx = (ny + y)*nw
+            var x = 0
+            while (x < mult) {
+              data(yidx + nx + x) = i
+              x += 1
+            }
+            y += 1
+          }
+          nx += mult
+          ox += 1
+        }
+        ny += mult
+        oy += 1
+      }
+      new Bitmap(data, 0, nw, nw, nh, hasAlpha)
+    }
+    else if (level > 1) {
+      val nw = w/level
+      val nh = h/level
+      val data = new Array[Int](nw * nh)
+      var ny = 0
+      var oy = level/2
+      while (ny < nh) {
+        var nx = 0
+        var ox = level/2
+        while (nx < nw) {
+          data(ny*nw + nx) = packed(oy*stride + offset + ox)
+          ox += level
+          nx += 1
+        }
+        oy += level
+        ny += 1
+      }
+      new Bitmap(data, 0, nw, nw, nh, hasAlpha)
+    }
+    else deepCopy
+
+  def binAsUInt(binning: Int): Bitmap = {
+    if (binning < 2) throw new IllegalArgumentException("Binning should be at least 2, not "+binning)
+    val nw = w/binning
+    val nh = h/binning
+    val bsq = binning*binning
+    val data = new Array[Int](nw * nh)
+    var ny = 0
+    while (ny < nh) {
+      var nx = 0
+      while (nx < nw) {
+        var sum = 0L
+        var idx = stride*ny*binning + offset + nx*binning
+        var y = 0
+        while (y < binning) {
+          var x = 0
+          while (x < binning) {
+            sum += packed(idx + stride*y + x) & 0xFFFFFFFFL
+            x += 1
+          }
+          y += 1
+        }
+        data(ny*nw + nx) = (sum/bsq).toInt
+        nx += 1
+      }
+      ny += 1
+    }
+    new Bitmap(data, 0, nw, nw, nh, hasAlpha)
+  }
+
+
   def deepCopy: Bitmap = new Bitmap(java.util.Arrays.copyOf(packed, packed.length), offset, stride, w, h, hasAlpha)
   def trim = 
     if (packed.length == w*h) this

@@ -1498,7 +1498,7 @@ package chart {
       )
     }
   }
-  object Letters {    
+  object Letters {
     private[this] val safeMapping = {
       val m = new collection.mutable.LongMap[String]
       for (i <- 0 until ' ') { m += (i.toChar, f"&#$i;") }
@@ -1506,6 +1506,9 @@ package chart {
       m += ('>', "&gt;")
       m += ('&', "&amp;")
     }
+
+    def apply(anchor: Vc, text: String, style: Style) = new Letters(anchor, text, 0, style)
+
     def safeEncode(s: String): String = {
       var i = 0
       var fine = true
