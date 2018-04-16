@@ -36,7 +36,7 @@ package stats {
           val y = ab(j).bits
           same = ((x ^ y) | 0x1L) == 0x1L
           if (same) {
-            n += 1 - (x & 1).toInt
+            n += 1 - (y & 1).toInt
             j += 1
             m += j
           }
@@ -46,12 +46,12 @@ package stats {
         }
         else {
           val tied = j - i
-          t3_t = tied*(tied*tied.toDouble - 1)
+          t3_t += tied*(tied*tied.toDouble - 1)
           ra += n*m.toDouble/tied
         }
         i = j
       }
-      val u = ra - na*(na-1).toDouble/2
+      val u = na*(nb + (na+1).toDouble/2) - ra
       val mid = na*0.5*nb
       val correction = if (t3_t > 0) t3_t/((na+nb)*(na+nb-1)) else 0
       val dev = (mid*(na + nb + 1 - correction)/6).sqrt
