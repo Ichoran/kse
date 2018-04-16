@@ -34,7 +34,7 @@ package stats {
     private def rankTestEncoded(ab: Array[Double], na: Int): Floatx2 = {
       val nb = ab.length - na
       java.util.Arrays.sort(ab)
-      var ra = 0.0
+      var ra, rb = 0.0
       var i = 0
       var t3_t = 0.0
       while (i < ab.length) {
@@ -54,11 +54,14 @@ package stats {
         }
         if (j == i+1) {
           if (n != 0) ra += j
+          else        rb += j
         }
         else {
           val tied = j - i
           t3_t += tied*(tied*tied.toDouble - 1)
-          ra += n*m.toDouble/tied
+          val avg = m.toDouble/tied
+          ra += avg * n
+          rb += avg * (tied - n)
         }
         i = j
       }
@@ -71,10 +74,9 @@ package stats {
       val rbc = {
         // Kind of silly to remove signs and then add them back again, but
         // it's easier to follow textbook/Wikipedia math that way
-        val rr = ab.length*0.5*(ab.length + 1)
         val unsign = 1 - (if (u > mid) 2*mid - u else u)/mid
-        if (ra < rr)     -unsign
-        else if (ra > rr) unsign
+        if (ra < rb)     -unsign
+        else if (ra > rb) unsign
         else              0
       }
       Floats(p.toFloat, rbc.toFloat)
