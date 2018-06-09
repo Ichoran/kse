@@ -128,7 +128,7 @@ package object eio {
       val i = n.lastIndexOf('.')
       var pre = i-1
       while (pre >= 0 && n(pre) == '.') pre -= 1
-      if (pre <= 0 || i+1 >= n.length) None
+      if (pre < 0 || i+1 >= n.length) None
       else {
         val p = f.getParentFile
         val nf = if (p != null) new File(p, n.substring(0, pre+1)) else new File(n.substring(0, pre+1))
@@ -146,6 +146,13 @@ package object eio {
     def path = try { Some(FileSystems.getDefault.getPath(underlying)) } catch { case ipe: file.InvalidPathException => None }
     def getPath = FileSystems.getDefault.getPath(underlying)
     def grabPath(implicit oops: Oops): Path = try { FileSystems.getDefault.getPath(underlying) } catch { case ipe: file.InvalidPathException => OOPS }
+  }
+
+  implicit class BytesAsStrings(private val underlying: Array[Byte]) extends AnyVal {
+    def utf8 = new String(underlying, java.nio.charset.StandardCharsets.UTF_8)
+    def ascii = new String(underlying, java.nio.charset.StandardCharsets.US_ASCII)
+    def rawString = new String(underlying, java.nio.charset.StandardCharsets.ISO_8859_1)
+    def iso8859_1 = new String(underlying, java.nio.charset.StandardCharsets.ISO_8859_1)
   }
   
   implicit class ZipEntryProperPaths(private val underlying: ZipEntry) extends AnyVal {

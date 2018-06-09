@@ -800,4 +800,32 @@ package object coll {
       sb.result()
     }
   }
+
+  implicit class CanDeduplicateArrayPrefix[A: reflect.ClassTag](array: Array[A]) {
+    def deduplicatedPrefix: (Array[A], Int, Array[A]) = {
+      val coded = array.indices.groupBy(i => array(i))
+      val candidates = coded.
+        collect{ case (_, xs) if xs.length > 2 => xs }.
+        toArray.sortBy(_.head)
+      val lookup = candidates.zipWithIndex.
+        flatMap{ case (xs, n) => xs.map(_ -> n) }.toMap
+      if (!(lookup contains 0)) (Array.empty[A], 0, array)
+      else {
+        val starts = candidates.head
+        val intervals = starts.indices.tail.map{ ii =>
+          val delta = starts(ii) - starts(0)
+          delta ->
+            (ii until starts.length by ii).takeWhile{ jj => 
+              starts(jj) - starts(jj-ii) == delta && 
+              (0 until delta).forall(k => lookup contains k) &&
+              (0 until delta).forall(k => lookup.get(k) == lookup.get(starts(jj)+k))
+            }.map(ii => starts(ii)).toArray
+        }.filter(_._2.length > 0)
+        intervals.sortBy{ case (delta, si) => -((si.last + delta) * starts.length.toLong) + delta }.headOption match {
+          case None => (Array.empty, 0, array)
+          case Some((delta, si)) => (array.take(delta), si.length + 1, array.drop(si.last + delta))
+        }
+      }
+    }
+  }
 }

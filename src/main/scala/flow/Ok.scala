@@ -200,7 +200,7 @@ final case class No[+N](no: N) extends Ok[N, Nothing] {
   def forall(f: Nothing => Boolean) = true
   
   def reject[M >: N](pf: PartialFunction[Nothing, M]): Ok[M, Nothing] = this
-  def accept[Z](pf: PartialFunction[N, Z]): Ok[N, Z] = if (pf.isDefinedAt(no)) Yes(pf(no)) else this.asInstanceOf[Ok[N, Z]]
+  def accept[Z](pf: PartialFunction[N, Z]): Ok[N, Z] = if (pf.isDefinedAt(no)) Yes(pf(no)) else this
   
   /** Specifies what the other (favored) alternative should be. */
   def alt[Y]: Ok[N,Y] = this
