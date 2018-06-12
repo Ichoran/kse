@@ -714,6 +714,19 @@ package chartTest {
       val pik = Picture(150 vc 150, Bitmap.fillRgba(2,4){ (x,y) => Rgba.web(100+100*x, 128, 50 + 60*y) }, Some(20 vc 40), Style.empty)
       val cbr = ColorBar(250 vc 150, 10 vc 80, Spectrum.Rainbow, true, Some((5, 3f, 5f, -0.5f)), Style.empty)
       val dbtl = TickLabels(Vc(50, 50), Vc(150, 50), Seq(Tik(0, "0"), Tik(1, "0.5")), -20, 0, -5, Font(18) ++ Stroke(Rgba.Black))
+      val lps = Lilypad.dataVectored(
+        _.est.mean.toFloat, 5f, Stroke(1.5f), 3f, Stroke(0.8f),
+        _.aTo(0.1f), _.blend(Rgba.White, 0.5f).aTo(0.4f), _.blend(Rgba.White, 0.5f).aTo(0.4f), _.blend(Rgba.White, 0.5f)
+      )(
+        (
+          Array(
+            Array(Vc(165, 192), Vc(163, 201), Vc(148, 188), Vc(158, 207), Vc(167, 184)), 
+            Array(Vc(175, 222), Vc(163, 231), Vc(158, 218), Vc(148, 247), Vc(187, 214))
+          ),
+          Rgba.Green
+        ),
+        (Array(Array(Vc(205, 182), Vc(203, 171), Vc(198, 178), Vc(188, 187), Vc(207, 164))), Rgba.Blue)
+      )
       val ara = Arches(Vc(160, 30), Array(13f, 9f, 8f, 10f, -6f, 4f, 11f), Stroke(Rgba.Black, 2f))
       val arb = Arches(
         Vc(160, 30), 
@@ -731,7 +744,7 @@ package chartTest {
           0 vc 0, 0.3333f vc 0.3333f, 400 vc 200, Option((x: Float) => x.sqrt.toFloat), Opacity(0.5f),
           c, pa, pie.copy(pieces = pie.pieces.dropRight(1).map(p => p.copy(legend = ""))), cbr.copy(ticks = Some((5, 3f, 5f, 0.5f)))
         ),
-        gr, earc, ara, arb
+        gr, earc, ara, arb, lps
       )
     }
   }
