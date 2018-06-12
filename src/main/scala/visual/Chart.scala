@@ -727,13 +727,15 @@ package chartTest {
         ),
         (Array(Array(Vc(205, 182), Vc(203, 171), Vc(198, 178), Vc(188, 187), Vc(207, 164))), Rgba.Blue)
       )
-      val ara = Arches(Vc(160, 30), Array(13f, 9f, 8f, 10f, -6f, 4f, 11f), Stroke(Rgba.Black, 2f))
+      val ara = Arch(Vc(160, 30), Array(13f, 9f, 8f, 10f, -6f, 4f, 11f), Stroke(Rgba.Black, 2f))
       val arb = Arches(
         Vc(160, 30), 
-        Array(10f, 4f, 9f, 2f, 15f, 4f, 9f), 
+        Array(Array.fill(7)(0f), Array(10f, 4f, 9f, 2f, 15f, 4f, 9f)), 
         (0 to 6).map(i => Spectrum.Rainbow(i/6f)).toArray,
         (0 to 6).map(i => 3f + (i%2)).toArray,
-        Stroke(Rgba.Black, 3f)
+        Stroke(Rgba.Black, 1f),
+        Vc(6f, 3f),
+        Fill.alpha(Rgba.Magenta.aTo(0.7f))
       )
       quick(
         sh, pie, c, b, dl, dr, ea, eb, aa, ab, pa, tk, qbf, tl, pik, Circ(pik.corner, 3, Fill(Rgba.Black)), cbr, dbtl,

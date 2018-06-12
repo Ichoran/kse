@@ -512,7 +512,7 @@ object Pie {
 }
 
 
-final case class Arches(origin: Vc, values: Array[Float], axes: Array[Long], colors: Option[Array[Rgba]], widths: Option[Array[Float]], style: Style)
+final case class Arch(origin: Vc, values: Array[Float], axes: Array[Long], colors: Option[Array[Rgba]], widths: Option[Array[Float]], style: Style)
 extends Shown with Composite[Either[Grouping, DataLine]] {
   lazy val computed: Either[Grouping, DataLine] =
     if (colors.isEmpty && widths.isEmpty) {
@@ -541,6 +541,28 @@ extends Shown with Composite[Either[Grouping, DataLine]] {
     case Left(g)   => g
   }
   override def styled = style.stroky.promoteStrokeOpacity
+}
+object Arch {
+  import Arches.defaultAxes
+  def apply(origin: Vc, values: Array[Float], axes: Array[Long], colors: Array[Rgba], style: Style) = new Arch(origin, values, axes, Some(colors), None, style)
+  def apply(origin: Vc, values: Array[Float], axes: Array[Long], widths: Array[Float], style: Style) = new Arch(origin, values, axes, None, Some(widths), style)
+  def apply(origin: Vc, values: Array[Float], axes: Array[Long], style: Style) = new Arch(origin, values, axes, None, None, style)
+  def apply(origin: Vc, values: Array[Float], colors: Array[Rgba], widths: Array[Float], style: Style) = new Arch(origin, values, defaultAxes(values.length), Some(colors), Some(widths), style)
+  def apply(origin: Vc, values: Array[Float], colors: Array[Rgba], style: Style) = new Arch(origin, values, defaultAxes(values.length), Some(colors), None, style)
+  def apply(origin: Vc, values: Array[Float], widths: Array[Float], style: Style) = new Arch(origin, values, defaultAxes(values.length), None, Some(widths), style)
+  def apply(origin: Vc, values: Array[Float], style: Style) = new Arch(origin, values, defaultAxes(values.length), None, None, style)  
+}
+
+final case class Arches(origin: Vc, data: Array[Array[Float]], axes: Array[Long], colors: Option[Array[Rgba]], widths: Option[Array[Float]], archStyle: Style, dot: Vc, dotStyle: Style)
+extends Derived[Grouping] {
+  lazy val computed: Grouping = {
+    val origins = data.map(datum => Arches.travel(datum, axes) + origin)
+    val hops = (data zip data.tail).map{ case (a, b) => (a zip b).map{ case (i, j) => j - i } }
+    Grouping(
+      Grouping(origins.map(o => Oval(o, dot, dotStyle))),
+      Grouping((origins zip hops).map{ case (o, h) => Arch(o, h, axes, colors, widths, archStyle )})
+    )
+  }
 }
 object Arches {
   def defaultAxes(n: Int): Array[Long] = {
@@ -583,11 +605,28 @@ object Arches {
     }
     pj
   }
-  def apply(origin: Vc, values: Array[Float], axes: Array[Long], colors: Array[Rgba], style: Style) = new Arches(origin, values, axes, Some(colors), None, style)
-  def apply(origin: Vc, values: Array[Float], axes: Array[Long], widths: Array[Float], style: Style) = new Arches(origin, values, axes, None, Some(widths), style)
-  def apply(origin: Vc, values: Array[Float], axes: Array[Long], style: Style) = new Arches(origin, values, axes, None, None, style)
-  def apply(origin: Vc, values: Array[Float], colors: Array[Rgba], widths: Array[Float], style: Style) = new Arches(origin, values, defaultAxes(values.length), Some(colors), Some(widths), style)
-  def apply(origin: Vc, values: Array[Float], colors: Array[Rgba], style: Style) = new Arches(origin, values, defaultAxes(values.length), Some(colors), None, style)
-  def apply(origin: Vc, values: Array[Float], widths: Array[Float], style: Style) = new Arches(origin, values, defaultAxes(values.length), None, Some(widths), style)
-  def apply(origin: Vc, values: Array[Float], style: Style) = new Arches(origin, values, defaultAxes(values.length), None, None, style)
+  def apply(origin: Vc, data: Array[Array[Float]], axes: Array[Long], colors: Array[Rgba], archStyle: Style, dot: Vc, dotStyle: Style) =
+    new Arches(origin, data, axes, Some(colors), None, archStyle, dot, dotStyle)
+  def apply(origin: Vc, data: Array[Array[Float]], axes: Array[Long], widths: Array[Float], archStyle: Style, dot: Vc, dotStyle: Style) = 
+    new Arches(origin, data, axes, None, Some(widths), archStyle, dot, dotStyle)
+  def apply(origin: Vc, data: Array[Array[Float]], axes: Array[Long], archStyle: Style, dot: Vc, dotStyle: Style) = 
+    new Arches(origin, data, axes, None, None, archStyle, dot, dotStyle)
+  def apply(origin: Vc, data: Array[Array[Float]], colors: Array[Rgba], widths: Array[Float], archStyle: Style, dot: Vc, dotStyle: Style) = 
+    new Arches(origin, data, defaultAxes(data.headOption.map(_.length).getOrElse(0)), Some(colors), Some(widths), archStyle, dot, dotStyle)
+  def apply(origin: Vc, data: Array[Array[Float]], colors: Array[Rgba], archStyle: Style, dot: Vc, dotStyle: Style) = 
+    new Arches(origin, data, defaultAxes(data.headOption.map(_.length).getOrElse(0)), Some(colors), None, archStyle, dot, dotStyle)
+  def apply(origin: Vc, data: Array[Array[Float]], widths: Array[Float], archStyle: Style, dot: Vc, dotStyle: Style) = 
+    new Arches(origin, data, defaultAxes(data.headOption.map(_.length).getOrElse(0)), None, Some(widths), archStyle, dot, dotStyle)
+  def apply(origin: Vc, data: Array[Array[Float]], archStyle: Style, dot: Vc, dotStyle: Style) = 
+    new Arches(origin, data, defaultAxes(data.headOption.map(_.length).getOrElse(0)), None, None, archStyle, dot, dotStyle)
+
+  def datasets(origin: Vc, axes: Array[Long], dot: Vc)(
+    data: (Array[Array[Float]], Style, Style)*
+  ): Grouping = Grouping(data.map{ case (aaf, as, ds) => apply(origin, aaf, axes, as, dot, ds) })
+
+  def datasets(origin: Vc, axes: Array[Long], archStyle: Style, dotR: Float, dotStyle: Style, aC: Rgba => Rgba, dC: Rgba => Rgba)(
+    data: (Array[Array[Float]], Rgba)*
+  ): Grouping = Grouping(data.map{ case (aaf, c) => 
+    apply(origin, aaf, axes, archStyle ++ Stroke.alpha(aC(c)), Vc(1, 0.5f)*dotR, dotStyle ++ Fill.alpha(dC(c)))
+  })
 }
