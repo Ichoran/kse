@@ -57,11 +57,7 @@ extends Derived[Grouping] {
             )
           case _ =>
             b += Grouping(Circ(v, padR, padStyle), Line(summary, v, stemStyle))
-        }
-
-        if (delta.lenSq > padR.sq) {
-          b += Line(summary, v, stemStyle)
-        }        
+        }     
       }
       else b += Circ(v, padR, padStyle)
     }
