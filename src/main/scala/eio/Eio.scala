@@ -91,6 +91,59 @@ package object eio {
     def asLong(implicit oops: Oops) = { val l = math.rint(underlying).toLong; if (l.toDouble != underlying) OOPS else l }
     def asFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toDouble != underlying) OOPS else f }
   }
+
+  private val quotes_not_needed_regex_string = """[A-Za-z0-9_/\.\-~]+"""
+  private val single_escapes_regex_string    = """[A-Za-z0-9_/\.\-~ ]+"""
+  implicit class QuoteStringsForCommandLine(private val underlying: String) extends AnyVal {
+    def bashquoted: String = 
+      if (underlying.length == 0) "''"
+      else if (underlying matches quotes_not_needed_regex_string) underlying
+      else if (underlying matches single_escapes_regex_string) {
+        val sb = new java.lang.StringBuilder
+        var i = 0
+        while (i < underlying.length) {
+          val j = underlying.indexOf(' ', i)
+          if (j < 0) {
+            sb append underlying.substring(i)
+            i = underlying.length
+          }
+          else if (j > i) {
+            sb append underlying.substring(i, j)
+            sb append """\ """
+            i = j+1
+          }
+          else {
+            sb append """\ """
+            i += 1
+          }
+        }
+        sb.toString
+      }
+      else {
+        val sb = new java.lang.StringBuilder
+        var i = 0
+        while (i < underlying.length) {
+          val j = underlying.indexOf('\'', i)
+          if (j < 0) {
+            sb append '\''
+            sb append underlying.substring(i)
+            sb append '\''
+            i = underlying.length
+          }
+          else if (j > i) {
+            sb append '\''
+            sb append underlying.substring(i, j)
+            sb append """'\'"""
+            i = j+1
+          }
+          else {
+            sb append """\'"""
+            i += 1
+          }
+        }
+        sb.toString
+      }
+  }
   
 
   object \: {
