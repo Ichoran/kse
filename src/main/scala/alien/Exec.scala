@@ -51,15 +51,17 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
   private[this] var outbuf_i: Int = 0
   private[this] var outbuf_nl: Boolean = false
   private[this] var buffer: Array[Byte] = new Array[Byte](8192)
-  private[this] val process: Process = ???
 
   private[this] val myFinishFlag = new atomic.AtomicBoolean(false)
   private[this] val myStartTime = LocalDateTime.now
   private[this] val myStopTime: atomic.AtomicReference[Option[LocalDateTime]] = new atomic.AtomicReference(None)
   private[this] val myDieTime: atomic.AtomicReference[Option[LocalDateTime]] = new atomic.AtomicReference(None)
+  private[this] val deathAttempts = new atomic.AtomicInteger(0)
   private[this] val myExitCode: atomic.AtomicReference[Option[Int]] = new atomic.AtomicReference(None)
 
-  def running = myFinishFlag.get()
+  val process: Process = (new ProcessBuilder(args: _*)).start()
+
+  def running = !myFinishFlag.get()
   def elapsed = Duration.between(myStartTime, myStopTime.get().getOrElse(LocalDateTime.now))
   def exitCode = myExitCode.get()
 
@@ -118,20 +120,33 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
 
     var n = 0
     var i = 0
+    var i0 = 0
+    var j0 = 0
     while (i < len) {
       val ti = thing(i)
       var j = 0
       while (j < ti.length) {
         val c = ti(j)
-        if (c == '\n') n += 1
+        if (c == '\n') {i0 = i; j0 = j; n += 1 }
         j += 1
       }
       i += 1
     }
+    // WARNING: Must NOT return early past this point UNLESS you put `originally` back if need be!
+    val originally =
+      if (myFinishFlag.get() && (i0+1 < len || j0+2 < thing(len-1).length || (j0+2 == thing(len-1).length && thing(len-1)(j0+1) != '\r'))) {
+        // This is a horrible hack, but it works :(
+        val saved = thing(len-1)
+        thing(len-1) = java.util.Arrays.copyOf(thing(len-1), thing(len-1).length+1)
+        thing(len-1)(thing(len-1).length-1) = '\n'
+        n += 1
+        saved
+      }
+      else null
     val strings = new Array[String](n)
     var buffer = Exec.emptyBytes
-    var i0 = 0
-    var j0 = if (nl && thing(0)(0) == '\r') 1 else 0
+    i0 = 0
+    j0 = if (nl && thing(0)(0) == '\r') 1 else 0
     var m = 0
     while (m < n) {
       var i = i0
@@ -149,7 +164,7 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
       }
       if (i == i0 || (i == i0+1 && j == 0)) {
         if (i == i0 && j == j0) strings(m) = ""
-        else strings(m) = new String(thing(i0), j0, j, java.nio.charset.StandardCharsets.UTF_8)
+        else strings(m) = new String(thing(i0), j0, (if (i == i0) j else thing(i0).length) - j0, java.nio.charset.StandardCharsets.UTF_8)
       }
       else {
         if (buffer.length < k) buffer = new Array[Byte](if (k - buffer.length > (k >>> 2)) k else buffer.length + (k >>> 2))
@@ -184,6 +199,14 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
       i0 = i
       j0 = j
       m += 1
+    }
+    if (originally != null) {
+      // End of horrible but effective hack
+      thing(len-1) = originally
+      if (i0 == len-1 && j0 >= originally.length) {
+        i0 += 1
+        j0 = 0
+      }
     }
     trailing match {
       case Some(m) => m.value = (i0, j0)
@@ -347,6 +370,7 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
     if (bufs.length >= 1024 && len == bufs.length && bufs(len-1).length >= 1024) len = compactInPlace(bufs)
     if (len < bufs.length && (len == 0 || bufs(len-1).length >= 1024)) {
       bufs(len) = java.util.Arrays.copyOf(buffer, n)
+      len += 1
       if (bufs ne bufs0) setBufs(bufs)
       if (len != len0) setLen(len)
     }
@@ -360,13 +384,28 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
   def update() { synchronized {
     if (process.getErrorStream.available > 0) bufferedStore(process.getErrorStream, errbuf_i, errbuf, i => { errbuf_i = i }, bufs => { errbuf = bufs })
     if (process.getInputStream.available > 0) bufferedStore(process.getInputStream, outbuf_i, outbuf, i => { outbuf_i = i }, bufs => { outbuf = bufs })
+    if (myDieTime.get.exists(_ isBefore LocalDateTime.now)) {
+      if (deathAttempts.getAndIncrement() == 0) {
+        process.destroy()
+        myDieTime.set(Some(LocalDateTime.now plus Duration.ofSeconds(3)))
+      }
+      else {
+        process.destroyForcibly()
+        myDieTime.set(Some(LocalDateTime.now plus Duration.ofSeconds(1)))
+      }
+    }
   } }
 
-  def finish() { synchronized {
-    var i = 0; while (i < inbuf_i) { inbuf(i) = null; i += 1 }; inbuf_i = 0
-    while (process.getErrorStream.available > 0) bufferedStore(process.getErrorStream, errbuf_i, errbuf, i => { errbuf_i = i }, bufs => { errbuf = bufs })
-    while (process.getInputStream.available > 0) bufferedStore(process.getInputStream, outbuf_i, outbuf, i => { outbuf_i = i }, bufs => { outbuf = bufs })
-  } }
+  def finish() { 
+    if (!myFinishFlag.get()) synchronized {
+      myStopTime.set(Some(LocalDateTime.now))
+      myExitCode.set(Some(process.exitValue))
+      var i = 0; while (i < inbuf_i) { inbuf(i) = null; i += 1 }; inbuf_i = 0
+      while (process.getErrorStream.available > 0) bufferedStore(process.getErrorStream, errbuf_i, errbuf, i => { errbuf_i = i }, bufs => { errbuf = bufs })
+      while (process.getInputStream.available > 0) bufferedStore(process.getInputStream, outbuf_i, outbuf, i => { outbuf_i = i }, bufs => { outbuf = bufs })
+      myFinishFlag.set(true)
+    }
+  }
 
   override def run() {
     while (process.isAlive()) {
@@ -385,4 +424,5 @@ object Exec {
     thread.start()
     thread
   }
+  def apply(args: String*): Exec = apply(args.toArray)
 }
