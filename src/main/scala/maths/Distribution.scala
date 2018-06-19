@@ -110,6 +110,7 @@ final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n
   override def toString = f"$mean +- $error (n=$n)"
 }
 object EstM {
+  def empty = new EstM(0, 0, 0)
   def apply(): EstM = new EstM(0, 0, 0)
   def apply(n: Int, mean: Double, sse: Double): EstM = new EstM(n, mean, sse)
 }
@@ -125,6 +126,8 @@ final case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
   override val error = math.sqrt(errorSq)
 }
 object Est {
+  val empty = new Est(0, 0, 0)
+
   def from(data: Array[Float], i0: Int, iN: Int): Est = {
     val iA = math.max(0, i0)
     val iB = math.max(iA, math.min(data.length, iN))
@@ -139,6 +142,7 @@ object Est {
     new Est(n, mean, cuml)
   }
   def from(data: Array[Float]): Est = from(data, 0, data.length)
+
   def from(data: Array[Double], i0: Int, iN: Int): Est = {
     val iA = math.max(0, i0)
     val iB = math.max(iA, math.min(data.length, iN))
@@ -153,6 +157,7 @@ object Est {
     new Est(n, mean, cuml)
   }
   def from(data: Array[Double]): Est = from(data, 0, data.length)
+
   def boxed(data: TraversableOnce[Double]): Est = {
     val em = new EstM()
     data.foreach{ d => em += d }
@@ -168,6 +173,13 @@ object Est {
     val n = i+j
     new Est(n, (i+1.0)/(n+2.0), ((i+1.0)*(j+1.0)/(n+3.0))*(math.max(1, n-1)/(n+2.0).sq))
   }
+  def unbayes(e: Est): Option[(Int, Int)] =
+    if (e.mean < 0 || e.mean > 1) None
+    else if (e.n <= 0) Some((0, 0))
+    else {
+      val i = ((e.mean*(e.n+2.0))-1).rint.toInt
+      Some((i, e.n-i))
+    }
 }
 
 trait Extremal extends Estimate {
