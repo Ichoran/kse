@@ -47,6 +47,32 @@ object Dev {
   val zero = new Dev(0, 0)
 }
 
+/** For frequency-weighted estimates */
+trait EstimateByFreq {
+  def n: Double
+  def mean: Double
+  def sse: Double
+  def variance = sse / (if (n>2) n-1 else 1)
+  def sd = math.sqrt(variance)
+  def sem = if (n > 1) math.sqrt(sse / (n*(n-1))) else Double.NaN
+  def estm = {
+    val m = n.rint.toInt
+    if (m <= 0) EstM.empty
+    else {
+      val f = m/n
+      new EstM(m, mean*f, sse*f)
+    }
+  }
+  def est = {
+    val m = n.rint.toInt
+    if (m <= 0) EstM.empty
+    else {
+      val f = m/n
+      new Est(m, mean*f, sse*f)
+    }
+  }
+}
+
 
 trait Estimate extends Deviable {
   def n: Int
@@ -89,6 +115,7 @@ final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n
   def reset(): this.type = { n = 0; mean = 0; sse = 0; this }
   def result: Double = mean
   def immutable = new Est(n, mean, sse)
+  def weighted = new EstM.W(n, mean, sse)
   def sdToErrorInPlace: this.type = { if (n > 1) sse *= n; this }
   def errorToSDInPlace: this.type = { if (n > 1) sse /= n; this }
   def ++(that: Estimate): EstM = clone ++= that
@@ -113,12 +140,36 @@ object EstM {
   def empty = new EstM(0, 0, 0)
   def apply(): EstM = new EstM(0, 0, 0)
   def apply(n: Int, mean: Double, sse: Double): EstM = new EstM(n, mean, sse)
+
+  final class W(var n: Double, var mean: Double, var sse: Double) extends EstimateByFreq {
+    def immutable = Est.W(n, mean, sse)
+
+    def this() = this(0, 0, 0)
+    override def clone: W = new W(n, mean, sse)
+    def reset(): this.type = { n = 0; mean = 0; sse = 0; this }
+    def +=(x: Double, w: Double): this.type = {
+      if (!w.nan && !x.nan) {
+        val nold = n
+        val mold = mean
+        n += w
+        mean = if (nold > 0) (nold*mean + w*x)/n else x
+        sse += (mold - mean).sq*nold + w*(x - mean).sq
+      }
+      this
+    }
+  }
+  object W {
+    def empty = new W(0, 0, 0)
+    def apply() = new W(0, 0, 0)
+    def apply(n: Double, mean: Double, sse: Double) = new W(n, mean, sse)
+  }
 }
 
 final case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
   def sdToError = if (n <= 1) this else new Est(n, mean, sse*n)
   def errorToSD = if (n <= 1) this else new Est(n, mean, sse/n)
   def mutable = new EstM(n, mean, sse)
+  def weighted = new Est.W(n, mean, sse)
   def +:(x: Double): Est = (mutable += x).immutable
   def :+(x: Double): Est = (mutable += x).immutable
   def ++(that: Estimate): Est = (mutable ++= that).immutable
@@ -180,7 +231,15 @@ object Est {
       val i = ((e.mean*(e.n+2.0))-1).rint.toInt
       Some((i, e.n-i))
     }
+
+  final case class W(n: Double, mean: Double, sse: Double) extends EstimateByFreq {
+    def mutable = new EstM.W(n, mean, sse)
+  }
+  object W {
+    val empty = new W(0, 0, 0)
+  }
 }
+
 
 trait Extremal extends Estimate {
   def max: Double
