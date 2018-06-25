@@ -55,7 +55,7 @@ trait EstimateByFreq {
   def variance = sse / (if (n>2) n-1 else 1)
   def sd = math.sqrt(variance)
   def sem = if (n > 1) math.sqrt(sse / (n*(n-1))) else Double.NaN
-  def estm = {
+  def estm: EstM = {
     val m = n.rint.toInt
     if (m <= 0) EstM.empty
     else {
@@ -63,9 +63,9 @@ trait EstimateByFreq {
       new EstM(m, mean*f, sse*f)
     }
   }
-  def est = {
+  def est: Est = {
     val m = n.rint.toInt
-    if (m <= 0) EstM.empty
+    if (m <= 0) Est.empty
     else {
       val f = m/n
       new Est(m, mean*f, sse*f)
@@ -116,6 +116,13 @@ final class EstM(n0: Int, mean0: Double, sse0: Double) extends MutableEstimate(n
   def result: Double = mean
   def immutable = new Est(n, mean, sse)
   def weighted = new EstM.W(n, mean, sse)
+  def rescaleInPlace(factor: Double): this.type = { mean *= factor; sse *= factor*factor; this }
+  def renumberInPlace(number: Int): this.type = {
+    val factor = if (n <= 0) Double.PositiveInfinity else if (n > 2) (n-1) else n
+    sse *= (if (number > 2) number-1 else number)/factor
+    n = number
+    this
+  }
   def sdToErrorInPlace: this.type = { if (n > 1) sse *= n; this }
   def errorToSDInPlace: this.type = { if (n > 1) sse /= n; this }
   def ++(that: Estimate): EstM = clone ++= that
@@ -157,6 +164,14 @@ object EstM {
       }
       this
     }
+    def rescaleInPlace(factor: Double): this.type = { mean *= factor; sse *= factor*factor; this }
+    def renumberInPlace(number: Double): this.type = {
+      val factor = if (n <= 0) Double.PositiveInfinity else if (n > 2) (n-1) else n
+      sse *= (if (number > 2) number-1 else number)/factor
+      n = number
+      this
+    }
+    override def toString = s"EstM.W($n, $mean, $sse)"
   }
   object W {
     def empty = new W(0, 0, 0)
@@ -166,6 +181,11 @@ object EstM {
 }
 
 final case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
+  def rescaled(factor: Double) = new Est(n, mean*factor, sse*factor*factor)
+  def renumbered(number: Int) = {
+    val factor = if (n <= 0) Double.PositiveInfinity else if (n > 2) (n-1) else n
+    new Est(number, mean, sse*(if (number > 2) number-1 else number)/factor )
+  }
   def sdToError = if (n <= 1) this else new Est(n, mean, sse*n)
   def errorToSD = if (n <= 1) this else new Est(n, mean, sse/n)
   def mutable = new EstM(n, mean, sse)
@@ -175,6 +195,7 @@ final case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
   def ++(that: Estimate): Est = (mutable ++= that).immutable
   override val sd = math.sqrt(variance)
   override val error = math.sqrt(errorSq)
+  override def toString = f"$mean +- $error (n=$n)"
 }
 object Est {
   val empty = new Est(0, 0, 0)
@@ -234,6 +255,7 @@ object Est {
 
   final case class W(n: Double, mean: Double, sse: Double) extends EstimateByFreq {
     def mutable = new EstM.W(n, mean, sse)
+    override def toString = s"Est.W($n, $mean, $sse)"
   }
   object W {
     val empty = new W(0, 0, 0)

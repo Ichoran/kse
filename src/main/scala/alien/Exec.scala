@@ -155,7 +155,7 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
       var seek = true
       while (seek && i < len) {
         val ti = thing(i)
-        while (seek && j < ti.length && ti(j) != '\n') { j += 1; k += 1 }
+        while (j < ti.length && ti(j) != '\n') { j += 1; k += 1 }
         if (j >= ti.length) {
           i += 1
           j = 0
@@ -170,7 +170,7 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
         if (buffer.length < k) buffer = new Array[Byte](if (k - buffer.length > (k >>> 2)) k else buffer.length + (k >>> 2))
         var bn = thing(i0).length - j0
         System.arraycopy(thing(i0), j0, buffer, 0, bn)
-        var ii = 1
+        var ii = i0 + 1
         while (ii < i) {
           System.arraycopy(thing(ii), 0, buffer, bn, thing(ii).length)
           bn += thing(ii).length
