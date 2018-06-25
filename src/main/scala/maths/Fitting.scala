@@ -120,6 +120,12 @@ final class FitTX extends Fit[FitTX] {
   def apply(t: Double): Double = alphaX + betaX*(t - Ot) + Ox
   def xt(t: Double): Double = apply(t)
 
+  def inverse(x: Double): Double = {
+    val bX = betaX
+    if (bX == 0) Double.NaN
+    else (x - alphaX - Ox)/bX + Ot
+  }
+
   /** An estimate of the probability that a particular x at a value t comes from the linear relationship
     * fit by this fitter.  If the true (or a superior) estimate of the variance is known, it can
     * substantially improve the accuracy of the estimate especially for small n
@@ -327,6 +333,14 @@ final class FitTXY extends Fit[FitTXY] {
   def apply(t: Double): (Double, Double) = (alphaX + betaX*(t - Ot) + Ox, alphaY + betaY*(t - Ot) + Oy)
   def xt(t: Double): Double = alphaX + betaX*(t - Ot) + Ox
   def yt(t: Double): Double = alphaY + betaY*(t - Ot) + Oy
+  def inverse(x: Double, y: Double): Double = {
+    val xc = x - Ox - alphaX
+    val yc = y - Oy - alphaY
+    val bX = betaX
+    val bY = betaY
+    val denom = bX*bX + bY*bY
+    if (denom == 0) Double.NaN else (xc*bX + yc*bY)/denom + Ot
+  }
   def xform(in: Array[Double], i0: Int = 0, iN: Int = Int.MaxValue) {
     val iM = math.min(in.length, iN)
     var i = i0
