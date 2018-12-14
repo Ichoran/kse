@@ -5,6 +5,8 @@ package kse.jsonal
 
 import java.nio._
 
+import kse.flow._
+
 // WARNING!!! WARNING!!! WARNING!!!
 // This file is an unholy amalgam of code from JsonByteBufferParser and JsonStringParser
 // with some of its own custom logic as well.  And it uses sun.misc.Unsafe.
@@ -655,52 +657,52 @@ object JsonRecyclingParser {
     else                                               'a' | ('l' << 8) | ('s' << 16) | ('e' << 24)
 
 
-  def Json(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json] = {
+  def Json(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null, relaxed: Boolean = false): Jast.To[kse.jsonal.Json] = {
     val jrp = (new JsonRecyclingParser).relaxedNumbers(relaxed).refresh(input)
     jrp.parseVal() match {
-      case js: kse.jsonal.Json => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(js)
-      case je: JastError => Left(je)
+      case js: kse.jsonal.Json => if (ep ne null) ep.index = jrp.offset + jrp.start; Yes(js)
+      case je: JastError => No(je)
     }
   }
-  def Null(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null): Either[JastError, kse.jsonal.Json.Null] = {
+  def Null(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null): Jast.To[kse.jsonal.Json.Null] = {
     val jrp = (new JsonRecyclingParser).refresh(input).recycle()
-    if (jrp.available < 4) return Left(JastError("Expected JSON null but not enough input", jrp.start))
-    if (jrp.buffer(jrp.start) != 'n') Left(JastError("Expected JSON null but did not find 'n'", jrp.start))
+    if (jrp.available < 4) return No(JastError("Expected JSON null but not enough input", jrp.start))
+    if (jrp.buffer(jrp.start) != 'n') No(JastError("Expected JSON null but did not find 'n'", jrp.start))
     jrp.parseNull() match {
-      case j: kse.jsonal.Json.Null => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(j)
-      case e: JastError => Left(e)
-      case _ => Left(JastError("Internal error: parse did not produce JSON null or an error?"))
+      case j: kse.jsonal.Json.Null => if (ep ne null) ep.index = jrp.offset + jrp.start; Yes(j)
+      case e: JastError => No(e)
+      case _ => No(JastError("Internal error: parse did not produce JSON null or an error?"))
     }
   }
-  def Bool(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null): Either[JastError, kse.jsonal.Json.Bool] = {
+  def Bool(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null): Jast.To[kse.jsonal.Json.Bool] = {
     val jrp = (new JsonRecyclingParser).refresh(input).recycle()
     jrp.parseBool() match {
       case jb: kse.jsonal.Json.Bool =>
         if (ep ne null) ep.index = jrp.offset + jrp.start
         if (jb.value) myRightTrue else myRightFalse
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON boolean or an error?"))
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON boolean or an error?"))
     }
   }
-  def Str(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null): Either[JastError, kse.jsonal.Json.Str] = {
+  def Str(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null): Jast.To[kse.jsonal.Json.Str] = {
     val jrp = (new JsonRecyclingParser).refresh(input).recycle()
-    if (jrp.available < 2) return Left(JastError("Expected JSON string but not enough input", jrp.start))
-    if (jrp.buffer(jrp.start) != '"') return Left(JastError("Expected JSON string but did not find '\"'", jrp.start))
+    if (jrp.available < 2) return No(JastError("Expected JSON string but not enough input", jrp.start))
+    if (jrp.buffer(jrp.start) != '"') return No(JastError("Expected JSON string but did not find '\"'", jrp.start))
     jrp.parseStr() match {
-      case js: kse.jsonal.Json.Str => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(js)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
+      case js: kse.jsonal.Json.Str => if (ep ne null) ep.index = jrp.offset + jrp.start; Yes(js)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON string or an error?"))
     }
   }
-  def Num(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Num] = {
+  def Num(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Num] = {
     val jrp = (new JsonRecyclingParser).refresh(input).relaxedNumbers(relaxed).recycle()
-    if (jrp.available < 1) return Left(JastError("Expected JSON number but not enough input", jrp.start))
+    if (jrp.available < 1) return No(JastError("Expected JSON number but not enough input", jrp.start))
     val c = jrp.buffer(jrp.start)
-    if (!((c >= '0' && c <= '9') || c == '.')) return Left(JastError("Expected JSON number but did not find digit or '-'", jrp.start))
+    if (!((c >= '0' && c <= '9') || c == '.')) return No(JastError("Expected JSON number but did not find digit or '-'", jrp.start))
     jrp.parseJastNum(c) match {
-      case jn: kse.jsonal.Json.Num => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(jn)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON number or an error?"))
+      case jn: kse.jsonal.Json.Num => if (ep ne null) ep.index = jrp.offset + jrp.start; Yes(jn)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON number or an error?"))
     }
   }
   def Arr(
@@ -708,26 +710,26 @@ object JsonRecyclingParser {
     ep: FromJson.Endpoint = null,
     relaxed: Boolean = false,
     nonNumeric: Boolean = false
-  ): Either[JastError, kse.jsonal.Json.Arr] = {
+  ): Jast.To[kse.jsonal.Json.Arr] = {
     val jrp = (new JsonRecyclingParser).refresh(input).relaxedNumbers(relaxed).recycle()
-    if (jrp.available < 2) return Left(JastError("Expected JSON array but not enough input", jrp.start))
+    if (jrp.available < 2) return No(JastError("Expected JSON array but not enough input", jrp.start))
     val c = jrp.buffer(jrp.start)
-    if (c != '[') return Left(JastError("Expected JSON array but did not find '['", jrp.start))
+    if (c != '[') return No(JastError("Expected JSON array but did not find '['", jrp.start))
     jrp.parseArr(!nonNumeric) match {
-      case ja: kse.jsonal.Json.Arr => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(ja)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON array or an error?"))
+      case ja: kse.jsonal.Json.Arr => if (ep ne null) ep.index = jrp.offset + jrp.start; Yes(ja)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON array or an error?"))
     }
   }
-  def Obj(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Obj] = {
+  def Obj(input: RecyclingBuffer => Boolean, ep: FromJson.Endpoint = null, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Obj] = {
     val jrp = (new JsonRecyclingParser).refresh(input).relaxedNumbers(relaxed).recycle()
-    if (jrp.available < 2) return Left(JastError("Expected JSON object but not enough input", jrp.start))
+    if (jrp.available < 2) return No(JastError("Expected JSON object but not enough input", jrp.start))
     val c = jrp.buffer(jrp.start)
-    if (c != '{') return Left(JastError("Expected JSON object but did not find '{'", jrp.start))
+    if (c != '{') return No(JastError("Expected JSON object but did not find '{'", jrp.start))
     jrp.parseObj() match {
-      case jo: kse.jsonal.Json.Obj => if (ep ne null) ep.index = jrp.offset + jrp.start; Right(jo)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON object or an error?"))
+      case jo: kse.jsonal.Json.Obj => if (ep ne null) ep.index = jrp.offset + jrp.start; Yes(jo)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON object or an error?"))
     }
   }
 

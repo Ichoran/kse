@@ -82,7 +82,7 @@ sealed trait Ok[+N, +Y] extends Product with Serializable {
   
   
   /** Apply an operation only to a favored value and return the same `Ok`. */
-  def tap[A](f: Y => A): this.type
+  def tapYes[A](f: Y => A): this.type
   
   /** Apply an operation only to a disfavored value and return the same `Ok`. */
   def tapNo[A](f: N => A): this.type
@@ -104,6 +104,12 @@ sealed trait Ok[+N, +Y] extends Product with Serializable {
   
   /** Converts to a `scala.util.Either`. */
   def toEither: Either[N, Y] = this match {
+    case Yes(y) => Right(y)
+    case No(n) => Left(n)
+  }
+
+  /** Converts to a `scala.util.Either`. */
+  def e: Either[N, Y] = this match {
     case Yes(y) => Right(y)
     case No(n) => Left(n)
   }
@@ -153,7 +159,7 @@ final case class Yes[+Y](yes: Y) extends Ok[Nothing, Y] {
   def foreach[A](f: Y => A): Unit = { f(yes); () }
   def foreachNo[A](f: Nothing => A): Unit = {}
   
-  def tap[A](f: Y => A): this.type = { f(yes); this }
+  def tapYes[A](f: Y => A): this.type = { f(yes); this }
   def tapNo[A](f: Nothing => A): this.type = this
   
   def exists(f: Y => Boolean) = f(yes)
@@ -193,7 +199,7 @@ final case class No[+N](no: N) extends Ok[N, Nothing] {
   def foreach[A](f: Nothing => A): Unit = {}
   def foreachNo[A](f: N => A): Unit = { f(no); () }
   
-  def tap[A](f: Nothing => A): this.type = this
+  def tapYes[A](f: Nothing => A): this.type = this
   def tapNo[A](f: N => A): this.type = { f(no); this }
   
   def exists(f: Nothing => Boolean) = false

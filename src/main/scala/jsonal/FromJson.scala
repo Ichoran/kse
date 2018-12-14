@@ -3,92 +3,422 @@
 
 package kse.jsonal
 
-import scala.language.higherKinds
-
 import java.nio._
 
+import scala.language.higherKinds
+
 import scala.util.control.NonFatal
+
+import kse.flow._
 
 /** Classes or objects implementing this trait are able to deserialize objects from a JSON representation. */
 trait FromJson[A] {
   /** Recover the object from its JSON representation. */
-  def parse(input: Json): Either[JastError, A]
+  def parse(input: Json): Jast.To[A]
 
   /** Recover the object from its JSON representation if there was a JSON representation */
-  def parseJast(input: Jast): Either[JastError, A] = input match {
-    case je: JastError => Left(je)
+  def parseJast(input: Jast): Jast.To[A] = input match {
+    case je: JastError => No(je)
     case js: Json => parse(js)
   }
 
   /** Deserialize the object from a string containing its JSON representation, keeping track of the end of parsing. */
-  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Either[JastError, A] = Json.parse(input, i0, iN, ep) match {
-    case Left(je)  => Left(je)
-    case Right(js) => parse(js)
-  }
+  def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint): Jast.To[A] = parse(Json.parse(input, i0, iN, ep).?)
 
   /** Deserialize the object from a string containing its JSON representation. */
-  def parse(input: String): Either[JastError, A] = parse(input, 0, input.length, new FromJson.Endpoint(0))
+  def parse(input: String): Jast.To[A] = parse(input, 0, input.length, new FromJson.Endpoint(0))
 
   /** Deserialize the object from a ByteBuffer containing its JSON representation. */
-  def parse(input: ByteBuffer): Either[JastError, A] = Json.parse(input) match {
-    case Left(je)  => Left(je)
-    case Right(js) => parse(js)
-  }
+  def parse(input: ByteBuffer): Jast.To[A] = parse(Json.parse(input).?)
 
   /** Deserialize the object from a CharBuffer containing its JSON representation. */
-  def parse(input: CharBuffer): Either[JastError, A] = Json.parse(input) match {
-    case Left(je)  => Left(je)
-    case Right(js) => parse(js)
-  }
+  def parse(input: CharBuffer): Jast.To[A] = parse(Json.parse(input).?)
 
   /** Deserialize the object from an InputStream containing its JSON representation, keeping track of the end of parsing. */
-  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, A] = Json.parse(input, ep) match {
-    case Left(je)  => Left(je)
-    case Right(js) => parse(js)
-  }
+  def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Jast.To[A] = parse(Json.parse(input, ep).?)
 
   /** Deserialize the object from an InputStream containing its JSON representation. */
-  def parse(input: java.io.InputStream): Either[JastError, A] = parse(input, ep = null)
+  def parse(input: java.io.InputStream): Jast.To[A] = parse(input, ep = null)
 
   /** Recover an array of these objects from their JSON representation */
-  def parseArray(input: Json.Arr)(implicit tag: reflect.ClassTag[A]): Either[JastError, Array[A]] = {
+  def parseArray(input: Json.Arr)(implicit tag: reflect.ClassTag[A]): Jast.To[Array[A]] = {
     var a = new Array[A](input.size)
     var i = 0
     while (i < input.size) {
       val ji = input(i) match {
         case jx: Json => jx
-        case je: JastError => return Left(JastError("Error retriving index "+i, because = je))
+        case je: JastError => return No(JastError("Error retriving index "+i, because = je))
       }
       parse(ji) match {
-        case Left(e) => return Left(JastError("Error parsing index " + i, because = e))
-        case Right(x) => a(i) = x
+        case No(e) => return No(JastError("Error parsing index " + i, because = e))
+        case Yes(x) => a(i) = x
       }
       i += 1
     }
-    Right(a)
+    Yes(a)
   }
 
   /** Recover a collection of these objects from their JSON representation */
-  def parseTo[Coll[_]](input: Json.Arr)(implicit cbf: collection.generic.CanBuildFrom[Nothing, A, Coll[A]]): Either[JastError, Coll[A]] = {
+  def parseTo[Coll[_]](input: Json.Arr)(implicit cbf: collection.generic.CanBuildFrom[Nothing, A, Coll[A]]): Jast.To[Coll[A]] = {
     val b = cbf()
     var i = 0
     while (i < input.size) {
       val ji = input(i) match {
         case jx: Json => jx
-        case je: JastError => return Left(JastError("Error retriving index "+i, because = je))
+        case je: JastError => return No(JastError("Error retriving index "+i, because = je))
       }
       parse(ji) match {
-        case Left(e) => return Left(JastError("Error parsing index " + i, because = e))
-        case Right(x) => b += x
+        case No(e) => return No(JastError("Error parsing index " + i, because = e))
+        case Yes(x) => b += x
       }
       i += 1
     }
-    Right(b.result)
+    Yes(b.result)
   }
 }
 object FromJson {
   /** A utility class that holds the last index of a input used for JSON parsing */
   case class Endpoint(var index: Long) {}
+
+  /** Helper method that makes an instance of a FromJson */
+  def apply[A](name: String)(pf: PartialFunction[Json, Jast.To[A]]): FromJson[A] = new FromJson[A] {
+    def parse(json: Json): Jast.To[A] =
+      pf.applyOrElse(json, (_: Json) => No(JastError(s"Incorrect structure for JSON representation of $name")))
+  }
+
+  def obj[A, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A])
+  )(
+    zf: (Json.Obj, A) => Ok[JastError, Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Ok[JastError, Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        zf(o, a)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+  def obj[A, B, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B])
+  )(
+    zf: (Json.Obj, A, B) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        zf(o, a, b)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+
+  def obj[A, B, C, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B]),
+    fc: (String, Json => Jast.To[C])
+  )(
+    zf: (Json.Obj, A, B, C) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        val c = o(fc._1) match { 
+          case jj: Json => fc._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fc._1}"))
+        }
+        zf(o, a, b, c)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+  def obj[A, B, C, D, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B]),
+    fc: (String, Json => Jast.To[C]),
+    fd: (String, Json => Jast.To[D])
+  )(
+    zf: (Json.Obj, A, B, C, D) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        val c = o(fc._1) match { 
+          case jj: Json => fc._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fc._1}"))
+        }
+        val d = o(fd._1) match { 
+          case jj: Json => fd._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fd._1}"))
+        }
+        zf(o, a, b, c, d)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+  def obj[A, B, C, D, E, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B]),
+    fc: (String, Json => Jast.To[C]),
+    fd: (String, Json => Jast.To[D]),
+    fe: (String, Json => Jast.To[E])
+  )(
+    zf: (Json.Obj, A, B, C, D, E) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        val c = o(fc._1) match { 
+          case jj: Json => fc._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fc._1}"))
+        }
+        val d = o(fd._1) match { 
+          case jj: Json => fd._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fd._1}"))
+        }
+        val e = o(fe._1) match { 
+          case jj: Json => fe._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fe._1}"))
+        }
+        zf(o, a, b, c, d, e)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+  def obj[A, B, C, D, E, F, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B]),
+    fc: (String, Json => Jast.To[C]),
+    fd: (String, Json => Jast.To[D]),
+    fe: (String, Json => Jast.To[E]),
+    ff: (String, Json => Jast.To[F])
+  )(
+    zf: (Json.Obj, A, B, C, D, E, F) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        val c = o(fc._1) match { 
+          case jj: Json => fc._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fc._1}"))
+        }
+        val d = o(fd._1) match { 
+          case jj: Json => fd._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fd._1}"))
+        }
+        val e = o(fe._1) match { 
+          case jj: Json => fe._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fe._1}"))
+        }
+        val f = o(ff._1) match { 
+          case jj: Json => ff._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${ff._1}"))
+        }
+        zf(o, a, b, c, d, e, f)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+  def obj[A, B, C, D, E, F, G, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B]),
+    fc: (String, Json => Jast.To[C]),
+    fd: (String, Json => Jast.To[D]),
+    fe: (String, Json => Jast.To[E]),
+    ff: (String, Json => Jast.To[F]),
+    fg: (String, Json => Jast.To[G])
+  )(
+    zf: (Json.Obj, A, B, C, D, E, F, G) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        val c = o(fc._1) match { 
+          case jj: Json => fc._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fc._1}"))
+        }
+        val d = o(fd._1) match { 
+          case jj: Json => fd._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fd._1}"))
+        }
+        val e = o(fe._1) match { 
+          case jj: Json => fe._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fe._1}"))
+        }
+        val f = o(ff._1) match { 
+          case jj: Json => ff._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${ff._1}"))
+        }
+        val g = o(fg._1) match { 
+          case jj: Json => fg._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fg._1}"))
+        }
+        zf(o, a, b, c, d, e, f, g)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+  def obj[A, B, C, D, E, F, G, H, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B]),
+    fc: (String, Json => Jast.To[C]),
+    fd: (String, Json => Jast.To[D]),
+    fe: (String, Json => Jast.To[E]),
+    ff: (String, Json => Jast.To[F]),
+    fg: (String, Json => Jast.To[G]),
+    fh: (String, Json => Jast.To[H])
+  )(
+    zf: (Json.Obj, A, B, C, D, E, F, G, H) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        val c = o(fc._1) match { 
+          case jj: Json => fc._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fc._1}"))
+        }
+        val d = o(fd._1) match { 
+          case jj: Json => fd._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fd._1}"))
+        }
+        val e = o(fe._1) match { 
+          case jj: Json => fe._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fe._1}"))
+        }
+        val f = o(ff._1) match { 
+          case jj: Json => ff._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${ff._1}"))
+        }
+        val g = o(fg._1) match { 
+          case jj: Json => fg._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fg._1}"))
+        }
+        val h = o(fh._1) match { 
+          case jj: Json => fh._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fh._1}"))
+        }
+        zf(o, a, b, c, d, e, f, g, h)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
+
+  def obj[A, B, C, D, E, F, G, H, I, Z](
+    name: String,
+    fa: (String, Json => Jast.To[A]),
+    fb: (String, Json => Jast.To[B]),
+    fc: (String, Json => Jast.To[C]),
+    fd: (String, Json => Jast.To[D]),
+    fe: (String, Json => Jast.To[E]),
+    ff: (String, Json => Jast.To[F]),
+    fg: (String, Json => Jast.To[G]),
+    fh: (String, Json => Jast.To[H]),
+    fi: (String, Json => Jast.To[I])
+  )(
+    zf: (Json.Obj, A, B, C, D, E, F, G, H, I) => Jast.To[Z]
+  ): FromJson[Z] = new FromJson[Z] {
+    def parse(json: Json): Jast.To[Z] = json match {
+      case o: Json.Obj => 
+        val a = o(fa._1) match { 
+          case jj: Json => fa._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fa._1}"))
+        }
+        val b = o(fb._1) match { 
+          case jj: Json => fb._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fb._1}"))
+        }
+        val c = o(fc._1) match { 
+          case jj: Json => fc._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fc._1}"))
+        }
+        val d = o(fd._1) match { 
+          case jj: Json => fd._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fd._1}"))
+        }
+        val e = o(fe._1) match { 
+          case jj: Json => fe._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fe._1}"))
+        }
+        val f = o(ff._1) match { 
+          case jj: Json => ff._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${ff._1}"))
+        }
+        val g = o(fg._1) match { 
+          case jj: Json => fg._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fg._1}"))
+        }
+        val h = o(fh._1) match { 
+          case jj: Json => fh._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fh._1}"))
+        }
+        val i = o(fi._1) match { 
+          case jj: Json => fi._2(jj).?
+          case _ => return No(JastError(s"$name is missing field ${fi._1}"))
+        }
+        zf(o, a, b, c, d, e, f, g, h, i)
+      case _ => No(JastError(s"$name must be encoded in a JSON object"))
+    }
+  }
 }
 
 /** A class for functionality that allows one to parse to a a JSON AST. */
@@ -147,4 +477,16 @@ class ParseToJast private[jsonal] (protected val isRelaxed: Boolean) {
       }
     }
   }
+}
+
+trait FromJsonImplicit[A] {
+  implicit def fromJson: FromJson[A]
+}
+
+trait FromJsonCompanion[A] extends FromJson[A] with FromJsonImplicit[A] {
+  final implicit def fromJson: FromJson[A] = this
+}
+
+trait FromJsonCapable[A] extends FromJson[A] with FromJsonImplicit[A] {
+  final def parse(json: Json): Jast.To[A] = fromJson.parse(json)
 }

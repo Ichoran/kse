@@ -5,6 +5,8 @@ package kse.jsonal
 
 import java.nio._
 
+import kse.flow._
+
 
 // WARNING - this code is almost entirely COPIED from JsonByteBufferParser,
 // which is itself copied from JsonStringParser.
@@ -515,81 +517,81 @@ object JsonByteBufferParser{
     }
   }
 
-  def Json(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json] =
+  def Json(input: ByteBuffer, relaxed: Boolean = false): Jast.To[kse.jsonal.Json] =
     (new JsonByteBufferParser).relaxedNumbers(relaxed).parseVal(input) match {
-      case js: kse.jsonal.Json => Right(js)
-      case je: JastError => Left(je)
+      case js: kse.jsonal.Json => Yes(js)
+      case je: JastError => No(je)
     }
-  def Null(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Null] = {
-    if (input.remaining < 4) return Left(JastError("Expected JSON null but not enough input", input.position))
+  def Null(input: ByteBuffer, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Null] = {
+    if (input.remaining < 4) return No(JastError("Expected JSON null but not enough input", input.position))
     val zero = input.position
     if (input.get != 'n' || input.get != 'u' || input.get != 'l' || input.get != 'l') {
       input.position(zero)
-      Left(JastError("Expected JSON null but did not find literal text 'null'", zero))
+      No(JastError("Expected JSON null but did not find literal text 'null'", zero))
     }
     else myRightNull
   }
-  def Bool(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Bool] = {
+  def Bool(input: ByteBuffer, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Bool] = {
     (new JsonByteBufferParser).relaxedNumbers(relaxed).parseBool(input) match {
       case jb: kse.jsonal.Json.Bool =>
         if (jb.value) myRightTrue else myRightFalse
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON boolean or an error?"))
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON boolean or an error?"))
     }
   }
-  def Str(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Str] = {
-    if (input.remaining < 2) return Left(JastError("Expected JSON string but at end of input"))
+  def Str(input: ByteBuffer, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Str] = {
+    if (input.remaining < 2) return No(JastError("Expected JSON string but at end of input"))
     if (input.get != '"') {
       input.position(input.position-1)
-      return Left(JastError("Expected JSON string but did not find '\"'", input.position))
+      return No(JastError("Expected JSON string but did not find '\"'", input.position))
     }
     val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseStr(input) match {
-      case js: kse.jsonal.Json.Str => Right(js)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON string or an error?"))
+      case js: kse.jsonal.Json.Str => Yes(js)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON string or an error?"))
     }
   }
-  def Num(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Num] = {
-    if (!input.hasRemaining) return Left(JastError("Expected JSON number but at end of input"))
+  def Num(input: ByteBuffer, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Num] = {
+    if (!input.hasRemaining) return No(JastError("Expected JSON number but at end of input"))
     val c = input.get
     if (c != '-' && (c < '0' || c > '9')) {
       input.position(input.position-1)
-      return Left(JastError("Expected JSON number but found character "+c, input.position))
+      return No(JastError("Expected JSON number but found character "+c, input.position))
     }
     val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseJastNum(input, c) match {
-      case jn: kse.jsonal.Json.Num => Right(jn)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON number or an error?"))
+      case jn: kse.jsonal.Json.Num => Yes(jn)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON number or an error?"))
     }
   }
-  def Arr(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Arr] = {
-    if (!input.hasRemaining) return Left(JastError("Expected JSON array but at end of input"))
+  def Arr(input: ByteBuffer, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Arr] = {
+    if (!input.hasRemaining) return No(JastError("Expected JSON array but at end of input"))
     val c = input.get
     if (c != '[') {
       input.position(input.position-1)
-      return Left(JastError("Expected JSON array but found character "+c, input.position))
+      return No(JastError("Expected JSON array but found character "+c, input.position))
     }
     val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseArr(input) match {
-      case ja: kse.jsonal.Json.Arr => Right(ja)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON array or an error?"))
+      case ja: kse.jsonal.Json.Arr => Yes(ja)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON array or an error?"))
     }
   }
-  def Obj(input: ByteBuffer, relaxed: Boolean = false): Either[JastError, kse.jsonal.Json.Obj] = {
-    if (!input.hasRemaining) return Left(JastError("Expected JSON object but at end of input"))
+  def Obj(input: ByteBuffer, relaxed: Boolean = false): Jast.To[kse.jsonal.Json.Obj] = {
+    if (!input.hasRemaining) return No(JastError("Expected JSON object but at end of input"))
     val c = input.get
     if (c != '{') {
       input.position(input.position-1)
-      return Left(JastError("Expected JSON object but found character "+c, input.position))
+      return No(JastError("Expected JSON object but found character "+c, input.position))
     }
     val jcbp = (new JsonByteBufferParser).relaxedNumbers(relaxed)
     jcbp.parseObj(input) match {
-      case jo: kse.jsonal.Json.Obj => Right(jo)
-      case je: JastError => Left(je)
-      case _ => Left(JastError("Internal error: parse did not produce JSON object or an error?"))
+      case jo: kse.jsonal.Json.Obj => Yes(jo)
+      case je: JastError => No(je)
+      case _ => No(JastError("Internal error: parse did not produce JSON object or an error?"))
     }
   }
 }

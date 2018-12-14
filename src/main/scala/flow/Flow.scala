@@ -256,6 +256,15 @@ package object flow extends Priority1HopSpecs {
     @inline def orHop[B](default: => B)(implicit hop: Hop[B]): A = underlying match { case Some(a) => a; case None => hop(default); null.asInstanceOf[A] }
     /** Convert to [[Ok]] with `Unit` for the disfavored branch. */
     @inline def toOk: Ok[Unit, A] = underlying match { case Some(a) => Yes(a); case _ => Ok.UnitNo }
+
+    /** Convert to [[Ok]] with a specified value for the disfavored branch. */
+    @inline def okOr[B](b: => B): Ok[B, A] = underlying match { case Some(a) => Yes(a); case _ => No(b) }
+
+    /** Return on None, otherwise extract value */
+    def ? : A = macro ControlFlowMacroImpl.returnNoneOnNone
+
+    /** Return on None, otherwise extract value */
+    def SOME: A = macro ControlFlowMacroImpl.returnNoneOnNone
   }
 
   /** Typecasts `Try` to its failure branch.  Not a safe operation unless you've already pattern matched. */
@@ -281,9 +290,15 @@ package object flow extends Priority1HopSpecs {
 
     /** Extracts the successful result or performs a local or nonlocal return of the failure branch.
       *
+      * Note: this is similar to Rust's `?`
+      */
+    def ? : A = macro ControlFlowMacroImpl.returnTryOnFailure
+
+    /** Extracts the successful result or performs a local or nonlocal return of the failure branch.
+      *
       * Note: this is similar to Rust's `try!` macro.
       */
-    def OUT: A = macro ControlFlowMacroImpl.returnTryOnFailure
+    def SUCCESS: A = macro ControlFlowMacroImpl.returnTryOnFailure
   }
 
   /** Typecasts `Either` to its left branch.  Not a safe operation unless you've already pattern matched. */
@@ -298,11 +313,17 @@ package object flow extends Priority1HopSpecs {
     }
 
     /** Extracts the right value or performs a local or nonlocal return of the (boxed) left branch */
-    def OUT: R = macro ControlFlowMacroImpl.returnEitherOnLeft
+    def ? : R = macro ControlFlowMacroImpl.returnEitherOnLeft
+
+    /** Extracts the right value or performs a local or nonlocal return of the (boxed) left branch */
+    def RIGHT: R = macro ControlFlowMacroImpl.returnEitherOnLeft
   }
   
   /** Typecasts `Ok` to its `No` branch.  Not a safe operation unless you've already pattern matched. */
   @inline def unsafeCastOkToNo[N, Y](ok: Ok[N, Y]): No[N] = ok.asInstanceOf[No[N]]
+  
+  /** Typecasts `Ok` to its `Yes` branch.  Not a safe operation unless you've already pattern matched. */
+  @inline def unsafeCastOkToYes[N, Y](ok: Ok[N, Y]): Yes[Y] = ok.asInstanceOf[Yes[Y]]
   
   /** Allows alternatives to `yes` on [[Ok]] */
   implicit class OkCanHop[N,Y](private val underlying: Ok[N,Y]) extends AnyVal {
@@ -312,7 +333,13 @@ package object flow extends Priority1HopSpecs {
     @inline def orHop(implicit hop: Hop[N]): Y = if (underlying.isOk) underlying.yes else { hop(underlying.no); null.asInstanceOf[Y] }
 
     /** Extracts the `yes` value or performs a local or nonlocal return of the (boxed) `no` value */
-    def OUT: Y = macro ControlFlowMacroImpl.returnOkOnNo
+    def ? : Y = macro ControlFlowMacroImpl.returnOkOnNo
+
+    /** Extracts the `yes` value or performs a local or nonlocal return of the (boxed) `no` value */
+    def YES: Y = macro ControlFlowMacroImpl.returnOkOnNo
+
+    /** Extracts the `no` value or performs a local or nonlocal return of the (boxed) `yes` value */
+    def NO: N = macro ControlFlowMacroImpl.returnOkOnNo
   }
 
   /** Allows exceptions to convert themselves to a string representation.  Surprisingly complicated to do right! */
@@ -372,10 +399,13 @@ package object flow extends Priority1HopSpecs {
   /** Provides standard control-flow methods that should exist on Object. */
   implicit class EverythingCanTapAndSuch[A](private val underlying: A) extends AnyVal {
     /** Transforms self according to the function `f`. */
-    @inline def fn[Z](f: A => Z) = f(underlying)
-    
+    def fn[Z](f: A => Z): Z = macro ControlFlowMacroImpl.pipe[A, Z]
+
+    /** Transforms self according to the function `f` (alias for `fn`). */
+    def pipe[Z](f: A => Z): Z = macro ControlFlowMacroImpl.pipe[A, Z]
+
     /** Executes a side effect that depends on self, and returns self */
-    @inline def tap(f: A => Any) = { f(underlying); underlying }
+    def tap[U](f: A => U): A = macro ControlFlowMacroImpl.tap[A, U]
 
     /** Transforms self according to `pf` only for those values where `pf` is defined. */
     @inline def partFn(pf: PartialFunction[A,A]) = if (pf.isDefinedAt(underlying)) pf(underlying) else underlying

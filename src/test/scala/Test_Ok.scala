@@ -119,7 +119,7 @@ object Test_Ok extends Test_Kse {
     var two = "dog"
     val y = Yes("fish")
     val n = No("dog")
-    (y.tap(two = _) eq y) && (n.tap(one = _) eq n) && one == "fish" && two == "fish"
+    (y.tapYes(two = _) eq y) && (n.tapYes(one = _) eq n) && one == "fish" && two == "fish"
   }
 
   def test_tapNo = {

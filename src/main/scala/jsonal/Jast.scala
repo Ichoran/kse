@@ -37,6 +37,10 @@ import java.nio._
 
 import scala.util.control.NonFatal
 
+import scala.language.experimental.macros
+
+import kse.flow._
+
 
 /** Jast is a Json Abstract Syntax Tree.
   *
@@ -96,7 +100,7 @@ sealed trait Jast {
   def apply(key: String): Jast
 
   /** Parse into a class given an implicit (or explicit) converter */
-  def to[A](implicit fj: FromJson[A]): Either[JastError, A]
+  def to[A](implicit fj: FromJson[A]): Jast.To[A]
 
   /** Converts errors into JSON null values */
   def errorToNull: Json
@@ -111,7 +115,13 @@ sealed trait Jast {
 object Jast extends ParseToJast(false) {
   /** Parsing routines that take a relaxed approach to parsing numbers (everything goes into Double, even if inexact) */
   val relaxed: ParseToJast = new ParseToJast(true)
+
+  type To[+A] = Ok[JastError, A]
+  object To {
+    def error(msg: String): No[JastError] = No(JastError(msg))
+  }
 }
+
 
 /** Representation of an error that occured during JSON parsing or access. */
 final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.Null) extends Jast {
@@ -128,7 +138,7 @@ final case class JastError(msg: String, where: Long = -1L, because: Jast = Json.
   def stringOrNull: String = null
   def apply(i: Int) = this
   def apply(key: String) = this
-  def to[A](implicit fj: FromJson[A]): Either[JastError, A] = Left(this)
+  def to[A](implicit fj: FromJson[A]): Jast.To[A] = No(this)
   def errorToNull: Json = Json.Null
 
   override def toString = {
@@ -183,7 +193,7 @@ sealed trait Json extends Jast with AsJson {
   def stringOrNull: String = null
   def apply(i: Int): Jast = Json.notIndexableError
   def apply(key: String): Jast = Json.notKeyedError
-  def to[A](implicit fj: FromJson[A]): Either[JastError, A] = fj parse this
+  def to[A](implicit fj: FromJson[A]): Jast.To[A] = fj parse this
   def errorToNull: Json = this
 
   def json: Json = this
@@ -322,6 +332,15 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
   }
 
 
+  /** Makes explicit that you're happy to put either of two options into a JSON format without
+    * a key or anything to distingish between the two.
+    */
+  def ok[N, Y](e: Ok[N, Y])(implicit jsen: Jsonize[N], jsey: Jsonize[Y]): Json = e match {
+    case Yes(y) => jsey.jsonize(y)
+    case No(n)  => jsen.jsonize(n)
+  }
+
+
   /** Int can fit into Double just fine, so we allow this without warning */
   def ~(int: Int): Arr.Dbl.Build[Json] = (new Arr.Dbl.Build[Json]) ~ int.toDouble
 
@@ -437,18 +456,18 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
   /** Parse this JSON value as itself.
     *
-    * Note: a `Left(JastError)` is never actually produced.
+    * Note: a `No(JastError)` is never actually produced.
     */
-  def parse(input: Json): Either[JastError, Json] = Right(input)
+  def parse(input: Json): Jast.To[Json] = Yes(input)
 
   override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = JsonStringParser.Json(input, i0, iN, ep)
   override def parse(input: ByteBuffer) = JsonByteBufferParser.Json(input)
   override def parse(input: CharBuffer) = JsonCharBufferParser.Json(input)
-  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] =
+  override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Ok[JastError, Json] =
     JsonRecyclingParser.Json(JsonRecyclingParser recycleInputStream input, ep)
 
   private final class JsonFromJson extends FromJson[Json] {
-    def parse(input: Json): Either[JastError, Json] = Json.parse(input)
+    def parse(input: Json): Jast.To[Json] = Yes(input)
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
       JsonStringParser.Json(input, i0, iN, ep, relaxed = true)
@@ -457,7 +476,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     override def parse(input: CharBuffer) = Json.parse(input)
 
-    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Either[JastError, Json] =
+    override def parse(input: java.io.InputStream, ep: FromJson.Endpoint): Ok[JastError, Json] =
       JsonRecyclingParser.Json(JsonRecyclingParser recycleInputStream input, ep, relaxed = true)
   }
 
@@ -493,9 +512,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     override def equals(a: Any) = a.asInstanceOf[AnyRef] eq this
 
     /** Returns a `JastError` if this is not a JSON null */
-    def parse(input: Json): Either[JastError, Null] =
-      if (this eq input) Right(this)
-      else Left(JastError("expected null"))
+    def parse(input: Json): Jast.To[Null] =
+      if (this eq input) Yes(this)
+      else Jast.To.error("expected null")
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = 
       JsonStringParser.Null(input, i0, iN, ep)
@@ -554,9 +573,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
 
     /** Returns a `Left(JastError)` unless the input is a JSON boolean */
-    override def parse(input: Json): Either[JastError, Bool] = input match {
-      case b: Bool => Right(b)
-      case _       => Left(JastError("expected Json.Bool"))
+    override def parse(input: Json): Jast.To[Bool] = input match {
+      case b: Bool => Yes(b)
+      case _       => Jast.To.error("expected Json.Bool")
     }
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) = 
@@ -654,9 +673,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
 
     /** Returns `Left(JastError)` unless the input is a `Json.Str` */
-    override def parse(input: Json): Either[JastError, Str] = input match {
-      case s: Str => Right(s)
-      case _      => Left(JastError("expected Json.Str"))
+    override def parse(input: Json): Jast.To[Str] = input match {
+      case s: Str => Yes(s)
+      case _      => Jast.To.error("expected Json.Str")
     }
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
@@ -1057,9 +1076,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
 
     /** Returns `Left(JastError)` unless the input is a `Json.Num` */    
-    override def parse(input: Json): Either[JastError, Num] = input match {
-      case n: Num => Right(n)
-      case _      => Left(JastError("expected Json.Num"))
+    override def parse(input: Json): Jast.To[Num] = input match {
+      case n: Num => Yes(n)
+      case _      => Jast.To.error("expected Json.Num")
     }
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
@@ -1074,7 +1093,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
 
     /** Uses non-strict numeric parsing, storing all numbers in `Double` for speed */
     private final class NumFromJson extends FromJson[Num] {
-      override def parse(input: Json): Either[JastError, Num] = Num.parse(input)
+      override def parse(input: Json): Jast.To[Num] = Num.parse(input)
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
         JsonStringParser.Num(input, i0, iN, ep, relaxed = true)
       override def parse(input: ByteBuffer) = JsonByteBufferParser.Num(input, relaxed = true)
@@ -1720,9 +1739,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
 
     /** Returns `Left(JastError)` unless the input is a `Json.Arr` */    
-    override def parse(input: Json): Either[JastError, Arr] = input match {
-      case n: Arr => Right(n)
-      case _      => Left(JastError("expected Json.Arr"))
+    override def parse(input: Json): Jast.To[Arr] = input match {
+      case n: Arr => Yes(n)
+      case _      => Jast.To.error("expected Json.Arr")
     }
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
@@ -1736,7 +1755,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       JsonRecyclingParser.Arr(JsonRecyclingParser recycleInputStream input, ep)
 
     private final class ArrFromJson extends FromJson[Arr] {
-      override def parse(input: Json): Either[JastError, Arr] = Arr.parse(input)
+      override def parse(input: Json): Jast.To[Arr] = Arr.parse(input)
 
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
         JsonStringParser.Arr(input, i0, iN, ep, relaxed = true)
@@ -1905,7 +1924,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     def size = if (myMap eq null) underlying.size >> 1 else myMap.size
     override def apply(key: String): Jast = {
       val ans = get_or_java_null(key)
-      if (ans eq null) Obj.noSuchKeyError else ans
+      if (ans eq null) JastError("No such key: " + key) else ans
     }
     def hasDuplicateKeys: Boolean = (myMap eq null) && underlying.length >= 4 && {
       if (underlying.length < 12) {
@@ -2337,7 +2356,6 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     */
   object Obj extends FromJson[Obj] with JsonBuildTerminator[Obj] {
     private[jsonal] val mapBuildingInProcess = new collection.mutable.AnyRefMap[String, Json]()
-    private[jsonal] val noSuchKeyError = JastError("Key not found")
     private[jsonal] val notIndexedObjectError = JastError("Indexing into un-ordered object")
     private[jsonal] val noSuchIndexError = JastError("Ordered object does not contain requested index")
 
@@ -2575,9 +2593,9 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
     }
 
     /** Returns `Left(JastError)` unless the input is a `Json.Arr` */
-    override def parse(input: Json): Either[JastError, Obj] = input match {
-      case n: Obj => Right(n)
-      case _      => Left(JastError("expected Json.Obj"))
+    override def parse(input: Json): Jast.To[Obj] = input match {
+      case n: Obj => Yes(n)
+      case _      => Jast.To.error("expected Json.Obj")
     }
 
     override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
@@ -2591,7 +2609,7 @@ object Json extends FromJson[Json] with JsonBuildTerminator[Json] {
       JsonRecyclingParser.Obj(JsonRecyclingParser recycleInputStream input, ep)
 
     private final class RelaxedObjFromJson extends FromJson[Obj] {
-      override def parse(input: Json): Either[JastError, Obj] = Obj.parse(input)
+      override def parse(input: Json): Jast.To[Obj] = Obj.parse(input)
 
       override def parse(input: String, i0: Int, iN: Int, ep: FromJson.Endpoint) =
         JsonStringParser.Obj(input, i0, iN, ep, relaxed = true)

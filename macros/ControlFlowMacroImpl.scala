@@ -18,7 +18,64 @@ object ControlFlowMacroImpl {
       }
     }).transform(tree)
   }
+
+  def pipe[A, Z](c: Context)(f: c.Tree): c.Tree = {
+    import c.universe._
+
+    val Apply(_, self :: head) = c.prefix.tree
+
+    val a = TermName(c.freshName("a$"))
+
+    var valdefs = List(q"val $a = $self")
+
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, a)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = q"val $lf = $tree" :: valdefs
+        q"$lf($a)"
+    }
+
+    val body = inlineFn(f)
+
+    c.untypecheck(q"""
+    {
+      ..${valdefs.reverse}
+      $body
+    }
+    """)
+  }
     
+  def tap[A, U](c: Context)(f: c.Tree): c.Tree = {
+    import c.universe._
+
+    val Apply(_, self :: head) = c.prefix.tree
+
+    val a = TermName(c.freshName("a$"))
+
+    var valdefs = List(q"val $a = $self")
+
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, a)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = q"val $lf = $tree" :: valdefs
+        q"$lf($a)"
+    }
+
+    val body = inlineFn(f)
+
+    c.untypecheck(q"""
+    {
+      ..${valdefs.reverse}
+      $body;
+      $a
+    }
+    """)
+  }
+  
   def cFor[A](c: Context)(zero: c.Tree)(p: c.Tree)(next: c.Tree)(f: c.Tree) = {
     import c.universe._
     
@@ -142,9 +199,10 @@ object ControlFlowMacroImpl {
     """)
   }
 
-  var inspect: Context = null
-
-  def typedAsLeftBranch[L, R](e: Either[L, R]): Left[L, Nothing] = e.asInstanceOf[Left[L, Nothing]]
+  trait Alternatives[+One, +Two] {}
+  trait FirstAlternative[+One] extends Alternatives[One, Nothing] { def value: One }
+  trait SecondAlternative[+Two] extends Alternatives[Nothing, Two] { def value: Two }
+  class NoSuchAlternativeException extends RuntimeException("Neither alternative found") {}
 
   def returnTryOnFailure(c: Context): c.Tree = {
     import c.universe._
@@ -164,4 +222,24 @@ object ControlFlowMacroImpl {
     val Apply(_, self :: head) = c.prefix.tree
     q"$self match { case _root_.kse.flow.Yes(y) => y; case n => ${Return(q"_root_.kse.flow.unsafeCastOkToNo(n)")}}"
   }
+
+  def returnOkOnYes(c: Context): c.Tree = {
+    import c.universe._
+    val Apply(_, self :: head) = c.prefix.tree
+    q"$self match { case _root_.kse.flow.No(n) => n; case y => ${Return(q"_root_.kse.flow.unsafeCastOkToYes(y)")}}"
+  }
+
+  def returnNoneOnNone(c: Context): c.Tree = {
+    import c.universe._
+    val Apply(_, self :: head) = c.prefix.tree
+    q"$self match { case _root_.scala.Some(a) => a; case _ => ${Return(q"_root_.scala.None")}}"
+  }
+
+  /*
+  def returnSecondMatch[A: c.WeakTypeTag, B: c.WeakTypeTag](c: Context)(): c.Tree = {
+    import c.universe._
+    val Apply(_, self :: head) = c.prefix.tree
+    q"$self match { case b: ${tq"B"} => b; case a: ${tq"A"} => ${Return(q"a")} }"
+  }
+  */
 }

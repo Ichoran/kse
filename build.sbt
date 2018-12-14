@@ -36,9 +36,9 @@ pomExtra := (
 ///////////////////////////
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.4",
-  crossScalaVersions := Seq("2.12.4", "2.11.11"),
-  version := "0.7-SNAPSHOT",
+  scalaVersion := "2.12.8",
+  // crossScalaVersions := Seq("2.12.8", "2.11.11"),
+  version := "0.8-snapshot",
   scalacOptions += "-feature",
   scalacOptions += "-deprecation"
 )

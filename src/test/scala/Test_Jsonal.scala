@@ -7,6 +7,7 @@ import java.nio._
 
 import scala.util._
 
+import kse.flow._
 import kse.jsonal._
 
 object Test_Jsonal extends Test_Kse {
@@ -133,7 +134,7 @@ object Test_Jsonal extends Test_Kse {
       val j = i.toString
       val k = Json.parse(j)
       val k2 = Json.relaxed.parse(j)
-      k.right.exists{ kk =>
+      k.exists{ kk =>
         if (i != kk) {
           i =?= kk
           subtest(i, kk)
@@ -141,9 +142,9 @@ object Test_Jsonal extends Test_Kse {
         }
         else (("string "+j) =?= ("string " + kk.toString))
       } &&
-      k2.right.exists{ kk2 =>
+      k2.exists{ kk2 =>
         val l = Json.relaxed.parse(kk2.toString)
-        l.right.exists{ l2 => 
+        l.exists{ l2 => 
           val ans = l2 == kk2
           if (!ans) {
             println("relaxed")
@@ -153,7 +154,7 @@ object Test_Jsonal extends Test_Kse {
         }
       } &&
       (Json.parse(java.nio.CharBuffer.wrap(j.toCharArray)) match {
-        case Right(ll) =>
+        case Yes(ll) =>
           if (i != ll) {
             println("CharBuffer")
             i =?= ll
@@ -161,11 +162,11 @@ object Test_Jsonal extends Test_Kse {
             false
           }
           else true
-        case Left(e) => println(j); println("CharBuffer"); println(e); false
+        case No(e) => println(j); println("CharBuffer"); println(e); false
       }) &&
       (Json.relaxed.parse(java.nio.CharBuffer.wrap(j.toCharArray)) match { 
-        case Right(ll) =>
-          k2.right.exists{ kk2 =>
+        case Yes(ll) =>
+          k2.exists{ kk2 =>
             val ans = kk2 == ll
             if (!ans) {
               println("relaxed CharBuffer")
@@ -173,10 +174,10 @@ object Test_Jsonal extends Test_Kse {
             }
             ans
           }
-        case Left(e) => println(j); println("relaxed CharBuffer"); println(e); false 
+        case No(e) => println(j); println("relaxed CharBuffer"); println(e); false 
       }) &&
       (Json.parse(java.nio.ByteBuffer.wrap(j.getBytes("UTF-8"))) match {
-        case Right(mm) =>
+        case Yes(mm) =>
           if (i != mm) {
             println("ByteBuffer")
             i =?= mm
@@ -184,11 +185,11 @@ object Test_Jsonal extends Test_Kse {
             false
           }
           else true
-        case Left(e) => println(j); println("ByteBuffer"); println(e); false
+        case No(e) => println(j); println("ByteBuffer"); println(e); false
       }) &&
       (Json.relaxed.parse(java.nio.ByteBuffer.wrap(j.getBytes("UTF-8"))) match {
-        case Right(mm) =>
-          k2.right.exists{ kk2 =>
+        case Yes(mm) =>
+          k2.exists{ kk2 =>
             val ans = kk2 == mm
             if (!ans) {
               println("relaxed ByteBuffer")
@@ -196,7 +197,7 @@ object Test_Jsonal extends Test_Kse {
             }
             ans
           }
-        case Left(e) => println(j); println("relaxed ByteBuffer"); println(e); false
+        case No(e) => println(j); println("relaxed ByteBuffer"); println(e); false
       }) &&
       (Jast.parse(new java.io.ByteArrayInputStream(j.getBytes("UTF-8"))) match {
         case nn: Json =>
@@ -211,7 +212,7 @@ object Test_Jsonal extends Test_Kse {
       }) &&
       (Jast.parse(new java.io.ByteArrayInputStream(j.getBytes("UTF-8"))) match {
         case nn: Json =>
-          k2.right.exists{ kk2 =>
+          k2.exists{ kk2 =>
             val ans = kk2 == nn
             if (!ans) {
               println("relaxed InputStream")
@@ -221,7 +222,7 @@ object Test_Jsonal extends Test_Kse {
           }
         case e: JastError => println(j); println("relaxed InputStream"); println(e); false
       }) &&
-      k2.right.exists{ kk2 =>
+      k2.exists{ kk2 =>
         val s = kk2.toString
         val ss = { val sb = new java.lang.StringBuilder; kk2.jsonString(sb); sb.toString }
         val sss = {
@@ -251,13 +252,13 @@ object Test_Jsonal extends Test_Kse {
       val a = Array.fill(math.max(-1, r.nextInt(20)-4) + (1 << r.nextInt(10)))(r.nextInt.toByte)
       val j = Json(a)
       j.to[Array[Byte]] match {
-        case Right(b) =>
+        case Yes(b) =>
           var same = a.length == b.length
           var i = 0
           while (i < a.length && same) { same = a(i) == b(i); i += 1 }
           if (!same) println(f"${a.length}:${a.take(i+1).mkString(",")} != ${b.length}:${b.take(i+1).mkString(",")}")
           same
-        case Left(je) => println(je); println(j); false
+        case No(je) => println(je); println(j); false
       }
     }
   }
@@ -270,9 +271,9 @@ object Test_Jsonal extends Test_Kse {
     Json.Num(Double.NegativeInfinity) =?= Json.Null &&
     Json ~ ("fish", Array("wish", "dish")) ~ Json =?= Json ~ ("fish", Json ~ "wish" ~ "dish" ~ Json) ~ Json &&
     Json ~ ("fish", Map("wish" -> "dish")) ~ Json =?= Json ~ ("fish", Json ~ ("wish", "dish") ~ Json) ~ Json &&
-    Json(false).to[Boolean] =?= Right(false) &&
-    Json(2.127515).to[Double] =?= Right(2.127515) &&
-    Json("fish").to[String] =?= Right("fish") &&
+    Json(false).to[Boolean] =?= Yes(false) &&
+    Json(2.127515).to[Double] =?= Yes(2.127515) &&
+    Json("fish").to[String] =?= Yes("fish") &&
     Json.Arr.All(Array(Json(3.0), Json.Null)) =?= Json.Arr.Dbl(Array(3.0, Double.NaN)) &&
     Json ~ "fish" ~ 2.7 ~ Json =?= Json.Arr ~ "fish" ~ 2.7 ~ Json.Arr &&
     Json ~ "fish" ~ 2.7 ~ Json =?= Json.Arr.All ~ "fish" ~ 2.7 ~ Json.Arr.All &&
@@ -284,8 +285,8 @@ object Test_Jsonal extends Test_Kse {
     Json ~? ("fish", Json(Vector.empty[String])) ~ Json =?= Json.Obj.empty &&
     Json ~? ("fish", Json ~? ("wish", Json(Double.NaN)) ~ Json) ~ Json =?= Json.Obj.empty &&
     Json ~~ (Json.Obj ~ ("fish", "herring") ~ Json.Obj) ~ Json =?= Json ~ ("fish", "herring") ~ Json &&
-    (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].right.map(_.toSeq) =?= Right(Seq("cod", "herring")) &&
-    (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Right(Vector("cod", "herring")) &&
+    (Json ~ "cod" ~ "herring" ~ Json).to[Array[String]].map(_.toSeq) =?= Yes(Seq("cod", "herring")) &&
+    (Json ~ "cod" ~ "herring" ~ Json).to[Vector[String]] =?= Yes(Vector("cod", "herring")) &&
     (Json.Arr.All ~ "cod" ~ true ~ Json.Arr.All).filter(_.string.isDefined) =?= (Json ~ "cod" ~ Json) &&
     (Json.Arr.Dbl ~ -2.7 ~ 3.7 ~ Json.Arr.Dbl).filter((x: Double) => x > 0) =?= (Json ~ 3.7 ~ Json) &&
     (Json.Obj ~ ("apple", 0) ~ ("b", 1) ~ ("c", -1) ~ Json.Obj).filter((k,v) => k.length < 2 && v.double >= 0) =?= Json ~ ("b", 1) ~ Json &&
@@ -297,112 +298,112 @@ object Test_Jsonal extends Test_Kse {
       else v
     } =?= (Json.Obj ~ ("cod", true) ~ ("herring", true) ~ ("herring", 7) ~ Json.Obj) &&
     { val dt = java.time.Duration.parse("PT5M2.7S"); Json ~ dt ~ Json =?= Json ~ dt.toString ~ Json } &&
-    { val dt = java.time.Duration.parse("PT5M2.7S"); (Json ~ dt ~ Json).to[Array[java.time.Duration]].right.map(_.headOption) =?= Right(Option(dt)) } &&
+    { val dt = java.time.Duration.parse("PT5M2.7S"); (Json ~ dt ~ Json).to[Array[java.time.Duration]].map(_.headOption) =?= Yes(Option(dt)) } &&
     { val now = java.time.Instant.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
-    { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].right.map(_.headOption) =?= Right(Option(now)) } &&
+    { val now = java.time.Instant.now; (Json ~ now ~ Json).to[Array[java.time.Instant]].map(_.headOption) =?= Yes(Option(now)) } &&
     { val now = java.time.LocalDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
-    { val now = java.time.LocalDateTime.now; (Json ~ now ~ Json).to[Array[java.time.LocalDateTime]].right.map(_.headOption) =?= Right(Option(now)) } &&
+    { val now = java.time.LocalDateTime.now; (Json ~ now ~ Json).to[Array[java.time.LocalDateTime]].map(_.headOption) =?= Yes(Option(now)) } &&
     { val now = java.time.OffsetDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
-    { val now = java.time.OffsetDateTime.now; (Json ~ now ~ Json).to[Array[java.time.OffsetDateTime]].right.map(_.headOption) =?= Right(Option(now)) } &&
+    { val now = java.time.OffsetDateTime.now; (Json ~ now ~ Json).to[Array[java.time.OffsetDateTime]].map(_.headOption) =?= Yes(Option(now)) } &&
     { val now = java.time.ZonedDateTime.now; Json ~ now ~ Json =?= Json ~ now.toString ~ Json } &&
-    { val now = java.time.ZonedDateTime.now; (Json ~ now ~ Json).to[Array[java.time.ZonedDateTime]].right.map(_.headOption) =?= Right(Option(now)) } &&
-    { val x = ("one", 2); Json(x).to[(String, Int)] =?= Right(x) } &&
-    { val x = ("one", 2, 3); Json(x).to[(String, Int, Double)] =?= Right(x) } &&
-    { val x = (1, 2, 3, 4); Json(x).to[(Int, Long, Double, Int)] =?= Right(x) } &&
-    { val x = ("one", 2, 3, "four", 5); Json(x).to[(String, Int, Int, String, Int)] =?= Right(x) } &&
-    { val x = ("one", 2, 3, "four", 5, "six"); Json(x).to[(String, Int, Int, String, Int, String)] =?= Right(x) } &&
-    { val x = ("one", 2, 3, "four", 5, "six", 7); Json(x).to[(String, Int, Int, String, Int, String, Int)] =?= Right(x) } &&
-    { val x = ("one", 2, 3, "four", 5, "six", 7, None); Json(x).to[(String, Int, Int, String, Int, String, Int, Option[String])] =?= Right(x) } &&
-    { val x = ("one", 2, 3, "four", 5, "six", 7, None, (0, 9)); Json(x).to[(String, Int, Int, String, Int, String, Int, Option[String], (Int, Double))] =?= Right(x) }
+    { val now = java.time.ZonedDateTime.now; (Json ~ now ~ Json).to[Array[java.time.ZonedDateTime]].map(_.headOption) =?= Yes(Option(now)) } &&
+    { val x = ("one", 2); Json(x).to[(String, Int)] =?= Yes(x) } &&
+    { val x = ("one", 2, 3); Json(x).to[(String, Int, Double)] =?= Yes(x) } &&
+    { val x = (1, 2, 3, 4); Json(x).to[(Int, Long, Double, Int)] =?= Yes(x) } &&
+    { val x = ("one", 2, 3, "four", 5); Json(x).to[(String, Int, Int, String, Int)] =?= Yes(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six"); Json(x).to[(String, Int, Int, String, Int, String)] =?= Yes(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six", 7); Json(x).to[(String, Int, Int, String, Int, String, Int)] =?= Yes(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six", 7, None); Json(x).to[(String, Int, Int, String, Int, String, Int, Option[String])] =?= Yes(x) } &&
+    { val x = ("one", 2, 3, "four", 5, "six", 7, None, (0, 9)); Json(x).to[(String, Int, Int, String, Int, String, Int, Option[String], (Int, Double))] =?= Yes(x) }
   }
 
   def test_specifics_String: Boolean = {
     import JsonConverters._
 
-    Right(Json.Null) =?= Json.Null.parse("null") &&
-    Right(Json.Bool.True) =?= Json.Bool.parse("true") &&
-    Right(Json.Bool.False) =?= Json.Bool.parse("false") &&
-    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"") &&
-    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7") &&
-    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]") &&
-    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]") &&
-    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}") &&
-    Json.Null =?= Json.parse("null").right.get &&
-    Json.Bool.True =?= Json.parse("true").right.get &&
-    Json.Bool.False =?= Json.parse("false").right.get &&
-    Json.Str("fish") =?= Json.parse("\"fish\"").right.get &&
+    Yes(Json.Null) =?= Json.Null.parse("null") &&
+    Yes(Json.Bool.True) =?= Json.Bool.parse("true") &&
+    Yes(Json.Bool.False) =?= Json.Bool.parse("false") &&
+    Yes(Json.Str("fish")) =?= Json.Str.parse("\"fish\"") &&
+    Yes(Json.Num(1.7)) =?= Json.Num.parse("1.7") &&
+    Yes(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]") &&
+    Yes(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]") &&
+    Yes(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}") &&
+    Json.Null =?= Json.parse("null").yes &&
+    Json.Bool.True =?= Json.parse("true").yes &&
+    Json.Bool.False =?= Json.parse("false").yes &&
+    Json.Str("fish") =?= Json.parse("\"fish\"").yes &&
     Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(Json.parse).collect{
-      case Right(js) => js
+      case Yes(js) => js
     } =?= Seq[Json]() &&
-    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985").right.get &&
-    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12").right.get &&
-    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234").right.get &&
-    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234").right.get &&
-    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]").right.get &&
-    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}").right.get &&
-    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}").right.get &&
-    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}").right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]").right.get.getClass 
+    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985").yes &&
+    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12").yes &&
+    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234").yes &&
+    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234").yes &&
+    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]").yes &&
+    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}").yes &&
+    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}").yes &&
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}").yes &&
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]").yes.getClass 
   }
 
   def test_specifics_CharBuffer: Boolean = {
     import JsonConverters._
     implicit class StringToCharBuffer(private val string: String) { def cb: CharBuffer = CharBuffer.wrap(string.toCharArray) }
 
-    Right(Json.Null) =?= Json.Null.parse("null".cb) &&
-    Right(Json.Bool.True) =?= Json.Bool.parse("true".cb) &&
-    Right(Json.Bool.False) =?= Json.Bool.parse("false".cb) &&
-    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".cb) &&
-    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7".cb) &&
-    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".cb) &&
-    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".cb) &&
-    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".cb) &&
-    Json.Null =?= Json.parse("null".cb).right.get &&
-    Json.Bool.True =?= Json.parse("true".cb).right.get &&
-    Json.Bool.False =?= Json.parse("false".cb).right.get &&
-    Json.Str("fish") =?= Json.parse("\"fish\"".cb).right.get &&
+    Yes(Json.Null) =?= Json.Null.parse("null".cb) &&
+    Yes(Json.Bool.True) =?= Json.Bool.parse("true".cb) &&
+    Yes(Json.Bool.False) =?= Json.Bool.parse("false".cb) &&
+    Yes(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".cb) &&
+    Yes(Json.Num(1.7)) =?= Json.Num.parse("1.7".cb) &&
+    Yes(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".cb) &&
+    Yes(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".cb) &&
+    Yes(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".cb) &&
+    Json.Null =?= Json.parse("null".cb).yes &&
+    Json.Bool.True =?= Json.parse("true".cb).yes &&
+    Json.Bool.False =?= Json.parse("false".cb).yes &&
+    Json.Str("fish") =?= Json.parse("\"fish\"".cb).yes &&
     Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(_.cb).map(Json.parse).collect{
-      case Right(js) => js
+      case Yes(js) => js
     } =?= Seq[Json]() &&
-    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".cb).right.get &&
-    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".cb).right.get &&
-    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".cb).right.get &&
-    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".cb).right.get &&
-    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".cb).right.get &&
-    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".cb).right.get &&
-    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".cb).right.get &&
-    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".cb).right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".cb).right.get.getClass
+    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".cb).yes &&
+    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".cb).yes &&
+    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".cb).yes &&
+    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".cb).yes &&
+    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".cb).yes &&
+    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".cb).yes &&
+    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".cb).yes &&
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".cb).yes &&
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".cb).yes.getClass
   }
 
   def test_specifics_ByteBuffer: Boolean = {
     import JsonConverters._
     implicit class StringToCharBuffer(private val string: String) { def bb: ByteBuffer = ByteBuffer.wrap(string.getBytes) }
 
-    Right(Json.Null) =?= Json.Null.parse("null".bb) &&
-    Right(Json.Bool.True) =?= Json.Bool.parse("true".bb) &&
-    Right(Json.Bool.False) =?= Json.Bool.parse("false".bb) &&
-    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".bb) &&
-    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7".bb) &&
-    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".bb) &&
-    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".bb) &&
-    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".bb) &&
-    Json.Null =?= Json.parse("null".bb).right.get &&
-    Json.Bool.True =?= Json.parse("true".bb).right.get &&
-    Json.Bool.False =?= Json.parse("false".bb).right.get &&
-    Json.Str("fish") =?= Json.parse("\"fish\"".bb).right.get &&
+    Yes(Json.Null) =?= Json.Null.parse("null".bb) &&
+    Yes(Json.Bool.True) =?= Json.Bool.parse("true".bb) &&
+    Yes(Json.Bool.False) =?= Json.Bool.parse("false".bb) &&
+    Yes(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".bb) &&
+    Yes(Json.Num(1.7)) =?= Json.Num.parse("1.7".bb) &&
+    Yes(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".bb) &&
+    Yes(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".bb) &&
+    Yes(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".bb) &&
+    Json.Null =?= Json.parse("null".bb).yes &&
+    Json.Bool.True =?= Json.parse("true".bb).yes &&
+    Json.Bool.False =?= Json.parse("false".bb).yes &&
+    Json.Str("fish") =?= Json.parse("\"fish\"".bb).yes &&
     Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(_.bb).map(Json.parse).collect{
-      case Right(js) => js
+      case Yes(js) => js
     } =?= Seq[Json]() &&
-    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".bb).right.get &&
-    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".bb).right.get &&
-    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".bb).right.get &&
-    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".bb).right.get &&
-    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".bb).right.get &&
-    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".bb).right.get &&
-    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".bb).right.get &&
-    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".bb).right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".bb).right.get.getClass
+    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".bb).yes &&
+    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".bb).yes &&
+    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".bb).yes &&
+    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".bb).yes &&
+    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".bb).yes &&
+    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".bb).yes &&
+    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".bb).yes &&
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".bb).yes &&
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".bb).yes.getClass
   }
 
   def test_specifics_InputStream: Boolean = {
@@ -411,30 +412,30 @@ object Test_Jsonal extends Test_Kse {
       def is: java.io.InputStream = new java.io.ByteArrayInputStream(string.getBytes)
     }
 
-    Right(Json.Null) =?= Json.Null.parse("null".is) &&
-    Right(Json.Bool.True) =?= Json.Bool.parse("true".is) &&
-    Right(Json.Bool.False) =?= Json.Bool.parse("false".is) &&
-    Right(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".is) &&
-    Right(Json.Num(1.7)) =?= Json.Num.parse("1.7".is) &&
-    Right(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".is) &&
-    Right(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".is) &&
-    Right(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".is) &&
-    Json.Null =?= Json.parse("null".is).right.get &&
-    Json.Bool.True =?= Json.parse("true".is).right.get &&
-    Json.Bool.False =?= Json.parse("false".is).right.get &&
-    Json.Str("fish") =?= Json.parse("\"fish\"".is).right.get &&
+    Yes(Json.Null) =?= Json.Null.parse("null".is) &&
+    Yes(Json.Bool.True) =?= Json.Bool.parse("true".is) &&
+    Yes(Json.Bool.False) =?= Json.Bool.parse("false".is) &&
+    Yes(Json.Str("fish")) =?= Json.Str.parse("\"fish\"".is) &&
+    Yes(Json.Num(1.7)) =?= Json.Num.parse("1.7".is) &&
+    Yes(Json.Arr(Array(1.7, 1.8))) =?= Json.Arr.parse("[1.7, 1.8]".is) &&
+    Yes(Json.Arr(Array(Json("fish")))) =?= Json.Arr.parse("[\"fish\"]".is) &&
+    Yes(Json.Obj(Map("fish" -> Json(true)))) =?= Json.Obj.parse("{\"fish\": true}".is) &&
+    Json.Null =?= Json.parse("null".is).yes &&
+    Json.Bool.True =?= Json.parse("true".is).yes &&
+    Json.Bool.False =?= Json.parse("false".is).yes &&
+    Json.Str("fish") =?= Json.parse("\"fish\"".is).yes &&
     Seq("nul", "ull", "tru", "True", "rue", "als", "fals", "\"fish", "fish\"").map(_.is).map(Json.parse).collect{
-      case Right(js) => js
+      case Yes(js) => js
     } =?= Seq[Json]() &&
-    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".is).right.get &&
-    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".is).right.get &&
-    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".is).right.get &&
-    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".is).right.get &&
-    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".is).right.get &&
-    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".is).right.get &&
-    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".is).right.get &&
-    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".is).right.get &&
-    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".is).right.get.getClass
+    Json.Num(18014398509481985L) =?= Json.parse("18014398509481985".is).yes &&
+    Json.Num(1.9125881e13) =?= Json.parse("19.125881e12".is).yes &&
+    Json.Num(BigDecimal("1234123412341234123412431234123412341234")) =?= Json.parse("1234123412341234123412431234123412341234".is).yes &&
+    Json.Num(1.234123412341234E39) =?= Json.relaxed.parse("1234123412341234123412431234123412341234".is).yes &&
+    Json.Arr.All(Array(Json("fish"), Json(2.7))) =?= Json.parse("[\"fish\", 27e-1]".is).yes &&
+    Json.Obj(Map("fish" -> Json(2.7))) =?= Json.parse("{\"fish\": 0.27e1}".is).yes &&
+    Json.Obj ~ ("fish", 2.0) ~ ("fish", 3.0) ~ Json.Obj =?= Json.parse("{\"fish\": 2, \"fish\": 3}".is).yes &&
+    Json.Obj(Map("fish" -> (Json ~ Json("\n\n\n\n") ~ 2.7 ~ true ~ Json))) =?= Json.parse("{\"fish\":[\"\\n\\n\\n\\n\", 2.7, true]}".is).yes &&
+    classOf[Json.Arr.Dbl] =?= Json.parse("[-0.18873, -0.17394, null, -0.14907, -0.0905366, -0.009166, 0.0772224]".is).yes.getClass
   }
 
   def test_numericStringEquals: Boolean = {
