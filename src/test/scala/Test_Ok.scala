@@ -114,7 +114,7 @@ object Test_Ok extends Test_Kse {
     one == "dog" && two == "dog"
   }
 
-  def test_tap = {
+  def test_tapYes = {
     var one = "fish"
     var two = "dog"
     val y = Yes("fish")

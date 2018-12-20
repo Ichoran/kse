@@ -221,6 +221,72 @@ package object eio {
     }
   }
 
+  implicit class InputStreamShouldDoThis(private val underlying: java.io.InputStream) extends AnyVal {
+    def bigGulp(limit: Long): Ok[String, List[Array[Byte]]] = {
+      if (limit < 0) return No("Negative size limit")
+      if (limit == 0) return Yes(Nil)
+      try {
+        val pieces = List.newBuilder[Array[Byte]]
+        var current = new Array[Byte](underlying.available max (32L min limit).toInt)
+        var n = 0
+        var total = 0L
+        var complete = false
+        while (!complete) {
+          val limitNow = ((limit - total) min (current.length - n)).toInt max 1
+          val i = underlying.read(current, n, limitNow)
+          if (i < 0) complete = true
+          else {
+            total += i
+            if (total > limit) return No(s"Could not gulp entire stream: too big (> $limit bytes)")
+            if (i == current.length - n) {
+              if (n == 0 && total == i) {
+                val b = underlying.read()
+                if (b < 0) {
+                  n = current.length
+                  complete = true
+                }
+                else {
+                  total += 1
+                  if (total > limit) return No(s"Could not gulp entire stream: too big (> $limit bytes)")
+                  pieces += current
+                  current = new Array[Byte](4*current.length min 262144)
+                  current(0) = b.toByte
+                  n = 1
+                }
+              }
+              else {
+                pieces += current
+                current = new Array[Byte](4*current.length min 262144)
+                n = 0
+              }
+            }
+            else n += i
+          } 
+        }
+        if (n > 0) {
+          pieces += (if (n == current.length) current else java.util.Arrays.copyOf(current, n))
+        }
+        Yes(pieces.result())
+      }
+      catch {
+        case t if NonFatal(t) => No(s"Error while consuming InputStream:\n${t.explain(128)}")
+      }
+      finally { underlying.close }
+    }
+    def gulp(): Ok[String, Array[Byte]] = bigGulp(Int.MaxValue - 1).map{
+      case Nil        => new Array[Byte](0)
+      case one :: Nil => one
+      case lots       =>
+        val combined = new Array[Byte](lots.map(_.length).sum)
+        var n = 0
+        lots.foreach{ one =>
+          System.arraycopy(one, 0, combined, n, one.length)
+          n += one.length
+        }
+        combined
+    }
+  }
+
   implicit class FileShouldDoThis(private val underlying: java.io.File) extends AnyVal {
     def %(ext: String) = {
       val f0 = underlying match {
