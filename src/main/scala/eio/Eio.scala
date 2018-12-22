@@ -285,6 +285,18 @@ package object eio {
         }
         combined
     }
+    def reader() = new BufferedReader(new InputStreamReader(underlying))
+    def slurp(): Ok[String, Vector[String]] = safe {
+      val reader = new BufferedReader(new java.io.InputStreamReader(underlying))
+      val vb = Vector.newBuilder[String]
+      var continue = true
+      while (continue) {
+        val line = reader.readLine
+        if (line eq null) continue = false
+        else vb += line
+      }
+      vb.result()
+    }.mapNo(e => s"Error consuming InputStream:\n${e.explain()}")
   }
 
   implicit class FileShouldDoThis(private val underlying: java.io.File) extends AnyVal {
