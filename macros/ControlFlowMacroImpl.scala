@@ -298,6 +298,76 @@ object ControlFlowMacroImpl {
     """)
   }
 
+  def returnLeftMappedToNo[L, R, N](c: Context)(f: c.Tree): c.Tree = {
+    import c.universe._
+
+    val Apply(_, self :: head) = c.prefix.tree
+
+    val l = TermName(c.freshName("l$"))
+
+    var valdefs = List.empty[ValDef]
+
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, l)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = q"val $lf = $tree" :: valdefs
+        q"$lf($l)"
+    }
+
+    val body = inlineFn(f)
+
+    c.untypecheck(q"""
+    {
+      $self match {
+        case _root_.scala.Right(r) => r
+        case _root_.scala.Left($l) => 
+          ..${valdefs.reverse}
+          ${Return(q"No({$body})")}
+      }
+    }
+    """)
+  }
+
+  def returnFailureMappedToNo[S, N](c: Context)(f: c.Tree): c.Tree = {
+    import c.universe._
+
+    val Apply(_, self :: head) = c.prefix.tree
+
+    val t = TermName(c.freshName("t$"))
+
+    var valdefs = List.empty[ValDef]
+
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, t)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = q"val $lf = $tree" :: valdefs
+        q"$lf($t)"
+    }
+
+    val body = inlineFn(f)
+
+    c.untypecheck(q"""
+    {
+      $self match {
+        case _root_.scala.util.Success(s) => s
+        case _root_.scala.util.Failure($t) => 
+          ..${valdefs.reverse}
+          ${Return(q"No({$body})")}
+      }
+    }
+    """)
+  }
+
+  def returnFilledNoOnNone[A, N](c: Context)(n: c.Tree): c.Tree = {
+    import c.universe._
+    val Apply(_, self :: head) = c.prefix.tree
+    val a = TermName(c.freshName("a$"))
+    q"""$self match { case _root_.scala.Some($a) => $a; case _ => ${Return(q"No({$n})")}}"""
+  }
   /*
   def returnSecondMatch[A: c.WeakTypeTag, B: c.WeakTypeTag](c: Context)(): c.Tree = {
     import c.universe._

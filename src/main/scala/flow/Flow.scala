@@ -265,7 +265,10 @@ package object flow extends Priority1HopSpecs {
 
     /** Return on None, otherwise extract value */
     def SOME: A = macro ControlFlowMacroImpl.returnNoneOnNone
-  }
+
+    /** Extracts the value or performs a local or nonlocal return of new No-wrapped value. */
+    def TOSSING[N](n: N): A = macro ControlFlowMacroImpl.returnFilledNoOnNone[A, N]
+ }
 
   /** Typecasts `Try` to its failure branch.  Not a safe operation unless you've already pattern matched. */
   @inline def unsafeCastTryToFailure[A](t: scala.util.Try[A]): scala.util.Failure[Nothing] = t.asInstanceOf[scala.util.Failure[Nothing]]
@@ -299,6 +302,9 @@ package object flow extends Priority1HopSpecs {
       * Note: this is similar to Rust's `try!` macro.
       */
     def SUCCESS: A = macro ControlFlowMacroImpl.returnTryOnFailure
+
+    /** Extracts the successful result or performs a local or nonlocal return of throwable mapped to No. */
+    def TOSSING[N](f: Throwable => N): A = macro ControlFlowMacroImpl.returnFailureMappedToNo[A, N]
   }
 
   /** Typecasts `Either` to its left branch.  Not a safe operation unless you've already pattern matched. */
@@ -317,6 +323,9 @@ package object flow extends Priority1HopSpecs {
 
     /** Extracts the right value or performs a local or nonlocal return of the (boxed) left branch */
     def RIGHT: R = macro ControlFlowMacroImpl.returnEitherOnLeft
+
+    /** Extracts the right value or performs a local or nonlocal return mapping the left branch to a No */
+    def TOSSING[N](f: L => N): R = macro ControlFlowMacroImpl.returnLeftMappedToNo[L, R, N]
   }
   
   /** Typecasts `Ok` to its `No` branch.  Not a safe operation unless you've already pattern matched. */
@@ -342,7 +351,7 @@ package object flow extends Priority1HopSpecs {
     def NO: N = macro ControlFlowMacroImpl.returnOkOnYes
 
     /** Extracts the `yes` value or performs a local or nonlocal return of a mapped `no` value */
-    def OrReturn[M](f: N => M): Y = macro ControlFlowMacroImpl.returnMappedNo[N, Y, M]
+    def TOSSING[M](f: N => M): Y = macro ControlFlowMacroImpl.returnMappedNo[N, Y, M]
   }
 
   /** Allows exceptions to convert themselves to a string representation.  Surprisingly complicated to do right! */
