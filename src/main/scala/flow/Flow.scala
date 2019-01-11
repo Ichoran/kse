@@ -326,7 +326,7 @@ package object flow extends Priority1HopSpecs {
   @inline def unsafeCastOkToYes[N, Y](ok: Ok[N, Y]): Yes[Y] = ok.asInstanceOf[Yes[Y]]
   
   /** Allows alternatives to `yes` on [[Ok]] */
-  implicit class OkCanHop[N,Y](private val underlying: Ok[N,Y]) extends AnyVal {
+  implicit class OkCanHop[N, Y](private val underlying: Ok[N, Y]) extends AnyVal {
     /** Throws an available `Oops` if the [[Ok]] is a `No`, gives the `Yes` value otherwise. */
     @inline def grab(implicit oops: Oops): Y = if (underlying.isOk) underlying.yes else oops.hop()
     /** Throws a `No` value with an available `Hop`; gives the `Yes` value otherwise. */
@@ -339,7 +339,10 @@ package object flow extends Priority1HopSpecs {
     def YES: Y = macro ControlFlowMacroImpl.returnOkOnNo
 
     /** Extracts the `no` value or performs a local or nonlocal return of the (boxed) `yes` value */
-    def NO: N = macro ControlFlowMacroImpl.returnOkOnNo
+    def NO: N = macro ControlFlowMacroImpl.returnOkOnYes
+
+    /** Extracts the `yes` value or performs a local or nonlocal return of a mapped `no` value */
+    def OrReturn[M](f: N => M): Y = macro ControlFlowMacroImpl.returnMappedNo[N, Y, M]
   }
 
   /** Allows exceptions to convert themselves to a string representation.  Surprisingly complicated to do right! */
@@ -404,8 +407,14 @@ package object flow extends Priority1HopSpecs {
     /** Transforms self according to the function `f` (alias for `fn`). */
     def pipe[Z](f: A => Z): Z = macro ControlFlowMacroImpl.pipe[A, Z]
 
+    /** Transforms self according to the function `f` (alias for `fn`). */
+    def |>[Z](f: A => Z): Z = macro ControlFlowMacroImpl.pipe[A, Z]
+
     /** Executes a side effect that depends on self, and returns self */
     def tap[U](f: A => U): A = macro ControlFlowMacroImpl.tap[A, U]
+
+    /** Returns early if a condition is true */
+    def ReturnIf(p: A => Boolean): A = macro ControlFlowMacroImpl.returnOnCondition[A]
 
     /** Transforms self according to `pf` only for those values where `pf` is defined. */
     @inline def partFn(pf: PartialFunction[A,A]) = if (pf.isDefinedAt(underlying)) pf(underlying) else underlying

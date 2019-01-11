@@ -235,6 +235,69 @@ object ControlFlowMacroImpl {
     q"$self match { case _root_.scala.Some(a) => a; case _ => ${Return(q"_root_.scala.None")}}"
   }
 
+  def returnOnCondition[A](c: Context)(p: c.Tree): c.Tree = {
+    import c.universe._
+
+    val Apply(_, self :: head) = c.prefix.tree
+
+    val a = TermName(c.freshName("a$"))
+
+    var valdefs = List(q"val $a = $self")
+
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, a)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = q"val $lf = $tree" :: valdefs
+        q"$lf($a)"
+    }
+
+    val body = inlineFn(p)
+    val z = TermName(c.freshName("z$"))
+    valdefs = q"val $z = $body" :: valdefs
+
+    c.untypecheck(q"""
+    {
+      ..${valdefs.reverse}
+      if ($z) ${Return(q"$a")};
+      $a
+    }
+    """)
+  }
+
+  def returnMappedNo[N, Y, M](c: Context)(f: c.Tree): c.Tree = {
+    import c.universe._
+
+    val Apply(_, self :: head) = c.prefix.tree
+
+    val n = TermName(c.freshName("n$"))
+
+    var valdefs = List.empty[ValDef]
+
+    def inlineFn(tree: c.Tree): c.Tree = tree match {
+      case Function(List(param), body) => rename[c.type](c)(body, param.name, n)
+      case Block(Nil, last) => inlineFn(last)
+      case _ =>
+        val lf = TermName(c.freshName("lf$"))
+        valdefs = q"val $lf = $tree" :: valdefs
+        q"$lf($n)"
+    }
+
+    val body = inlineFn(f)
+
+    c.untypecheck(q"""
+    {
+      $self match {
+        case _root_.kse.flow.Yes(y) => y
+        case _root_.kse.flow.No($n) => 
+          ..${valdefs.reverse}
+          ${Return(q"No({$body})")}
+      }
+    }
+    """)
+  }
+
   /*
   def returnSecondMatch[A: c.WeakTypeTag, B: c.WeakTypeTag](c: Context)(): c.Tree = {
     import c.universe._
