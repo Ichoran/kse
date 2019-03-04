@@ -18,7 +18,7 @@ pomExtra := (
       <name>BSD 3-clause</name>
       <url>https://opensource.org/licenses/BSD-3-Clause</url>
       <distribution>repo</distribution>
-      <comments>Copyright 2011-2018 by Rex Kerr, HHMI Janelia, UC San Francisco, and Calico Life Sciences.</comments>
+      <comments>Copyright 2011-2019 by Rex Kerr, HHMI Janelia, UC San Francisco, and Calico Life Sciences.</comments>
     </license>
   </licenses>
   <scm>
@@ -37,8 +37,7 @@ pomExtra := (
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  // crossScalaVersions := Seq("2.12.8", "2.11.11"),
-  version := "0.8-SNAPSHOT",
+  version := "0.9-SNAPSHOT",
   scalacOptions += "-feature",
   scalacOptions += "-deprecation"
 )
