@@ -355,15 +355,19 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
     ii
   }
 
+  private[this] def catchAsZero(thunk: => Int) = 
+    try { thunk }
+    catch { case _: java.io.IOException if deathAttempts.get() > 0 => 0 }
+
   private[this] def bufferedStore(stream: java.io.InputStream, len0: Int, bufs0: Array[Array[Byte]], setLen: Int => Unit, setBufs: Array[Array[Byte]] => Unit) {
-    val n = try { stream.available } catch { case _: java.io.IOException if deathAttempts.get() == 0 => 0 }
+    val n = catchAsZero{ stream.available }
     if (n <= 0) return
     if (n > buffer.length) {
       buffer = new Array[Byte](n max (buffer.length + (n >> 2)))
     }
     var len = len0
     var bufs = bufs0
-    val m = try { stream.read(buffer, 0, n) } catch { case _: java.io.IOException if deathAttempts.get() == 0 => 0 }
+    val m = catchAsZero{ stream.read(buffer, 0, n) }
     if (m <= 0) return
     if (bufs.length < 1) bufs = new Array[Array[Byte]](1)
     else if (len > 0 && bufs(len-1).length >= 1024 && bufs.length < 1024) bufs = java.util.Arrays.copyOf(bufs, bufs.length + bufs.length/2 + 2)
@@ -382,8 +386,10 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
   }
 
   def update() { synchronized {
-    if (process.getErrorStream.available > 0) bufferedStore(process.getErrorStream, errbuf_i, errbuf, i => { errbuf_i = i }, bufs => { errbuf = bufs })
-    if (process.getInputStream.available > 0) bufferedStore(process.getInputStream, outbuf_i, outbuf, i => { outbuf_i = i }, bufs => { outbuf = bufs })
+    if (catchAsZero{ process.getErrorStream.available } > 0)
+      bufferedStore(process.getErrorStream, errbuf_i, errbuf, i => { errbuf_i = i }, bufs => { errbuf = bufs })
+    if (catchAsZero{ process.getInputStream.available } > 0)
+      bufferedStore(process.getInputStream, outbuf_i, outbuf, i => { outbuf_i = i }, bufs => { outbuf = bufs })
     if (myDieTime.get.exists(_ isBefore LocalDateTime.now)) {
       if (deathAttempts.getAndIncrement() == 0) {
         process.destroy()
