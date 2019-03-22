@@ -356,14 +356,14 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
   }
 
   private[this] def bufferedStore(stream: java.io.InputStream, len0: Int, bufs0: Array[Array[Byte]], setLen: Int => Unit, setBufs: Array[Array[Byte]] => Unit) {
-    val n = stream.available
+    val n = try { stream.available } catch { case _: java.io.IOException if deathAttempts.get() == 0 => 0 }
     if (n <= 0) return
     if (n > buffer.length) {
       buffer = new Array[Byte](n max (buffer.length + (n >> 2)))
     }
     var len = len0
     var bufs = bufs0
-    val m = stream.read(buffer, 0, n)
+    val m = try { stream.read(buffer, 0, n) } catch { case _: java.io.IOException if deathAttempts.get() == 0 => 0 }
     if (m <= 0) return
     if (bufs.length < 1) bufs = new Array[Array[Byte]](1)
     else if (len > 0 && bufs(len-1).length >= 1024 && bufs.length < 1024) bufs = java.util.Arrays.copyOf(bufs, bufs.length + bufs.length/2 + 2)
