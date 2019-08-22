@@ -357,7 +357,7 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
 
   private[this] def catchAsZero(thunk: => Int) = 
     try { thunk }
-    catch { case _: java.io.IOException if deathAttempts.get() > 0 => 0 }
+    catch { case ioe: java.io.IOException if deathAttempts.get() > 0 => 0 }
 
   private[this] def bufferedStore(stream: java.io.InputStream, len0: Int, bufs0: Array[Array[Byte]], setLen: Int => Unit, setBufs: Array[Array[Byte]] => Unit) {
     val n = catchAsZero{ stream.available }
@@ -407,8 +407,10 @@ final class ExecThread(args: Array[String], mergeErrors: Boolean = false, pollin
       myStopTime.set(Some(LocalDateTime.now))
       myExitCode.set(Some(process.exitValue))
       var i = 0; while (i < inbuf_i) { inbuf(i) = null; i += 1 }; inbuf_i = 0
-      while (process.getErrorStream.available > 0) bufferedStore(process.getErrorStream, errbuf_i, errbuf, i => { errbuf_i = i }, bufs => { errbuf = bufs })
-      while (process.getInputStream.available > 0) bufferedStore(process.getInputStream, outbuf_i, outbuf, i => { outbuf_i = i }, bufs => { outbuf = bufs })
+      while (catchAsZero{ process.getErrorStream.available } > 0) 
+        bufferedStore(process.getErrorStream, errbuf_i, errbuf, i => { errbuf_i = i }, bufs => { errbuf = bufs })
+      while (catchAsZero{ process.getInputStream.available } > 0) 
+        bufferedStore(process.getInputStream, outbuf_i, outbuf, i => { outbuf_i = i }, bufs => { outbuf = bufs })
       myFinishFlag.set(true)
     }
   }

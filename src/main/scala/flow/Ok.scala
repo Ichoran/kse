@@ -53,12 +53,19 @@ sealed trait Ok[+N, +Y] extends Product with Serializable {
   
   /** Maps a disfavored value from `Y` to `Z` using `f`; does nothing to a favored value. */
   def mapNo[M](f: N => M): Ok[M, Y]
+
+  /** Maps both values */
+  def mapBoth[M, Z](f: N => M, g: Y => Z): Ok[M, Z]
   
   /** Turn a favored value into a `Z` or into a disfavored `M` via `f`; leaves a disfavored value alone. */
   def flatMap[M >: N, Z](f: Y => Ok[M, Z]): Ok[M, Z]
 
   /** Turn a disfavored value into a `M` or into a favored `Z` via `f`; leaves a favored value alone. */
   def flatMapNo[M, Z >: Y](f: N => Ok[M, Z]): Ok[M, Z]
+
+  /** Flat maps both values as if running both .flatMapNo and .flatMap */
+  def flatMapBoth[M, Z](f: N => Ok[M, Z], g: Y => Ok[M, Z]): Ok[M, Z]
+  
 
 
   /** Selects only favored values selected by `p`; an implicit conversion 
@@ -150,9 +157,11 @@ final case class Yes[+Y](yes: Y) extends Ok[Nothing, Y] {
   
   def map[Z](f: Y => Z): Ok[Nothing, Z] = Yes(f(yes))
   def mapNo[M](f: Nothing => M): Ok[M, Y] = this
+  def mapBoth[M, Z](f: Nothing => M, g: Y => Z): Ok[M, Z] = Yes(g(yes))
   
   def flatMap[M, Z](f: Y => Ok[M, Z]): Ok[M, Z] = f(yes)
   def flatMapNo[M, Z >: Y](f: Nothing => Ok[M, Z]): Ok[M, Z] = this
+  def flatMapBoth[M, Z](f: Nothing => Ok[M, Z], g: Y => Ok[M, Z]): Ok[M, Z] = g(yes)
   
   def filter[M](p: Y => Boolean)(implicit noify: Ok.Defaulter[M,Y]): Ok[M, Y] = if (p(yes)) this else noify(yes)
   
@@ -187,9 +196,11 @@ final case class No[+N](no: N) extends Ok[N, Nothing] {
   
   def map[Z](f: Nothing => Z): Ok[N, Z] = this
   def mapNo[M](f: N => M): Ok[M, Nothing] = No(f(no))
+  def mapBoth[M, Z](f: N => M, g: Nothing => Z): Ok[M, Z] = No(f(no))
   
   def flatMap[M >: N, Z](f: Nothing => Ok[M, Z]): Ok[M, Z] = this
   def flatMapNo[M, Z](f: N => Ok[M, Z]): Ok[M, Z] = f(no)
+  def flatMapBoth[M, Z](f: N => Ok[M, Z], g: Nothing => Ok[M, Z]): Ok[M, Z] = f(no)
   
   def filter[M >: N](p: Nothing => Boolean)(implicit noify: Ok.Defaulter[M,Nothing]) = this
   
