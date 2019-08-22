@@ -200,6 +200,27 @@ package coll {
         protected def reusable() = (!v.isInstanceOf[Checking.Empty]) && v.asInstanceOf[Option[A]].isDefined
       }
 
+    def preserve[V](hV: Hold[V])(p: V => Boolean): Hold[V] =
+      new Checking[Long, V, (V, Long)](0L) {
+        protected def advance(context: (V, Long)) = context._1
+        protected def reusable(context: (V, Long)) = {
+          val ans = context._2 == h
+          if (!ans) h = context._2
+          ans
+        }
+        def release() { hV.release(); invalidate() }
+        def get(): (V, Long) = {
+          val failed = this.synchronized{ !v.isInstanceOf[Checking.Empty] && !p(v.asInstanceOf[V]) }
+          if (failed) hV.release()
+          get(hV.get())
+        }
+        def apply(): V = {
+          val failed = this.synchronized{ !v.isInstanceOf[Checking.Empty] && !p(v.asInstanceOf[V]) }
+          if (failed) hV.release()
+          apply(hV.get())
+        }
+      }
+
     def map[V, A](hV: Hold[V])(f: V => A): Hold[A] =
       new Mapping[A, (V, Long)] {
         protected def forget() { hV.release() }
