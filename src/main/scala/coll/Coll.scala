@@ -138,10 +138,10 @@ package coll {
           if (!ans) v = Checking.released
           ans
         }
-        forget()
+        if (!done) forget()
       }
 
-      final def reusable(context: C): Boolean = {
+      protected def reusable(context: C): Boolean = {
         val m = extract(context)
         val ans = m == h
         if (!ans) h = m
@@ -202,7 +202,7 @@ package coll {
 
     def map[V, A](hV: Hold[V])(f: V => A): Hold[A] =
       new Mapping[A, (V, Long)] {
-        def forget() { hV.release() }
+        protected def forget() { hV.release() }
         protected def gatherContext() = hV.get()
         protected def extract(context: (V, Long)) = context._2
         protected def advance(context: (V, Long)) = f(context._1)
@@ -210,7 +210,7 @@ package coll {
 
     def map[V, U, A](hV: Hold[V], hU: Hold[U])(f: (V, U) => A): Hold[A] =
       new Mapping[A, ((V, Long), (U, Long))] {
-        def forget() { hV.release(); hU.release() }
+        protected def forget() { hV.release(); hU.release() }
         protected def gatherContext() = (hV.get(), hU.get())
         protected def extract(context: ((V, Long), (U, Long))) = context._1._2 + context._2._2
         protected def advance(context: ((V, Long), (U, Long))) = f(context._1._1, context._2._1)
@@ -218,7 +218,7 @@ package coll {
 
     def map[V, U, T, A](hV: Hold[V], hU: Hold[U], hT: Hold[T])(f: (V, U, T) => A): Hold[A] =
       new Mapping[A, ((V, Long), (U, Long), (T, Long))] {
-        def forget() { hV.release(); hU.release(); hT.release() }
+        protected def forget() { hV.release(); hU.release(); hT.release() }
         protected def gatherContext() = (hV.get(), hU.get(), hT.get())
         protected def extract(context: ((V, Long), (U, Long), (T, Long))) = context._1._2 + context._2._2 + context._3._2
         protected def advance(context: ((V, Long), (U, Long), (T, Long))) = f(context._1._1, context._2._1, context._3._1)
@@ -226,7 +226,7 @@ package coll {
 
     def map[V, U, T, S, A](hV: Hold[V], hU: Hold[U], hT: Hold[T], hS: Hold[S])(f: (V, U, T, S) => A): Hold[A] =
       new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long))] {
-        def forget() { hV.release(); hU.release(); hT.release(); hS.release() }
+        protected def forget() { hV.release(); hU.release(); hT.release(); hS.release() }
         protected def gatherContext() = (hV.get(), hU.get(), hT.get(), hS.get())
         protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long))) =
           context._1._2 + context._2._2 + context._3._2 + context._4._2
@@ -236,7 +236,7 @@ package coll {
 
     def map[V, U, T, S, R, A](hV: Hold[V], hU: Hold[U], hT: Hold[T], hS: Hold[S], hR: Hold[R])(f: (V, U, T, S, R) => A): Hold[A] =
       new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))] {
-        def forget() { hV.release(); hU.release(); hT.release(); hS.release(); hR.release() }
+        protected def forget() { hV.release(); hU.release(); hT.release(); hS.release(); hR.release() }
         protected def gatherContext() = (hV.get(), hU.get(), hT.get(), hS.get(), hR.get())
         protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))) =
           context._1._2 + context._2._2 + context._3._2 + context._4._2 + context._5._2
@@ -246,7 +246,7 @@ package coll {
 
     def map[V, U, T, S, R, Q, A](hV: Hold[V], hU: Hold[U], hT: Hold[T], hS: Hold[S], hR: Hold[R], hQ: Hold[Q])(f: (V, U, T, S, R, Q) => A): Hold[A] =
       new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))] {
-        def forget() { hV.release(); hU.release(); hT.release(); hS.release(); hR.release(); hQ.release() }
+        protected def forget() { hV.release(); hU.release(); hT.release(); hS.release(); hR.release(); hQ.release() }
         protected def gatherContext() = (hV.get(), hU.get(), hT.get(), hS.get(), hR.get(), hQ.get())
         protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))) =
           context._1._2 + context._2._2 + context._3._2 + context._4._2 + context._5._2 + context._6._2
