@@ -127,17 +127,51 @@ package coll {
       final def apply(): V = apply(gatherContext())
     }
 
-    def memo[V >: Null <: AnyRef](gen: => V): Hold[V] =
+    def apply[V >: Null <: AnyRef](gen: => V): Hold[V] =
       new Caching[Unit, V](())(_ => gen) { protected def reusable() = true }
 
-    def timed[V >: Null <: AnyRef](timeout: java.time.Duration)(gen: => V): Hold[V] =
-      new Caching[java.time.Instant, V](java.time.Instant.EPOCH)(_ => gen) {
-        protected def reusable() = {
-          val now = java.time.Instant.now
-          val ans = timeout.compareTo(java.time.Duration.between(h, now)) >= 0
-          if (!ans) h = now
-          ans
+    def tested[V >: Null <: AnyRef](zero: V)(test: V => Boolean)(next: V => V): Hold[V] =
+      new Caching[V, V](zero)(next) {
+        protected def reusable() =
+          if (v eq null) false
+          else {
+            h = v
+            test(h)
+          }
+      }
+
+    final class Counted(uses: Long) {
+      def apply[V >: Null <: AnyRef](gen: => V): Hold[V] =
+        new Caching[Long, V](0L)(_ => gen) {
+          protected def reusable() = {
+            if (h < uses) { h += 1; true }
+            else { h = 0; false }
+          }
         }
+    }
+    def counted(uses: Long) = new Counted(uses)
+
+    final class Timed(timeout: java.time.Duration) {
+      def apply[V >: Null <: AnyRef](gen: => V): Hold[V] =
+        new Caching[java.time.Instant, V](java.time.Instant.EPOCH)(_ => gen) {
+          protected def reusable() = {
+            val now = java.time.Instant.now
+            val ans = timeout.compareTo(java.time.Duration.between(h, now)) >= 0
+            if (!ans) h = now
+            ans
+          }
+        }
+    }
+    def timed(timeout: java.time.Duration) = new Timed(timeout)
+
+    def okay[N, Y](gen: => Ok[N, Y]): Hold[Ok[N, Y]] =
+      new Caching[Unit, Ok[N, Y]](())(_ => gen) {
+        protected def reusable() = (v ne null) && v.isOk
+      }
+
+    def option[A](gen: => Option[A]): Hold[Option[A]] =
+      new Caching[Unit, Option[A]](())(_ => gen) {
+        protected def reusable() = (v ne null) && v.isDefined
       }
 
     final class Map1[V >: Null <: AnyRef](sourceV: Hold[V]) {
