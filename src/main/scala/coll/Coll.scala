@@ -63,57 +63,83 @@ package coll {
   }
 
   /** Clearable, chainable, thread-safe caching with side-state.  Fairly heavyweight operation, so use for work that is significant. */
-  sealed trait Hold[V >: Null <: AnyRef] {
+  sealed trait Hold[V] {
+    /** Indicate that this value should be recomputed next access. */
     def invalidate(): Unit
+
+    /** Indicate that this value, and everything it depends on, should be released and recomputed. */
+    def release(): Unit
+
+    /** Get a count of the number of computations (which serves as a timestamp of sorts) */
     def stamp(): Long
+
+    /** Get the current value and current count of computations */
     def get(): (V, Long)
+
+    /** Get the current value */
     def apply(): V
-    final def map[A >: Null <: AnyRef](f: V => A): Hold[A] = Hold.map(this)(f)
+
+    /** Produce a new Hold that depends on this one. */
+    final def map[A](f: V => A): Hold[A] = Hold.map(this)(f)
   }
   object Hold {
-    sealed abstract class Checking[H, V >: Null <: AnyRef, C](hidden: H) extends Hold[V] {
+    sealed abstract class Checking[H, V, C](hidden: H) extends Hold[V] {
       // These things must only be used while synchronized
       protected var h: H = hidden
-      protected var v: V = null
+      protected var v: Any = Checking.invalidated
       protected var n: Long = 0L
       protected def reusable(context: C): Boolean    // Called EXACTLY ONCE
       protected def advance(context: C): V           // May NOT call reusable()
       // End of things that must be used synchronized
 
-      final def invalidate() { this.synchronized {
-        if (v ne null) v = null
-      }}
+      final def invalidate() { this.synchronized { if (!v.isInstanceOf[Checking.Empty]) v = Checking.invalidated } }
 
       final def stamp(): Long = this.synchronized { n }
 
       final protected def get(context: C): (V, Long) = this.synchronized {
-        if (!reusable(context) || (v eq null)) {    // Note--reusable comes first so it is called exactly once
+        if (!reusable(context) || (v.isInstanceOf[Checking.Empty])) {    // Note--reusable comes first so it is called exactly once
           v = advance(context)
           n += 1
         }
-        (v, n)
+        (v.asInstanceOf[V], n)
       }
 
       final protected def apply(context: C): V = this.synchronized {
-        if (!reusable(context) || (v eq null)) {   // Note--reusable comes first so it is called exactly once
+        if (!reusable(context) || (v.isInstanceOf[Checking.Empty])) {   // Note--reusable comes first so it is called exactly once
           v = advance(context)
           n += 1
         }
-        v
+        v.asInstanceOf[V]
       }
     }
+    object Checking {
+      private[Hold] class Empty {}
+      private[Hold] val invalidated = new Empty {}
+      private[Hold] val released = new Empty {}
+    }
 
-    sealed abstract class Caching[H, V >: Null <: AnyRef](hidden: H)(gen: H => V) extends Checking[H, V, Unit](hidden) {
+    sealed abstract class Caching[H, V](hidden: H)(gen: H => V) extends Checking[H, V, Unit](hidden) {
       protected def reusable(): Boolean
+      final def release() { invalidate() }
       final def reusable(context: Unit): Boolean = reusable()
       final def advance(context: Unit): V = gen(h)
       def get(): (V, Long) = get(())
       def apply(): V = apply(())
     }
 
-    sealed abstract class Mapping[V >: Null <: AnyRef, C] extends Checking[Long, V, C](0L) {
+    sealed abstract class Mapping[V, C] extends Checking[Long, V, C](0L) {
       protected def gatherContext(): C         // Must NOT use within synchronized!
       protected def extract(context: C): Long
+      protected def forget(): Unit
+
+      final def release() {
+        val done = this.synchronized { 
+          val ans = v.asInstanceOf[AnyRef] eq Checking.released
+          if (!ans) v = Checking.released
+          ans
+        }
+        forget()
+      }
 
       final def reusable(context: C): Boolean = {
         val m = extract(context)
@@ -127,21 +153,21 @@ package coll {
       final def apply(): V = apply(gatherContext())
     }
 
-    def apply[V >: Null <: AnyRef](gen: => V): Hold[V] =
+    def apply[V](gen: => V): Hold[V] =
       new Caching[Unit, V](())(_ => gen) { protected def reusable() = true }
 
-    def tested[V >: Null <: AnyRef](zero: V)(test: V => Boolean)(next: V => V): Hold[V] =
+    def tested[V](zero: V)(test: V => Boolean)(next: V => V): Hold[V] =
       new Caching[V, V](zero)(next) {
         protected def reusable() =
-          if (v eq null) false
+          if (v.isInstanceOf[Checking.Empty]) false
           else {
-            h = v
+            h = v.asInstanceOf[V]
             test(h)
           }
       }
 
     final class Counted(uses: Long) {
-      def apply[V >: Null <: AnyRef](gen: => V): Hold[V] =
+      def apply[V](gen: => V): Hold[V] =
         new Caching[Long, V](0L)(_ => gen) {
           protected def reusable() = {
             if (h < uses) { h += 1; true }
@@ -152,7 +178,7 @@ package coll {
     def counted(uses: Long) = new Counted(uses)
 
     final class Timed(timeout: java.time.Duration) {
-      def apply[V >: Null <: AnyRef](gen: => V): Hold[V] =
+      def apply[V](gen: => V): Hold[V] =
         new Caching[java.time.Instant, V](java.time.Instant.EPOCH)(_ => gen) {
           protected def reusable() = {
             val now = java.time.Instant.now
@@ -166,101 +192,67 @@ package coll {
 
     def okay[N, Y](gen: => Ok[N, Y]): Hold[Ok[N, Y]] =
       new Caching[Unit, Ok[N, Y]](())(_ => gen) {
-        protected def reusable() = (v ne null) && v.isOk
+        protected def reusable() = (!v.isInstanceOf[Checking.Empty]) && v.asInstanceOf[Ok[N, Y]].isOk
       }
 
     def option[A](gen: => Option[A]): Hold[Option[A]] =
       new Caching[Unit, Option[A]](())(_ => gen) {
-        protected def reusable() = (v ne null) && v.isDefined
+        protected def reusable() = (!v.isInstanceOf[Checking.Empty]) && v.asInstanceOf[Option[A]].isDefined
       }
 
-    final class Map1[V >: Null <: AnyRef](sourceV: Hold[V]) {
-      def apply[A >: Null <: AnyRef](f: V => A): Hold[A] =
-        new Mapping[A, (V, Long)] {
-          protected def gatherContext() = sourceV.get()
-          protected def extract(context: (V, Long)) = context._2
-          protected def advance(context: (V, Long)) = f(context._1)
-        }
-    }
-    def map[V >: Null <: AnyRef](sourceV: Hold[V]): Map1[V] = new Map1(sourceV)
+    def map[V, A](hV: Hold[V])(f: V => A): Hold[A] =
+      new Mapping[A, (V, Long)] {
+        def forget() { hV.release() }
+        protected def gatherContext() = hV.get()
+        protected def extract(context: (V, Long)) = context._2
+        protected def advance(context: (V, Long)) = f(context._1)
+      }
 
-    final class Map2[V >: Null <: AnyRef, U >: Null <: AnyRef](sourceV: Hold[V], sourceU: Hold[U]) {
-      def apply[A >: Null <: AnyRef](f: (V, U) => A): Hold[A] =
-        new Mapping[A, ((V, Long), (U, Long))] {
-          protected def gatherContext() = (sourceV.get(), sourceU.get())
-          protected def extract(context: ((V, Long), (U, Long))) = context._1._2 + context._2._2
-          protected def advance(context: ((V, Long), (U, Long))) = f(context._1._1, context._2._1)
-        }
-    }
-    def map[V >: Null <: AnyRef, U >: Null <: AnyRef, A >: Null <: AnyRef](sourceV: Hold[V], sourceU: Hold[U]): Map2[V, U] =
-      new Map2(sourceV, sourceU)
+    def map[V, U, A](hV: Hold[V], hU: Hold[U])(f: (V, U) => A): Hold[A] =
+      new Mapping[A, ((V, Long), (U, Long))] {
+        def forget() { hV.release(); hU.release() }
+        protected def gatherContext() = (hV.get(), hU.get())
+        protected def extract(context: ((V, Long), (U, Long))) = context._1._2 + context._2._2
+        protected def advance(context: ((V, Long), (U, Long))) = f(context._1._1, context._2._1)
+      }
 
-    final class Map3[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T]) {
-      def apply[A >: Null <: AnyRef](f: (V, U, T) => A): Hold[A] =
-        new Mapping[A, ((V, Long), (U, Long), (T, Long))] {
-          protected def gatherContext() = (sourceV.get(), sourceU.get(), sourceT.get())
-          protected def extract(context: ((V, Long), (U, Long), (T, Long))) = context._1._2 + context._2._2 + context._3._2
-          protected def advance(context: ((V, Long), (U, Long), (T, Long))) = f(context._1._1, context._2._1, context._3._1)
-        }
-    }
-    def map[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef, A >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T]): Map3[V, U, T] =
-      new Map3(sourceV, sourceU, sourceT)
+    def map[V, U, T, A](hV: Hold[V], hU: Hold[U], hT: Hold[T])(f: (V, U, T) => A): Hold[A] =
+      new Mapping[A, ((V, Long), (U, Long), (T, Long))] {
+        def forget() { hV.release(); hU.release(); hT.release() }
+        protected def gatherContext() = (hV.get(), hU.get(), hT.get())
+        protected def extract(context: ((V, Long), (U, Long), (T, Long))) = context._1._2 + context._2._2 + context._3._2
+        protected def advance(context: ((V, Long), (U, Long), (T, Long))) = f(context._1._1, context._2._1, context._3._1)
+      }
 
-    final class Map4[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef, S >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T], sourceS: Hold[S]) {
-      def apply[A >: Null <: AnyRef](f: (V, U, T, S) => A): Hold[A] =
-        new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long))] {
-          protected def gatherContext() = (sourceV.get(), sourceU.get(), sourceT.get(), sourceS.get())
-          protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long))) =
-            context._1._2 + context._2._2 + context._3._2 + context._4._2
-          protected def advance(context: ((V, Long), (U, Long), (T, Long), (S, Long))) =
-            f(context._1._1, context._2._1, context._3._1, context._4._1)
-        }
-    }
-    def map[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef, S >: Null <: AnyRef, A >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T], sourceS: Hold[S]): Map4[V, U, T, S] =
-      new Map4(sourceV, sourceU, sourceT, sourceS)
+    def map[V, U, T, S, A](hV: Hold[V], hU: Hold[U], hT: Hold[T], hS: Hold[S])(f: (V, U, T, S) => A): Hold[A] =
+      new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long))] {
+        def forget() { hV.release(); hU.release(); hT.release(); hS.release() }
+        protected def gatherContext() = (hV.get(), hU.get(), hT.get(), hS.get())
+        protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long))) =
+          context._1._2 + context._2._2 + context._3._2 + context._4._2
+        protected def advance(context: ((V, Long), (U, Long), (T, Long), (S, Long))) =
+          f(context._1._1, context._2._1, context._3._1, context._4._1)
+      }
 
-    final class Map5[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef, S >: Null <: AnyRef, R >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T], sourceS: Hold[S], sourceR: Hold[R]) {
-      def apply[A >: Null <: AnyRef](f: (V, U, T, S, R) => A): Hold[A] =
-        new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))] {
-          protected def gatherContext() = (sourceV.get(), sourceU.get(), sourceT.get(), sourceS.get(), sourceR.get())
-          protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))) =
-            context._1._2 + context._2._2 + context._3._2 + context._4._2 + context._5._2
-          protected def advance(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))) = 
-            f(context._1._1, context._2._1, context._3._1, context._4._1, context._5._1)
-        }
-    }
-    def map[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef, S >: Null <: AnyRef, R >: Null <: AnyRef, A >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T], sourceS: Hold[S], sourceR: Hold[R]): Map5[V, U, T, S, R] =
-      new Map5(sourceV, sourceU, sourceT, sourceS, sourceR)
+    def map[V, U, T, S, R, A](hV: Hold[V], hU: Hold[U], hT: Hold[T], hS: Hold[S], hR: Hold[R])(f: (V, U, T, S, R) => A): Hold[A] =
+      new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))] {
+        def forget() { hV.release(); hU.release(); hT.release(); hS.release(); hR.release() }
+        protected def gatherContext() = (hV.get(), hU.get(), hT.get(), hS.get(), hR.get())
+        protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))) =
+          context._1._2 + context._2._2 + context._3._2 + context._4._2 + context._5._2
+        protected def advance(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long))) = 
+          f(context._1._1, context._2._1, context._3._1, context._4._1, context._5._1)
+      }
 
-    final class Map6[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef, S >: Null <: AnyRef, R >: Null <: AnyRef, Q >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T], sourceS: Hold[S], sourceR: Hold[R], sourceQ: Hold[Q]) {
-      def apply[A >: Null <: AnyRef](f: (V, U, T, S, R, Q) => A): Hold[A] =
-        new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))] {
-          protected def gatherContext() = (sourceV.get(), sourceU.get(), sourceT.get(), sourceS.get(), sourceR.get(), sourceQ.get())
-          protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))) =
-            context._1._2 + context._2._2 + context._3._2 + context._4._2 + context._5._2 + context._6._2
-          protected def advance(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))) = 
-            f(context._1._1, context._2._1, context._3._1, context._4._1, context._5._1, context._6._1)
-        }
-    }
-    def map[
-      V >: Null <: AnyRef, U >: Null <: AnyRef, T >: Null <: AnyRef, S >: Null <: AnyRef, R >: Null <: AnyRef, Q >: Null <: AnyRef,
-      A >: Null <: AnyRef
-    ](sourceV: Hold[V], sourceU: Hold[U], sourceT: Hold[T], sourceS: Hold[S], sourceR: Hold[R], sourceQ: Hold[Q]): Map6[V, U, T, S, R, Q] =
-      new Map6(sourceV, sourceU, sourceT, sourceS, sourceR, sourceQ)
+    def map[V, U, T, S, R, Q, A](hV: Hold[V], hU: Hold[U], hT: Hold[T], hS: Hold[S], hR: Hold[R], hQ: Hold[Q])(f: (V, U, T, S, R, Q) => A): Hold[A] =
+      new Mapping[A, ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))] {
+        def forget() { hV.release(); hU.release(); hT.release(); hS.release(); hR.release(); hQ.release() }
+        protected def gatherContext() = (hV.get(), hU.get(), hT.get(), hS.get(), hR.get(), hQ.get())
+        protected def extract(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))) =
+          context._1._2 + context._2._2 + context._3._2 + context._4._2 + context._5._2 + context._6._2
+        protected def advance(context: ((V, Long), (U, Long), (T, Long), (S, Long), (R, Long), (Q, Long))) = 
+          f(context._1._1, context._2._1, context._3._1, context._4._1, context._5._1, context._6._1)
+      }
   }
   
   /** Hides data from case classes */
