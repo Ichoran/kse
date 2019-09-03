@@ -1019,6 +1019,25 @@ package object coll {
       if (cb ne null) ccb += cb.result()
       ccb.result()
     }
+
+    def splitUnless(indicator: (A, A) => Boolean)(implicit cbf: CanBuildFrom[CC[A], A, CC[A]], cbf2: CanBuildFrom[CC[A], CC[A], CC[CC[A]]]): CC[CC[A]] = {
+      val ccb = cbf2()
+      var last: A = null.asInstanceOf[A]
+      var cb: collection.mutable.Builder[A, CC[A]] = null
+      trav(xs).foreach{ x =>
+        if (cb eq null) {
+          cb = cbf()
+        }
+        else if (!indicator(last, x)) {
+          ccb += cb.result()
+          cb = cbf()
+        }
+        cb += x
+        last = x
+      }
+      if (cb ne null) ccb += cb.result()
+      ccb.result()
+    }
   }
   implicit class StringCanSplitWithIndicator(xs: String) {
     import collection.generic.CanBuildFrom
