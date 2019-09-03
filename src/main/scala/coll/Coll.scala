@@ -1000,6 +1000,25 @@ package object coll {
       if (cb != null) ccb += cb.result()
       ccb.result()
     }
+
+    def distinctSplit[B](indicator: A => B)(implicit cbf: CanBuildFrom[CC[A], A, CC[A]], cbf2: CanBuildFrom[CC[A], CC[A], CC[CC[A]]]): CC[CC[A]] = {
+      val ccb = cbf2()
+      val seen = collection.mutable.HashSet.empty[B]
+      var cb: collection.mutable.Builder[A, CC[A]] = null
+      trav(xs).foreach{ x =>
+        val i = indicator(x)
+        if (seen contains i) {
+          if (cb ne null) ccb += cb.result()
+          cb = null
+          seen.clear
+        }
+        if (cb eq null) cb = cbf()
+        seen += i
+        cb += x
+      }
+      if (cb ne null) ccb += cb.result()
+      ccb.result()
+    }
   }
   implicit class StringCanSplitWithIndicator(xs: String) {
     import collection.generic.CanBuildFrom
@@ -1007,9 +1026,9 @@ package object coll {
       val sb = Array.newBuilder[String]
       var i = 0
       while (i < xs.length) {
-        val c = xs.charAt(i)
+        val b = indicator(xs.charAt(i))
         var j = i + 1
-        while (j < xs.length && xs.charAt(j) == c) j += 1
+        while (j < xs.length && indicator(xs.charAt(j)) == b) j += 1
         sb += xs.substring(i, j)
         i = j
       }
