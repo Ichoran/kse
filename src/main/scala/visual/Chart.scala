@@ -577,7 +577,8 @@ package chart {
   final case class Titling(
     title: String, xlegend: String, ylegend: String,
     titler: Style => Style = Titling.defaultTitler, legender: Style => Style = Titling.defaultLegender,
-    titleGap: Float = 0f, xlegendGap: Float = 0f, ylegendGap: Float = 0f
+    titleGap: Float = 0f, xlegendGap: Float = 0f, ylegendGap: Float = 0f,
+    xAxisOn: Boolean = true, yAxisOn: Boolean = true
   ) {}
   object Titling {
     val defaultTitler = (s: Style) => s.scale(1.59f)
@@ -602,9 +603,13 @@ package chart {
         (dataOrigin + Vc(0, dataExtent.y * extrascale)).underlying,
         dataOrigin.underlying,
         (dataOrigin + Vc(dataExtent.x * extrascale, 0)).underlying
+      ).pipe(x =>
+        if (titles.exists(_.xAxisOn == false)) x.dropRight(1) else x
+      ).pipe(x =>
+        if (titles.exists(_.yAxisOn == false)) x.drop(1) else x
       ),
-      arrow,
-      arrow,
+      arrow.filterNot(_ => titles.exists(_.xAxisOn == false)),
+      arrow.filterNot(_ => titles.exists(_.yAxisOn == false)),
       linestyle
     )){ (line, xform, mag, fm) =>
       val m = Magnification.from(mag, xform, line.points)
@@ -658,12 +663,12 @@ package chart {
     lazy val xyLegends = {
       val textHeight: Float = legendstyle.elements.collectFirst{ case FontSize(fs) => fs }.getOrElse(13f)
       val tickTextH: Float = tickstyle.elements.collectFirst{ case FontSize(fs) => fs }.getOrElse(10f)
-      titles.map(_.xlegend).filter(_.nonEmpty).map{ xText =>
+      titles.filterNot(_.xAxisOn == false).map(_.xlegend).filter(_.nonEmpty).map{ xText =>
         val x = 0.5f*viewExtent.x
         val y = -(2*ticklen + tickTextH) - titles.get.xlegendGap*textHeight
         Letters(viewOrigin + Vc(x,y), xText, 0, legendstyle ++ Font(Horizontal.Middle, Vertical.Top))
       }.toVector ++
-      titles.map(_.ylegend).filter(_.nonEmpty).map{ yText =>
+      titles.filterNot(_.yAxisOn == false).map(_.ylegend).filter(_.nonEmpty).map{ yText =>
         val y = 0.5f*viewExtent.y
         val x = -(
           2*ticklen +
@@ -674,7 +679,15 @@ package chart {
       }.toVector
     }
 
-    lazy val lineAssembly = dataAssembly.copy(thicken = None, stuff = Vector(axisLine, xTicks, yTicks))
+    lazy val lineAssembly = dataAssembly.copy(
+      thicken = None,
+      stuff = (!titles.exists(_.xAxisOn == false), !titles.exists(_.yAxisOn == false)) match {
+        case (false, false) => Vector.empty
+        case (false, true ) => Vector(axisLine, yTicks)
+        case (true,  false) => Vector(axisLine, xTicks)
+        case (true,  true ) => Vector(axisLine, xTicks, yTicks)
+      }
+    )
 
     lazy val fullAssembly = Assembly((Vector(dataAssembly, lineAssembly) ++ xyLegends ++ theTitle): _*)
 
