@@ -24,7 +24,7 @@ package coll {
   }
   object Itself extends LowPriorityItselfConversions {
     def value[@specialized A](a: A): Itself[A] = new Itself[A] { def itself = a }
-    def is[@specialized A](a: => A): Itself[A] = new Itself[A] { private lazy val mySelf = a; def itself = a }
+    def is[@specialized A](a: => A): Itself[A] = new Itself[A] { private lazy val mySelf = a; def itself = mySelf }
     def from[@specialized A](a: => A): Itself[A] = new Itself[A] { def itself = a }
   }
 
