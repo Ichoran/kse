@@ -39,7 +39,7 @@ package coll {
     def map[B](f: A => B) = Lazy(f(value))
     def flatMap[B](f: A => Lazy[B]) = Lazy(f(value).value)
     def foreach[B](f: A => B) { f(value) }
-    def asItself: Itself[A] = Itself is value
+    def asItself: Itself[A] = Itself from value
   }
   object Lazy {
     def apply[A](gen: => A) = new Lazy(gen)
