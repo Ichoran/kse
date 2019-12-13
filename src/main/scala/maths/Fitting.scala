@@ -61,7 +61,7 @@ sealed trait Fit[F <: Fit[F]] extends scala.Cloneable {
 /** FitTX performs a ordinary least squares fit of a parameter t against a readout x.
   * We assume t is accurate; this method is not precise if both t and x can vary.
   */
-final class FitTX extends Fit[FitTX] {
+final class FitTX() extends Fit[FitTX] {
   private[this] var Ot = 0.0
   private[this] var Ox = 0.0
 
@@ -119,6 +119,8 @@ final class FitTX extends Fit[FitTX] {
 
   def apply(t: Double): Double = alphaX + betaX*(t - Ot) + Ox
   def xt(t: Double): Double = apply(t)
+
+  def xDeviation(t: Double): Double = sqrt((error/(n-2))*(1.0/n + (n*t - St).sq/(n*(n*Stt - St*St))))
 
   def inverse(x: Double): Double = {
     val bX = betaX
@@ -241,7 +243,7 @@ object FitTX {
 /** FitTXY performs a ordinary least squares fit of a parameter t against two readouts x and y.
   * We assume t is accurate; this method is not precise if t has error as well as x and y.
   */
-final class FitTXY extends Fit[FitTXY] {
+final class FitTXY() extends Fit[FitTXY] {
   private[this] var Ot = 0.0
   private[this] var Ox = 0.0
   private[this] var Oy = 0.0
