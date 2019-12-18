@@ -104,12 +104,11 @@ object Act {
         Yes(true)
       }
   }
-  object Like {
-    def apply(computation: => Unit)                             = new Like(computation)
-    def apply(computation: => Unit, name: String)               = new Like(computation, name)
-    def apply(computation: => Unit, cost: Double)               = new Like(computation, cost = cost)
-    def apply(computation: => Unit, name: String, cost: Double) = new Like(computation, name, cost)
-  }
+
+  def like(computation: => Unit)                             = new Like(computation)
+  def like(computation: => Unit, name: String)               = new Like(computation, name)
+  def like(computation: => Unit, cost: Double)               = new Like(computation, cost = cost)
+  def like(computation: => Unit, name: String, cost: Double) = new Like(computation, name, cost)
 
 
   final class TemporaryInputSupplier[I](private val input: () => I) extends AnyVal {
@@ -166,10 +165,17 @@ extends Act {
               if (myInput.compareAndSet(x, null)) {
                 val i = x match {
                   case Yes(y) => y
-                  case No(fn) => fn()
+                  case No(fn) =>
+                    try { fn() }
+                    catch {
+                      case e if NonFatal(e) =>
+                        myInput.set(No(fn))
+                        myStatus.set(Act.Outcome.Before.yes)
+                        return Double.NaN
+                    }
                 }
-                myInput.set(Yes(i))
                 ensureCostIsSetImpl(i)
+                myInput.set(Yes(i))
               }
             }
             myStatus.set(Act.Outcome.Before.yes)
@@ -202,7 +208,16 @@ extends Act {
           if (myInput.compareAndSet(x, null)) {
             val i = x match {
               case Yes(y) => y
-              case No(fn) => fn()
+              case No(fn) =>
+                try { fn() }
+                catch {
+                  case t if NonFatal(t) =>
+                    myInput.set(No(fn))
+                    myCost.compareAndSet(Arrow.UninitializedNaNBits, Arrow.DoubleNaNBits)
+                    val e = No(handler(t).getOrElse(excuse(s"Exception before $name could act:\n${t.explain()}")))
+                    myOutput.set(e)
+                    return e
+                }
             }
             actArrowImpl(i, provisions) match {
               case n: No[E] =>
