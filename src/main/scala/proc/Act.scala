@@ -3,8 +3,9 @@
 
 package kse.proc
 
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicReference
+import java.time.{Duration, Instant}
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.collection.immutable.TreeMap
 import scala.util.control.NonFatal
@@ -13,6 +14,237 @@ import kse.flow._
 import kse.maths._
 import kse.maths.stats._
 import kse.maths.fits._
+
+
+abstract class Act {
+  type E
+
+  def name: String
+  def cost: Double
+
+  protected val myStatus = new AtomicReference[Ok[E, Act.Outcome]](Act.Outcome.Before.yes)
+  def status: Act.Outcome = myStatus.get() match {
+    case Yes(y) => y
+    case No(e) => Act.Outcome.Failed
+  }
+
+  protected def handler(t: Throwable): Option[E]
+  protected def excuse(message: String): E
+
+  /** Call all `Impl` methods, including this one, ONLY while you own the `Act.Outcome.Running` flag! */
+  protected def actImpl(provisions: Act.Provision): Ok[E, Boolean]
+
+  def act(provisions: Act.Provision): Ok[E, Act.Outcome] = {
+    var result: Ok[E, Act.Outcome] = null
+    while (result eq null) {
+      myStatus.get() match {
+        case Yes(Act.Outcome.Before) =>
+          if (myStatus.compareAndSet(Act.Outcome.Before.yes, Act.Outcome.Running.yes)) {
+            result =
+              try { 
+                actImpl(provisions).map{ b => 
+                  if (b) Act.Outcome.Succeeded
+                  else   Act.Outcome.Skipped
+                }
+              }
+              catch {
+                case e if NonFatal(e) => handler(e) match {
+                  case Some(x) => No(x)
+                  case None => throw e
+                }
+              }
+            myStatus.set(result)
+          }
+        case Yes(Act.Outcome.Running) =>
+          Thread.`yield`
+        case x =>
+          result = x
+      }
+    }
+    result
+  }
+  final def act(): Ok[E, Act.Outcome] = act(Act.Provision.empty)
+
+  override def toString =
+    if (name.nonEmpty) name + status.actText
+    else getClass.getName + "@" + System.identityHashCode(this).toHexString + status.actText
+}
+object Act {
+  sealed trait Outcome { def actText: String; lazy val yes = Yes(this) }
+  object Outcome {
+    case object  Before    extends Outcome  { def actText = "";             override def toString = "has not acted" }
+    sealed trait Complete  extends Outcome  {}
+    case object  Succeeded extends Complete { def actText = " (succeeded)"; override def toString = "act succeeded" }
+    case object  Failed    extends Complete { def actText = " (failed)";    override def toString = "act failed" }
+    case object  Running   extends Outcome  { def actText = " (running)";   override def toString = "acting" }
+    case object  Skipped   extends Outcome  { def actText = " (skipped)";   override def toString = "skipped" }
+  }
+
+  case class Provision(threads: Int, completeBy: Option[java.time.Instant]) {}
+  object Provision {
+    val empty = new Provision(1, None)
+    def apply(i: Int) = new Provision(i max 1, None)
+    def apply(t: java.time.Instant) = new Provision(1, Some(t))
+  }
+
+
+  trait Stringly extends Act {
+    type E = String
+    final protected def excuse(message: String) = message
+    final protected def handler(t: Throwable): Option[String] = Some(t.explain())
+  }
+
+
+  final class Like private[proc] (computation: => Unit, val name: String = "", val cost: Double = Double.NaN)
+  extends Act with Stringly {
+    protected def actImpl(provisions: Act.Provision): Ok[E, Boolean] =
+      if (provisions.completeBy.exists(t => t isBefore Instant.now)) Yes(false)
+      else {
+        computation
+        Yes(true)
+      }
+  }
+  object Like {
+    def apply(computation: => Unit)                             = new Like(computation)
+    def apply(computation: => Unit, name: String)               = new Like(computation, name)
+    def apply(computation: => Unit, cost: Double)               = new Like(computation, cost = cost)
+    def apply(computation: => Unit, name: String, cost: Double) = new Like(computation, name, cost)
+  }
+
+
+  final class TemporaryInputSupplier[I](private val input: () => I) extends AnyVal {
+    def map[O](fn: I => O):                                       Arrow[I, O] with Stringly = new Arrow.Map(input, fn, "",   Arrow.nanEstimator)
+    def map[O](fn: I => O, name: String):                         Arrow[I, O] with Stringly = new Arrow.Map(input, fn, name, Arrow.nanEstimator)
+    def map[O](fn: I => O,               estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.Map(input, fn, "",   estimator)
+    def map[O](fn: I => O, name: String, estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.Map(input, fn, name, estimator)
+    def flatMap[O](fn: I => Ok[String, O]):                                       Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, "",   Arrow.nanEstimator)
+    def flatMap[O](fn: I => Ok[String, O], name: String):                         Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, name, Arrow.nanEstimator)
+    def flatMap[O](fn: I => Ok[String, O],               estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, "",   estimator)
+    def flatMap[O](fn: I => Ok[String, O], name: String, estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, name, estimator)
+  }
+
+  def from[I](input: => I) = new TemporaryInputSupplier(() => input)
+}
+
+
+
+abstract class Arrow[I, O](input: () => I, estimator: I => Double = (i: I) => Double.NaN, val name: String = "")
+extends Act {
+  protected val myInput = new AtomicReference[Ok[() => I, I]](No(input))
+  protected val myOutput = new AtomicReference[Ok[E, O]](null)
+  protected val myCost = new AtomicLong(Arrow.UninitializedNaNBits)
+
+  /** Call only when you hold both the `Act.Outcome.Running` flag AND the `myInput == null` flag */
+  private[this] def ensureCostIsSetImpl(i: I) {
+    var retries = 3
+    while (retries > 0) {
+      retries -= 1
+      if (myCost.compareAndSet(Arrow.UninitializedNaNBits, Arrow.RunningNaNBits)) {
+        myCost.set( 
+          try{ val c = estimator(i); if (c.isNaN) Arrow.DoubleNaNBits else c.bits }
+          catch { case e if NonFatal(e) => Arrow.DoubleNaNBits }
+        )
+        retries = 0
+      }
+      else myCost.get() match {
+        case Arrow.RunningNaNBits => Thread.`yield`
+        case Arrow.UninitializedNaNBits =>
+        case _ => retries = 0
+      }
+    }
+  }
+
+  final def cost: Double = {
+    var retries = 10
+    while (retries > 0) {
+      retries -= 1
+      myCost.get() match {
+        case Arrow.UninitializedNaNBits =>
+          if (myStatus.compareAndSet(Act.Outcome.Before.yes, Act.Outcome.Running.yes)) {
+            val x = myInput.get()
+            if (x != null) {
+              if (myInput.compareAndSet(x, null)) {
+                val i = x match {
+                  case Yes(y) => y
+                  case No(fn) => fn()
+                }
+                myInput.set(Yes(i))
+                ensureCostIsSetImpl(i)
+              }
+            }
+            myStatus.set(Act.Outcome.Before.yes)
+          }
+        case Arrow.RunningNaNBits => Thread.`yield`
+        case x => return x.binary64
+      }
+    }
+    Double.NaN
+  }
+
+  final def output: Ok[Option[E], O] = myOutput.get() match {
+    case null => No(None)
+    case y: Yes[O] => y
+    case No(e) => No(Some(e))
+  }
+
+  /** Assume when implementing this that we're holding the `Act.Outcome.Running` flag */
+  protected def actArrowImpl(in: I, provisions: Act.Provision): Ok[E, Option[O]]
+
+  /** Only call this when guarded by holding the `Act.Outcome.Running` flag (i.e. you CASed it into place) */
+  protected final def actImpl(provisions: Act.Provision): Ok[E, Boolean] = {
+    var retries = 10
+    while (retries > 0) {
+      retries -= 1
+      myInput.get() match {
+        case null => // Bad implementation or we computed the cost concurrently and memory consistency hasn't caught up yet
+          Thread.`yield`
+        case x =>
+          if (myInput.compareAndSet(x, null)) {
+            val i = x match {
+              case Yes(y) => y
+              case No(fn) => fn()
+            }
+            actArrowImpl(i, provisions) match {
+              case n: No[E] =>
+                myOutput.set(n)
+                ensureCostIsSetImpl(i)
+                return n
+              case Yes(Some(o)) =>
+                myOutput.set(Yes(o))
+                ensureCostIsSetImpl(i)
+                return Yes(true)
+              case Yes(None) => myInput.set(Yes(i)); return Yes(false)
+            }
+          }
+          else Thread.`yield`
+      }
+    }
+    No(excuse(s"input not available to $this"))
+  }
+}
+object Arrow {
+  val DoubleNaNBits = Double.NaN.bits
+  val UninitializedNaNBits = Double.NaN.bits ^ 0x3
+  val RunningNaNBits = Double.NaN.bits ^ 0x5
+  val nanEstimator = (a: Any) => Double.NaN
+
+  private[proc] class Map[I, O](input: () => I, op: I => O, name: String, estimator: I => Double)
+  extends Arrow[I, O](input, estimator, name) with Act.Stringly {
+    protected def actArrowImpl(in: I, provisions: Act.Provision): Ok[E, Option[O]] =
+      safe{ Option(op(in)) }.mapNo(e => excuse(e.explain()))
+  }
+
+  private[proc] class FlatMap[I, O](input: () => I, op: I => Ok[String, O], name: String, estimator: I => Double)
+  extends Arrow[I, O](input, estimator, name) with Act.Stringly {
+    protected def actArrowImpl(in: I, provisions: Act.Provision): Ok[E, Option[O]] =
+      try{ op(in).map(o => Option(o)) } catch { case e if NonFatal(e) => No(excuse(e.explain())) }
+  }
+  def apply[I, O](input: => I, op: I => O, name: String = "", estimator: I => Double = (i: I) => Double.NaN): Arrow[I, O] with Act.Stringly =
+    new Map[I, O](() => input, op, name, estimator)
+}
+
+
+/*
 
 /** An Act is an error-prone producer of heavyweight values.
   * It can estimate the workload to produce itself, returning
@@ -94,15 +326,19 @@ object Act {
     /** An Act.Once.From starts with a value; once it has run
       * it will discard that value and remember the result forever.
       */
-    sealed abstract class From[I >: Null <: AnyRef, F, A](f: I => Ok[F, A], err: String => F, val identifier: Option[String] = None)
+    sealed abstract class From[I >: Null <: AnyRef, F, A](f: I => Ok[F, A], err: String => F, val identifier: Option[String] = None, val quantifier: I => Double = _ => Double.NaN)
     extends Once[A] {
       type E = F
       override def error(message: String) = err(message)
       override def once(): this.type = this
     }
     object From {
-      sealed private[proc] class Impl[I >: Null <: AnyRef, F, A](f: I => Ok[F, A], err: String => F, identifier: Option[String])
+      sealed private[proc] class Impl[I >: Null <: AnyRef, F, A](f: I => Ok[F, A], err: String => F, identifier: Option[String], quantifier: I => Double)
       extends From[I, F, A](f, err, identifier) with On[I, A] {
+        override def quantify(): Double = synchronizer.synchronized{
+          if (supplyCache == null) Double.NaN)
+          else 
+        }
         def actOn(i: I, provisions: Act.Provision): Ok[E, A] =
           try { f(i) }
           catch { case e if NonFatal(e) => No(error(e.explain())) }
@@ -165,7 +401,89 @@ object Act {
     val simple = new Provision(1, None)
     def apply(i: Int) = new Provision(i, None)
   }
+
+
+  class Predictor[A, K <: Act[A]] {
+    protected val quantityModel = EstXM()
+    protected val constantModel = EstM.empty
+    protected val nanModel = EstM.empty
+    protected val affineModel = new FitTX()
+
+    def apply(quantity: Double): Double = {
+      if (quantity.isNaN) {
+        if (nanModel.n > 0) nanModel.mean
+        else if (constantModel.n > 0) constantModel.mean
+        else Double.NaN
+      }
+      else if (constantModel.n == 0) {
+        if (nanModel.n > 0) nanModel.mean else Double.NaN
+      }
+      else if (constantModel.n < 5) constantModel.n
+      else {
+        val cv = constantModel.mean
+        val ce = constantModel.sd
+        val av = affineModel.xt(quantity)
+        val ae = affineModel.xDeviation(quantity)
+        val w =
+          if (ce.finite && ae.finite && ce > 0 && ae > 0) {
+            if (quantity >= quantityModel.min && quantity <= quantityModel.max) ae / (ce + ae)
+            else {
+              val outside = if (quantity < quantityModel.min) quantityModel.min - quantity else quantity-quantityModel.max
+              val extrap = outside / (0.5*(quantityModel.max - quantityModel.min))
+              val wce = ce / (1+extrap)
+              ae / (wce + ae)
+            }
+          }
+          else 0.5
+
+        cv*w + av*(1-w)
+      }
+    }
+    def apply(act: K): Double = apply(act.quantify())
+
+    def learn(quantity: Double, observed: Double): Unit = {
+      if (dt.finite) {
+        if (quantity.finite) {
+          quantityModel += quantity
+          constantModel += dt
+          affineModel += (quantity, dt)
+        }
+        else nanModel += quantity
+      }
+    }
+  }
 }
+
+
+class [A, K <: Act[A]] {}
+
+
+
+class Acts[A, K <: Act[A], N, Z]
+
+trait Acts[Z >: Null <: AnyRef] extends Act[Z] {
+
+  protected val results = new ConcurrentLinkedQueue[Acts.Result[A, K, N]]()
+
+  protected def summarize(): Z
+}
+object Acts {
+  sealed trait Result[A, K <: Act[A], +N] {}
+  final class Worked[A, K <: Act[A]](val act: K)(val result: A) extends Result[A, K, Nothing] {}
+  final class Failed[A, K <: Act[A]](val act: K)(val error: act.E) extends Result[A, K, Nothing] {}
+  final class Skipped[A, K <: Act[A], +N](val act: K)(val why: N) extends Result[A, K, N] {}
+
+
+  class Record[A, K <: Act[A], X](zero: X) {
+    protected val x = new AtomicReference(zero)
+  }
+
+  abstract class Abstract[A, K <: Act[A], Z >: Null <: AnyRef](initial: Iterator[K])
+  extends Acts[A, K, Z] with Act.On[Iterator[K], Z] {
+
+  }
+}
+*/
 
 
 /*
@@ -179,12 +497,16 @@ trait Acts[Z >: Null <: AnyRef] extends Act[Z] {
   protected def finalizeRecord(record: R, queue: Seq[K]): Ok[(E, Seq[K]), Z]
 
   protected def initialActs: Ok[E, Iterator[K]]
-  protected def checkAct(k: K, timeBudget: Double = NaN): Ok[N, Double]
+  protected def checkAct(k: K, timeBudget: Double = Double.NaN): Ok[N, Double]
   protected def actMore(record: R, k: K)(result: Ok[k.E, A]): Ok[E, Iterator[K]]
 
   protected def actImpl(provisions: Act.Provision): Ok[(E, Seq[K]), Z]
 }
 object Acts {
+  trait Once[Z >: Null <: AnyRef] extends Acts[Z] with Act.Once[Z] {
+    def actUnsync(provisions: Act.Provision): Ok[(E, Seq[K]), Z] = actImpl(provisions)
+  }
+
   trait Record[A, K <: Act[A], N, E] {
     def no(act: K)(n: N): Ok[E, Unit]
     def ran(act: K)(result: Ok[act.E, A]): Ok[E, Unit]
@@ -239,7 +561,7 @@ object Acts {
     protected def checkActTime(k: K, timeBudget: Double): Ok[N, Unit] = 
       if (timeBudget.nan) Ok.UnitYes
       else {
-        dt = predictTime(k.quantity()) max 0
+        val dt = predictTime(k.quantity()) max 0
         if (dt.nan) Ok.UnitYes
         else if (timeBudget <= dt * Timed.SafetyFactor) No(notEnoughTime(dt * Timed.SafetyFactor, timeBudget))
         else Ok.UnitYes
