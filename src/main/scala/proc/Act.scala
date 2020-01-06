@@ -5,9 +5,10 @@ package kse.proc
 
 import java.time.{Duration, Instant}
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.collection.immutable.TreeMap
+import scala.collection.mutable.Queue
 import scala.util.control.NonFatal
 
 import kse.flow._
@@ -16,6 +17,10 @@ import kse.maths.stats._
 import kse.maths.fits._
 
 
+/** An Act is a computation that can run once and is safe for concurrent access.
+  * It is assumed to work via side-effects, so it doesn't return any value;
+  * it just reports on its state.
+  */
 abstract class Act {
   type E
 
@@ -126,7 +131,12 @@ object Act {
 }
 
 
-
+/** An Arrow is an Act that starts with a predefined input and produces,
+  * after acting, an output.  It also can optionally give a numeric score
+  * that represents an estimate of the amount of work it is to create an
+  * output.  Ideally, this number would be linearly related to the
+  * execution time (possibly with a constant offset).
+  */
 abstract class Arrow[I, O](input: () => I, estimator: I => Double = (i: I) => Double.NaN, val name: String = "")
 extends Act {
   protected val myInput = new AtomicReference[Ok[() => I, I]](No(input))
@@ -256,6 +266,91 @@ object Arrow {
   }
   def apply[I, O](input: => I, op: I => O, name: String = "", estimator: I => Double = (i: I) => Double.NaN): Arrow[I, O] with Act.Stringly =
     new Map[I, O](() => input, op, name, estimator)
+}
+
+
+/** Quiver is an Act (actually an Arrow) that runs a bunch of Arrows.  (Yes, it's a play on words.)
+  *
+  * Be very careful while interacting with the concurrency mechanisms.
+  * It's safest to use the builder methods to create one of the two
+  * primary subclasses, `Quiver.Sequential` and `Quiver.Concurrent`.
+  */
+abstract class Quiver[KI, KO, K <: Arrow[KI, KO], Z <: Quiver.Summary](initial: () => Seq[K], name: String = "")
+extends Arrow[Seq[K], Z](initial, _ => Double.NaN, name) {
+  type KE
+  type KR <: Quiver.Result[KI, KO, K, KE]
+
+  private[proc] val progress = new Quiver.Progress[KO, KI, K, KE, KR, E]
+
+  private[proc] def reload(act: K)(result: KO): Seq[K]
+  private[proc] def fatality(act: K)(e: act.E): Option[E]
+
+  protected def getExecutors(): Seq[Quiver.Executor[KI, KO, K, KE]]
+  protected def summaryImpl(summary: (Option[E], Vector[KR], Vector[K])): Ok[E, Z]
+
+  protected def actOnQueueImpl(provisions: Act.Provision): Ok[E, (Option[E], Vector[KR], Vector[K])] = {
+    val execs = getExecutors()
+    if (execs.isEmpty) No(excuse(s"$name could not create any executors"))
+    else {
+      execs.foreach(_.begin(execs.length))
+      execs.foreach(_.await)
+      var e: Option[E] = None
+      val osb = Vector.newBuilder[KR]
+      val isb = Vector.newBuilder[K]
+      progress.synchronized {
+        e = progress.dead
+        progress.dead = None
+        progress.bored = 0
+        while (progress.outputs.nonEmpty) osb += progress.outputs.dequeue
+        while (progress.queue.nonEmpty) isb += progress.queue.dequeue
+      }
+      Yes((e, osb.result, isb.result))
+    }
+  }
+
+  final protected def actArrowImpl(in: Seq[K], provisions: Act.Provision): Ok[E, Option[Z]] = {
+    val i = in.iterator
+    while (i.hasNext) progress.queue add i.next
+    actOnQueueImpl(provisions).flatMap(summaryImpl).map(z => Some(z))
+  }
+}
+object Quiver {
+  // Use ONLY when synchronized!
+  final protected[proc] class Progress[KI, KO, K <: Arrow[KI, KO], KE, KR <: Result[KI, KO, K, KE], E]() {
+    var bored = 0
+    var dead: Option[E] = None
+    val queue = new Queue[K]()
+    val outputs = new Queue[KR]()
+    var provisions: Option[Provisions] = None
+  }
+
+  trait Summary {}
+  trait Result[KI, KO, K <: Arrow[KI, KO], KE] {}
+  trait Executor[KI, KO, K <: Arrow[KI, KO], KE] {
+    val quiver: Quiver[KI, KO, K, _]
+    def begin(allBored: Int): Unit
+    def await(): Unit
+  }
+  object Executor {
+    final class Sequential[KI, KO, K <: Arrow[KI, KO], KE](val quiver: Quiver[KI, KO, K, _])
+    extends Executor[KI, KO, K, KE] {
+      def begin(allBored: Int): Unit = quiver.progress.synchronized {
+        val p = quiver.progress
+        while (p.queue.nonEmpty && p.dead.isEmpty) {
+          val k = p.queue.dequeue
+          val status = quiver.provisions match { case Some(prov) => k.act(prov); case _ => k.act() }
+          status match {
+            case Yes(state) =>
+            case No(error)  => quiver.fatality(k)(error) match {
+              case None
+            }
+          }
+          // TODO--make this actually run the arrow and process the output
+        }
+      }
+      def await() : Unit = ()   // Already ran everything when we began because we're sequential
+    }
+  }
 }
 
 
