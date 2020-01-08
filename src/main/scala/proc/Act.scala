@@ -165,14 +165,13 @@ object Act {
 
 
   abstract class InTime[I, Err, O] private[proc] (input: I, f: I => Ok[Err, O], name: String, appraiser: I => Double, val model: InTime.Model)
-  extends On[I, Err, O](input, f, name, appraiser) {
-    protected def needMoreTime(duration: Duration): Ok[Err, O]
+  extends On[I, InTime.Problem[Err], O](input, (i: I) => f(i).mapNo(e => InTime.Mistake(e)), name, appraiser) {
     override protected def actImpl(provisions: Provision): Ok[E, O] = provisions.completeBy match {
       case None => super.actImpl(provisions)
       case Some(t) =>
         val now = Instant.now
         val expected = now plus model(cost)
-        if (t isBefore expected) needMoreTime(Duration.between(t, expected))
+        if (t isBefore expected) No(InTime.Slow(Duration.between(t, expected)))
         else {
           val ans = super.actImpl(provisions)
           val elapsed = Duration.between(now, Instant.now)
@@ -182,12 +181,32 @@ object Act {
     }
   }
   object InTime {
-    trait Stringly[I, O] extends InTime[I, String, O] with On.Stringly[I, O] {
-      override type E = String
+    sealed trait Problem[Err] {
+      def toOk: Ok[Duration, Err]
+      def isSlow: Boolean
+      def isError: Boolean
+      def mistake: Option[Err]
+      def slow: Option[Duration]
     }
-    object Stringly {
-      def lateError[O](name: String, duration: Duration): Ok[String, O] =
-        No(s"Needed $duration more time${if (name.isEmpty) "" else " for "+name}")
+    final case class Slow[Err](duration: Duration) extends Problem[Err] {
+      def toOk = No(duration)
+      def isSlow = true
+      def isError = false
+      def mistake = None
+      def slow = Some(duration)
+    }
+    final case class Mistake[Err](error: Err) extends Problem[Err] {
+      def toOk = Yes(error)
+      def isSlow = false
+      def isError = true
+      def mistake = Some(error)
+      def slow = None
+    }
+
+    class Stringish[I, O] private[proc] (input: I, f: I => Ok[String, O], name: String, appraiser: I => Double, model: InTime.Model)
+    extends InTime[I, String, O](input, f, name, appraiser, model) {
+      final protected def excuse(message: String) = Mistake(message)
+      final protected def handler(t: Throwable) = Mistake(t.explain())
     }
 
     trait Model { model =>
@@ -257,39 +276,15 @@ object Act {
   }
 
   final class TemporaryInputModelSupplier[I](input: () => I, model: InTime.Model, appraiser: I => Double) {
-    def map[O](fn: I => O): InTime.Stringly[I, O] =
-      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), "", appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O]("", duration)
-      }
-    def map[O](fn: I => O, name: String): InTime.Stringly[I, O] =
-      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), name, appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O](name, duration)
-      }
-    def map[O](fn: I => O, ifLate: (I, Duration) => Ok[String, O]) =
-      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), "", appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = ifLate(input, duration)
-      }
-    def map[O](fn: I => O, name: String, ifLate: (String, I, Duration) => Ok[String, O]) =
-      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), name, appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = ifLate(name, input, duration)
-      }
+    def map[O](fn: I => O): InTime.Stringish[I, O] =
+      new InTime.Stringish[I, O](input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), "", appraiser, model)
+    def map[O](fn: I => O, name: String): InTime.Stringish[I, O] =
+      new InTime.Stringish[I, O](input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), name, appraiser, model)
 
-    def flatMap[O](fn: I => Ok[String, O]): InTime.Stringly[I, O] =
-      new InTime(input(), fn, "", appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O]("", duration)
-      }
-    def flatMap[O](fn: I => Ok[String, O], name: String): InTime.Stringly[I, O] =
-      new InTime(input(), fn, name, appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O](name, duration)
-      }
-    def flatMap[O](fn: I => Ok[String, O], ifLate: (I, Duration) => Ok[String, O]) =
-      new InTime(input(), fn, "", appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = ifLate(input, duration)
-      }
-    def flatMap[O](fn: I => Ok[String, O], name: String, ifLate: (String, I, Duration) => Ok[String, O]) =
-      new InTime(input(), fn, name, appraiser, model) with InTime.Stringly[I, O] {
-        protected def needMoreTime(duration: Duration) = ifLate(name, input, duration)
-      }
+    def flatMap[O](fn: I => Ok[String, O]): InTime.Stringish[I, O] =
+      new InTime.Stringish[I, O](input(), fn, "", appraiser, model)
+    def flatMap[O](fn: I => Ok[String, O], name: String): InTime.Stringish[I, O] =
+      new InTime.Stringish(input(), fn, name, appraiser, model)
   }
 
   def on[I](input: => I) = new TemporaryInputSupplier(() => input)
