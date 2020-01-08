@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license
-// Copyright 2019 Rex Kerr and Calico Life Sciences
+// Copyright 2019, 2020 Rex Kerr and Calico Life Sciences
 
 package kse.proc
 
@@ -18,96 +18,116 @@ import kse.maths.fits._
 
 
 /** An Act is a computation that can run once and is safe for concurrent access.
-  * It is assumed to work via side-effects, so it doesn't return any value;
-  * it just reports on its state.
   */
-abstract class Act {
+abstract class Act[O] {
   type E
 
   def name: String
   def cost: Double
 
-  protected val myStatus = new AtomicReference[Ok[E, Act.Outcome]](Act.Outcome.Before.yes)
-  def status: Act.Outcome = myStatus.get() match {
-    case Yes(y) => y
-    case No(e) => Act.Outcome.Failed
-  }
+  protected val myStatus = new AtomicReference[Act.Status[E, O]](Act.Before())
+  def status: Act.Status[E, O] = myStatus.get()
 
-  protected def handler(t: Throwable): Option[E]
+  protected def handler(t: Throwable): E
   protected def excuse(message: String): E
 
-  /** Call all `Impl` methods, including this one, ONLY while you own the `Act.Outcome.Running` flag! */
-  protected def actImpl(provisions: Act.Provision): Ok[E, Boolean]
+  /** Call all `Impl` methods, including this one, ONLY while you own the `Act.Status.Running` flag! */
+  protected def actImpl(provisions: Act.Provision): Ok[E, O]
 
-  def act(provisions: Act.Provision): Ok[E, Act.Outcome] = {
-    var result: Ok[E, Act.Outcome] = null
+  final def act(provisions: Act.Provision): Ok[E, O] = {
+    var result: Ok[E, O] = null
     while (result eq null) {
       myStatus.get() match {
-        case Yes(Act.Outcome.Before) =>
-          if (myStatus.compareAndSet(Act.Outcome.Before.yes, Act.Outcome.Running.yes)) {
+        case _: Act.Before[_, _] =>
+          if (myStatus.compareAndSet(Act.Before(), Act.Running())) {
             result =
-              try { 
-                actImpl(provisions).map{ b => 
-                  if (b) Act.Outcome.Succeeded
-                  else   Act.Outcome.Skipped
-                }
-              }
-              catch {
-                case e if NonFatal(e) => handler(e) match {
-                  case Some(x) => No(x)
-                  case None => throw e
-                }
-              }
-            myStatus.set(result)
+              try { actImpl(provisions) }
+              catch { case e if NonFatal(e) => No(handler(e)) }
+            myStatus.set(Act.Done(result))
           }
-        case Yes(Act.Outcome.Running) =>
+        case _: Act.Running[_, _] =>
           Thread.`yield`
-        case x =>
+        case Act.Done(x) =>
           result = x
       }
     }
     result
   }
-  final def act(): Ok[E, Act.Outcome] = act(Act.Provision.empty)
+  final def act(): Ok[E, O] = act(Act.Provision.empty)
 
   override def toString =
     if (name.nonEmpty) name + status.actText
     else getClass.getName + "@" + System.identityHashCode(this).toHexString + status.actText
 }
 object Act {
-  sealed trait Outcome { def actText: String; lazy val yes = Yes(this) }
-  object Outcome {
-    case object  Before    extends Outcome  { def actText = "";             override def toString = "has not acted" }
-    sealed trait Complete  extends Outcome  {}
-    case object  Succeeded extends Complete { def actText = " (succeeded)"; override def toString = "act succeeded" }
-    case object  Failed    extends Complete { def actText = " (failed)";    override def toString = "act failed" }
-    case object  Running   extends Outcome  { def actText = " (running)";   override def toString = "acting" }
-    case object  Skipped   extends Outcome  { def actText = " (skipped)";   override def toString = "skipped" }
+  sealed trait Status[E, O] { 
+    def actText: String
+    def isBefore: Boolean = false
+    def isRunning: Boolean = false
+    def isDone: Boolean = false
+    def isSuccess: Boolean = false
+    def isFailure: Boolean = false
   }
 
-  case class Provision(threads: Int, completeBy: Option[java.time.Instant]) {}
+  sealed trait Before[E, O]  extends Status[E, O] { 
+    override def isBefore = true
+    def actText = "";
+    override def toString = "has not acted"
+  }
+  object Before {
+    def apply[E, O]() = myBefore.asInstanceOf[Before[E, O]]
+    private[this] val myBefore = new Before[Any, Any] {}
+  }
+
+  sealed trait Running[E, O] extends Status[E, O] {
+    override def isRunning = true
+    def actText = " (running)"
+    override def toString = "acting"
+  }
+  object Running {
+    def apply[E, O]() = myRunning.asInstanceOf[Running[E, O]]
+    private[this] val myRunning = new Running[Any, Any] {}
+  }
+
+  final case class Done[E, O](result: Ok[E, O]) extends Status[E, O]  {
+    override def isDone = true
+    override def isSuccess = result.isOk
+    override def isFailure = !result.isOk
+    def actText = if (result.isOk) " (succeeded)" else " (failed)"
+    override def toString = if (result.isOk) "act succeeded" else "act failed"
+  }
+
+
+  case class Provision(threads: Int, completeBy: Option[java.time.Instant]) {
+    def delay(dt: java.time.Duration) = completeBy match {
+      case Some(t) => new Provision(threads, Some(t plus dt))
+      case _       => this
+    }
+  }
   object Provision {
     val empty = new Provision(1, None)
     def apply(i: Int) = new Provision(i max 1, None)
     def apply(t: java.time.Instant) = new Provision(1, Some(t))
+    def after(t: java.time.Duration) = new Provision(1, Some(Instant.now plus t))
+    def millis(m: Long) = new Provision(1, Some(Instant.now plusMillis m))
+    def now() = new Provision(1, Some(Instant.now))
   }
 
 
-  trait Stringly extends Act {
+  trait Stringly[O] extends Act[O] {
     type E = String
     final protected def excuse(message: String) = message
-    final protected def handler(t: Throwable): Option[String] = Some(t.explain())
+    final protected def handler(t: Throwable): String = t.explain()
   }
 
 
+  /** Act.Like just computes a side effect, returning nothing and using String for error reporting */
   final class Like private[proc] (computation: => Unit, val name: String = "", val cost: Double = Double.NaN)
-  extends Act with Stringly {
-    protected def actImpl(provisions: Act.Provision): Ok[E, Boolean] =
-      if (provisions.completeBy.exists(t => t isBefore Instant.now)) Yes(false)
-      else {
-        computation
-        Yes(true)
-      }
+  extends Stringly[Unit] {
+    protected def actImpl(provisions: Act.Provision): Ok[E, Unit] = {
+      computation
+      Ok.UnitYes
+    }
   }
 
   def like(computation: => Unit)                             = new Like(computation)
@@ -116,21 +136,167 @@ object Act {
   def like(computation: => Unit, name: String, cost: Double) = new Like(computation, name, cost)
 
 
-  final class TemporaryInputSupplier[I](private val input: () => I) extends AnyVal {
-    def map[O](fn: I => O):                                       Arrow[I, O] with Stringly = new Arrow.Map(input, fn, "",   Arrow.nanEstimator)
-    def map[O](fn: I => O, name: String):                         Arrow[I, O] with Stringly = new Arrow.Map(input, fn, name, Arrow.nanEstimator)
-    def map[O](fn: I => O,               estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.Map(input, fn, "",   estimator)
-    def map[O](fn: I => O, name: String, estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.Map(input, fn, name, estimator)
-    def flatMap[O](fn: I => Ok[String, O]):                                       Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, "",   Arrow.nanEstimator)
-    def flatMap[O](fn: I => Ok[String, O], name: String):                         Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, name, Arrow.nanEstimator)
-    def flatMap[O](fn: I => Ok[String, O],               estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, "",   estimator)
-    def flatMap[O](fn: I => Ok[String, O], name: String, estimator: I => Double): Arrow[I, O] with Stringly = new Arrow.FlatMap(input, fn, name, estimator)
+  /** Act.Make just computes a value, like an overly fancy lazy val, using String for error reporting */
+  final class Make[O] private[proc] (computation: => O, val name: String = "", val cost: Double = Double.NaN)
+  extends Stringly[O] {
+    protected def actImpl(provisions: Act.Provision): Ok[E, O] = Yes(computation)
   }
 
-  def from[I](input: => I) = new TemporaryInputSupplier(() => input)
+  def apply[O](computation: => O)                             = new Make(computation)
+  def apply[O](computation: => O, name: String)               = new Make(computation, name = name)
+  def apply[O](computation: => O, cost: Double)               = new Make(computation, cost = cost)
+  def apply[O](computation: => O, name: String, cost: Double) = new Make(computation, name, cost)
+
+
+  /** Act.On computes a value given an input, like a once-memoized function */
+  abstract class On[I, Err, O] private[proc] (val input: I, val f: I => Ok[Err, O], val name: String, val appraiser: I => Double)
+  extends Act[O] {
+    type E = Err
+    final lazy val cost = appraiser(input)
+    protected def actImpl(provisions: Act.Provision): Ok[E, O] = f(input)
+  }
+  object On {
+    val nanAppraiser = (a: Any) => Double.NaN
+
+    trait Stringly[I, O] extends On[I, String, O] with Act.Stringly[O] {
+      override type E = String
+    }
+  }
+
+
+  abstract class InTime[I, Err, O] private[proc] (input: I, f: I => Ok[Err, O], name: String, appraiser: I => Double, val model: InTime.Model)
+  extends On[I, Err, O](input, f, name, appraiser) {
+    protected def needMoreTime(duration: Duration): Ok[Err, O]
+    override protected def actImpl(provisions: Provision): Ok[E, O] = provisions.completeBy match {
+      case None => super.actImpl(provisions)
+      case Some(t) =>
+        val now = Instant.now
+        val expected = now plus model(cost)
+        if (t isBefore expected) needMoreTime(Duration.between(t, expected))
+        else {
+          val ans = super.actImpl(provisions)
+          val elapsed = Duration.between(now, Instant.now)
+          model.learn(cost, elapsed)
+          ans
+        }
+    }
+  }
+  object InTime {
+    trait Stringly[I, O] extends InTime[I, String, O] with On.Stringly[I, O] {
+      override type E = String
+    }
+    object Stringly {
+      def lateError[O](name: String, duration: Duration): Ok[String, O] =
+        No(s"Needed $duration more time${if (name.isEmpty) "" else " for "+name}")
+    }
+
+    trait Model { model =>
+      def apply(cost: Double): Duration
+      def learn(cost: Double, actual: Duration): Unit
+
+      def predicting[I](input: => I)(appraiser: I => Double) = new TemporaryInputModelSupplier(() => input, model, appraiser)
+    }
+    object Model {
+      class Affine() extends Model {
+        val input = new EstXM()
+        val finite = new EstXM()
+        val extreme = new EstM()
+        val dependent = new FitTX()
+
+        def apply(cost: Double) = synchronized {
+          val dt =
+            if (cost.finite) {
+              if (finite.n > 4 && finite.min < finite.max) {
+                val x = dependent(cost)
+                val outside = 
+                  if (cost < input.min) (input.min - cost)/(input.max - input.min)
+                  else if (cost > input.max) (cost - input.max)/(input.max - input.min)
+                  else 0
+                if (outside <=  0.1) x
+                else {
+                  val scale = (outside - 0.1) * 4
+                  val q = scale/(1 + scale)
+                  finite.mean*q + x*(1-q)
+                }
+              }
+              else if (finite.n > 0 || extreme.n == 0) finite.mean
+              else extreme.mean
+            }
+            else if (extreme.n == 0 && finite.n > 0) finite.mean
+            else extreme.mean
+          Duration.ofNanos((dt * 1e9).rint.toLong)
+        }
+
+        def learn(cost: Double, actual: Duration): Unit = synchronized {
+          val dt = actual.toNanos * 1e-9
+          if (cost.finite) {
+            input += cost
+            finite += dt
+            dependent += (cost, dt)
+          }
+          else extreme += dt
+        }
+      }
+    }
+  }
+
+  /** Act.TemporaryInputSupplier is an adaptor that lets us map or flatMap a starting value
+    * to get an Act.On or Act.InTime with String errors
+    */
+  final class TemporaryInputSupplier[I](private val input: () => I) extends AnyVal {
+    def map[O](fn: I => O):                                       On.Stringly[I, O] = new On(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), "",   On.nanAppraiser) with On.Stringly[I, O] {}
+    def map[O](fn: I => O, name: String):                         On.Stringly[I, O] = new On(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), name, On.nanAppraiser) with On.Stringly[I, O] {}
+    def map[O](fn: I => O,               appraiser: I => Double): On.Stringly[I, O] = new On(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), "",   appraiser) with On.Stringly[I, O] {}
+    def map[O](fn: I => O, name: String, appraiser: I => Double): On.Stringly[I, O] = new On(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), name, appraiser) with On.Stringly[I, O] {}
+    def flatMap[O](fn: I => Ok[String, O]):                                       On.Stringly[I, O] = new On(input(), fn, "",   On.nanAppraiser) with On.Stringly[I, O] {}
+    def flatMap[O](fn: I => Ok[String, O], name: String):                         On.Stringly[I, O] = new On(input(), fn, name, On.nanAppraiser) with On.Stringly[I, O] {}
+    def flatMap[O](fn: I => Ok[String, O],               appraiser: I => Double): On.Stringly[I, O] = new On(input(), fn, "",   appraiser) with On.Stringly[I, O] {}
+    def flatMap[O](fn: I => Ok[String, O], name: String, appraiser: I => Double): On.Stringly[I, O] = new On(input(), fn, name, appraiser) with On.Stringly[I, O] {}
+
+    def predict(model: InTime.Model, appraiser: I => Double = On.nanAppraiser) = new TemporaryInputModelSupplier[I](input, model, appraiser)
+  }
+
+  final class TemporaryInputModelSupplier[I](input: () => I, model: InTime.Model, appraiser: I => Double) {
+    def map[O](fn: I => O): InTime.Stringly[I, O] =
+      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), "", appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O]("", duration)
+      }
+    def map[O](fn: I => O, name: String): InTime.Stringly[I, O] =
+      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), name, appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O](name, duration)
+      }
+    def map[O](fn: I => O, ifLate: (I, Duration) => Ok[String, O]) =
+      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), "", appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = ifLate(input, duration)
+      }
+    def map[O](fn: I => O, name: String, ifLate: (String, I, Duration) => Ok[String, O]) =
+      new InTime(input(), (i: I) => safe{ fn(i) }.mapNo(_.explain()), name, appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = ifLate(name, input, duration)
+      }
+
+    def flatMap[O](fn: I => Ok[String, O]): InTime.Stringly[I, O] =
+      new InTime(input(), fn, "", appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O]("", duration)
+      }
+    def flatMap[O](fn: I => Ok[String, O], name: String): InTime.Stringly[I, O] =
+      new InTime(input(), fn, name, appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = InTime.Stringly.lateError[O](name, duration)
+      }
+    def flatMap[O](fn: I => Ok[String, O], ifLate: (I, Duration) => Ok[String, O]) =
+      new InTime(input(), fn, "", appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = ifLate(input, duration)
+      }
+    def flatMap[O](fn: I => Ok[String, O], name: String, ifLate: (String, I, Duration) => Ok[String, O]) =
+      new InTime(input(), fn, name, appraiser, model) with InTime.Stringly[I, O] {
+        protected def needMoreTime(duration: Duration) = ifLate(name, input, duration)
+      }
+  }
+
+  def on[I](input: => I) = new TemporaryInputSupplier(() => input)
 }
 
 
+/*
 /** An Arrow is an Act that starts with a predefined input and produces,
   * after acting, an output.  It also can optionally give a numeric score
   * that represents an estimate of the amount of work it is to create an
@@ -143,7 +309,7 @@ extends Act {
   protected val myOutput = new AtomicReference[Ok[E, O]](null)
   protected val myCost = new AtomicLong(Arrow.UninitializedNaNBits)
 
-  /** Call only when you hold both the `Act.Outcome.Running` flag AND the `myInput == null` flag */
+  /** Call only when you hold both the `Act.Status.Running` flag AND the `myInput == null` flag */
   private[this] def ensureCostIsSetImpl(i: I) {
     var retries = 3
     while (retries > 0) {
@@ -169,7 +335,7 @@ extends Act {
       retries -= 1
       myCost.get() match {
         case Arrow.UninitializedNaNBits =>
-          if (myStatus.compareAndSet(Act.Outcome.Before.yes, Act.Outcome.Running.yes)) {
+          if (myStatus.compareAndSet(Act.Status.Before.yes, Act.Status.Running.yes)) {
             val x = myInput.get()
             if (x != null) {
               if (myInput.compareAndSet(x, null)) {
@@ -180,7 +346,7 @@ extends Act {
                     catch {
                       case e if NonFatal(e) =>
                         myInput.set(No(fn))
-                        myStatus.set(Act.Outcome.Before.yes)
+                        myStatus.set(Act.Status.Before.yes)
                         return Double.NaN
                     }
                 }
@@ -188,7 +354,7 @@ extends Act {
                 myInput.set(Yes(i))
               }
             }
-            myStatus.set(Act.Outcome.Before.yes)
+            myStatus.set(Act.Status.Before.yes)
           }
         case Arrow.RunningNaNBits => Thread.`yield`
         case x => return x.binary64
@@ -203,10 +369,10 @@ extends Act {
     case No(e) => No(Some(e))
   }
 
-  /** Assume when implementing this that we're holding the `Act.Outcome.Running` flag */
+  /** Assume when implementing this that we're holding the `Act.Status.Running` flag */
   protected def actArrowImpl(in: I, provisions: Act.Provision): Ok[E, Option[O]]
 
-  /** Only call this when guarded by holding the `Act.Outcome.Running` flag (i.e. you CASed it into place) */
+  /** Only call this when guarded by holding the `Act.Status.Running` flag (i.e. you CASed it into place) */
   protected final def actImpl(provisions: Act.Provision): Ok[E, Boolean] = {
     var retries = 10
     while (retries > 0) {
@@ -352,7 +518,7 @@ object Quiver {
     }
   }
 }
-
+*/
 
 /*
 
