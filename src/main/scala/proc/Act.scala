@@ -99,6 +99,10 @@ object Act {
 
 
   case class Provision(threads: Int, completeBy: Option[java.time.Instant]) {
+    def expired(): Boolean = completeBy match {
+      case Some(i) => i isBefore Instant.now
+      case _ => false
+    }
     def delay(dt: java.time.Duration) = completeBy match {
       case Some(t) => new Provision(threads, Some(t plus dt))
       case _       => this
