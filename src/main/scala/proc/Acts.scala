@@ -26,6 +26,7 @@ extends Act[R] {
   private val queue = {
     val ans = new Queue[K]()
     while (input.hasNext) ans += input.next
+    println(s"Queue has ${ans.length} elements")
     ans
   }
   private val outputs = new Queue[Acts.Result[KO, K]]()
@@ -76,10 +77,13 @@ extends Act[R] {
     val p = provisions.copy(threads = 1)
     synchronized{ interesting = provisions.threads }
     val workers = Array.fill(provisions.threads)(new Thread {
-      override def run(): Unit = actImplReentrant(p)
+      override def run(): Unit = {
+        println(s"Activated thread ${Thread.currentThread.getId}")
+        actImplReentrant(p)
+      }
     });
-    { var i = 0; while (i < workers.length) workers(i).start() }
-    { var i = 0; while (i < workers.length) workers(i).join() }
+    { var i = 0; while (i < workers.length) { workers(i).start(); i += 1 } }
+    { var i = 0; while (i < workers.length) { workers(i).join(); i += 1 } }
   }
 
   protected def actImplSequential(provisions: Act.Provision): Unit = {
@@ -90,48 +94,54 @@ extends Act[R] {
   protected def actImplReentrant(provisions: Act.Provision): Unit = {
     var more = true
     var lively = true
-    while (more && synchronized { killer.nonEmpty } && !provisions.expired()) {
-      synchronized { queue.dequeueFirst(_ => true) } match {
-        case Some(k) =>
-          val index = synchronized {
-            if (!lively) {
-              lively = true
-              interesting += 1
+    try {
+      while (more && synchronized { killer.isEmpty } && !provisions.expired()) {
+        synchronized { queue.dequeueFirst(_ => true) } match {
+          case Some(k) =>
+            val index = synchronized {
+              if (!lively) {
+                lively = true
+                interesting += 1
+                println(s"Interesting up to $interesting")
+              }
+              val x = count
+              count += 1
+              x
             }
-            val x = count
-            count += 1
-            x
-          }
-          val result = safe{ k.act(provisions) }
-          synchronized{ result match {
-            case No(e) => if (killer.isEmpty) killer = Some(handler(e))
-            case Yes(y) => y match {
-              case Yes(ko) =>
-                val result = Acts.Result.Good(k, index, ko)
-                outputs += result
-                myState = process(k)(result)(myState)
-                queue ++= expand(k)(ko)(myState)
-              case No(ke) => fatality(k)(ke) match {
-                case Some(e) => if (killer.isEmpty) killer = Some(e)
-                case None =>
-                  val result = Acts.Result.Bad[KO, K](k, index)(ke)
+            val result = safe{ k.act(provisions) }
+            synchronized{ result match {
+              case No(e) => if (killer.isEmpty) killer = Some(handler(e))
+              case Yes(y) => y match {
+                case Yes(ko) =>
+                  val result = Acts.Result.Good(k, index, ko)
                   outputs += result
                   myState = process(k)(result)(myState)
+                  queue ++= expand(k)(ko)(myState)
+                case No(ke) => fatality(k)(ke) match {
+                  case Some(e) => if (killer.isEmpty) killer = Some(e)
+                  case None =>
+                    val result = Acts.Result.Bad[KO, K](k, index)(ke)
+                    outputs += result
+                    myState = process(k)(result)(myState)
+                }
               }
+            }}
+          case _ =>
+            synchronized {
+              if (lively) {
+                lively = false
+                interesting -= 1
+                println(s"Interesting down to $interesting")
+              }
+              else if (interesting <= 0) more = false
+              else Thread.`yield`()
             }
-          }}
-        case _ =>
-          synchronized {
-            if (lively) {
-              lively = false
-              interesting -= 1
-            }
-            else if (interesting == 0) more = false
-            else Thread.`yield`()
-          }
+        }
       }
     }
-    if (lively) synchronized { interesting -= 1 }
+    finally {
+      if (lively) synchronized { interesting -= 1 }
+    }
   }
 
   protected def complete(results: Acts.Results[KO, K], state: S): Ok[E, R]
@@ -187,7 +197,6 @@ object Acts {
   import java.nio.file._
   final class PickPath(p: Path, m: Act.InTime.Model, pick: Path => Boolean)
   extends Act.InTime[Path, String, Array[Ok[Path, Path]]](p, x => PickPath.list(x.toRealPath(), pick), p.getFileName.toString, _ => 1.0, m) {
-    println(s"Created new PickPath with $p")
     protected def excuse(message: String) = Act.InTime.Mistake(message)
     protected def handler(t: Throwable) = Act.InTime.Mistake(t.explain())
   }
@@ -203,7 +212,7 @@ object Acts {
           pb += (if (pick(rp)) Yes(rp) else No(rp))
         }
         ls.close
-        pb.result.tap(xs => println(s"  Found ${xs.length} things, of which ${xs.count(_.isOk)} are good"))
+        pb.result
       }
       else noPaths
     }.mapNo(e => s"Could not read directory $p\n${e.explain()}")
