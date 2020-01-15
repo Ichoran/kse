@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2015, 2016 Rex Kerr and Calico Labs.
+// Copyright (c) 2015-2020 Rex Kerr and Calico Labs.
 
 /////////////////////////////////
 // Sonatype publishing section //
@@ -37,7 +37,7 @@ pomExtra := (
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  version := "0.9-SNAPSHOT",
+  version := "0.10-SNAPSHOT",
   scalacOptions += "-feature",
   scalacOptions += "-deprecation"
 )
