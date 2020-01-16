@@ -182,6 +182,7 @@ package object eio {
   }
   implicit class DoubleCanMultiplyAndBeTime(val value: Double) extends AnyVal {
     def asTime = new DoubleAsTime(value)
+    def asDuration = (new DoubleAsTime(value)).toDuration
     def *(that: DoubleAsTime) = new DoubleAsTime(value * that.time)
   }
   implicit class LongCanMultiplyDuration(val value: Long) extends AnyVal {
