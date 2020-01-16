@@ -96,15 +96,32 @@ package object eio {
     def asFloat(implicit oops: Oops) = { val f = underlying.toFloat; if (f.toDouble != underlying) OOPS else f }
   }
 
-  class DoubleAsTime(val time: Double) extends AnyVal {
+  class DoubleAsTime private[eio] (val time: Double) extends AnyVal {
+    def <(that: DoubleAsTime) = time < that.time
+    def <=(that: DoubleAsTime) = time <= that.time
+    def >=(that: DoubleAsTime) = time >= that.time
+    def >(that: DoubleAsTime) = time > that.time
+    def abs = if (time < 0) new DoubleAsTime(-time) else this
+    def max(that: DoubleAsTime) =
+      if      (time <  that.time) that
+      else if (time >  that.time) this
+      else if (time == that.time) this
+      else if (time.isNaN) this
+      else that
+    def min(that: DoubleAsTime) =
+      if      (time <  that.time) this
+      else if (time >  that.time) that
+      else if (time == that.time) this
+      else if (time.isNaN) this
+      else that
+    def unary_- = new DoubleAsTime(-time)
     def +(that: DoubleAsTime) = new DoubleAsTime(time + that.time)
     def -(that: DoubleAsTime) = new DoubleAsTime(time - that.time)
-    def *(factor: Double) = new DoubleAsTime(factor * time)
-    def /(factor: Double) = new DoubleAsTime(time / factor)
-    def timeFn(f: Double => Double) = new DoubleAsTime(f(time))
+    def *(factor: Double) = DoubleAsTime.apply(factor * time)
+    def /(factor: Double) = DoubleAsTime.apply(time / factor)
+    def timeFn(f: Double => Double) = DoubleAsTime.apply(f(time))
     def +(that: Duration) = new DoubleAsTime(time + that.getSeconds + that.getNano/1e9)
     def -(that: Duration) = new DoubleAsTime(time - (that.getSeconds.toDouble + that.getNano/1e9))
-    def roundNanos = new DoubleAsTime(math.rint(time * 1e9) / 1e9)
     def roundMillis = new DoubleAsTime(math.rint(time * 1e3) / 1e3)
     def roundSecs = new DoubleAsTime(math.rint(time))
     def roundMins = new DoubleAsTime(math.rint(time / 60) * 60)
@@ -113,7 +130,7 @@ package object eio {
     def toNanos = math.rint(time * 1e9).toLong
     def toMillis = math.rint(time * 1e3).toLong
     def toSecs = math.rint(time).toLong
-    def toMinutes = math.rint(time / 60).toLong
+    def toMins = math.rint(time / 60).toLong
     def toHours = math.rint(time / 3600).toLong
     def toDays = math.rint(time / 86400).toLong
     def toDuration = {
@@ -141,11 +158,27 @@ package object eio {
     def +(when: OffsetDateTime) = when plus this.toDuration
     def +(when: FileTime): FileTime = this.+((new FileTimeCanDoThings(when)).epoch).epochFileTime
     override def toString = time.toString + " sec"
+    def =~=(that: DoubleAsTime) = {
+      val t = math.max(math.abs(time), math.abs(time))
+      if (t < 11259e2)                         time == that.time
+      else if (t < 11259e5)   math.rint(time*1e6)   == math.rint(that.time*1e6)
+      else if (t < 11259e8)   math.rint(time*1e3)   == math.rint(that.time*1e3)
+      else if (t < 11259e11)  math.rint(time)       == math.rint(that.time)
+      else if (t < 67554e12)  math.rint(time/60)    == math.rint(that.time/60)
+      else if (t < 405324e13) math.rint(time/3600)  == math.rint(that.time/3600)
+      else                    math.rint(time/86400) == math.rint(that.time/86400)
+    }
   }
   object DoubleAsTime {
     val InstantMaxEpochSeconds = Instant.MAX.getEpochSecond
     val InstantMinEpochSeconds = Instant.MIN.getEpochSecond
-    def apply(time: Double) = new DoubleAsTime(time)
+
+    implicit val canonicalTimeOrdering: Ordering[DoubleAsTime] = new Ordering[DoubleAsTime] {
+      def compare(a: DoubleAsTime, b: DoubleAsTime) =
+        if (a.=~=(b)) 0 else java.lang.Double.compare(a.time, b.time)
+    }
+
+    def apply(time: Double) = new DoubleAsTime(math.rint(time*1e9)/1e9)
   }
   implicit class DoubleCanMultiplyAndBeTime(val value: Double) extends AnyVal {
     def asTime = new DoubleAsTime(value)
@@ -196,13 +229,20 @@ package object eio {
     def days = Duration.ofDays(value)
   }
   implicit class DurationCanDoThings(private val duration: Duration) extends AnyVal {
+    def <(that: Duration) = duration.compareTo(that) < 0
+    def <=(that: Duration) = duration.compareTo(that) <= 0
+    def >=(that: Duration) = duration.compareTo(that) >= 0
+    def >(that: Duration) = duration.compareTo(that) > 0
+    def abs = if (duration.getSeconds < 0) duration.negated else duration
+    def max(that: Duration) = if (duration.compareTo(that) < 0) that else duration
+    def min(that: Duration) = if (duration.compareTo(that) > 0) that else duration
     def +(that: Duration) = duration plus that
     def -(that: Duration) = duration minus that
     def unary_- = duration.negated
     def *(factor: Long) = duration multipliedBy factor
     def +(that: DoubleAsTime) = new DoubleAsTime(that.time + duration.getSeconds.toDouble + duration.getNano/1e9)
     def -(that: DoubleAsTime) = new DoubleAsTime(duration.getSeconds.toDouble + duration.getNano/1e9 - that.time)
-    def doubleTime = new DoubleAsTime(duration.getSeconds.toDouble + duration.getNano/1e9)
+    def toDouble = new DoubleAsTime(duration.getSeconds.toDouble + duration.getNano/1e9)
     def roundMillis = {
       val s = duration.getSeconds
       val n = duration.getNano
@@ -232,6 +272,12 @@ package object eio {
     def +(when: FileTime): FileTime = FileTime from when.toInstant.plus(duration)
   }
   implicit class InstantCanDoThings(private val instant: Instant) extends AnyVal {
+    def <(when: Instant) = instant isBefore when
+    def <=(when: Instant) = !(when isBefore instant)
+    def >=(when: Instant) = !(instant isBefore when)
+    def >(when: Instant) = when isBefore instant
+    def min(when: Instant) = if (when isBefore instant) when else instant
+    def max(when: Instant) = if (when isAfter instant) when else instant
     def +(that: Duration) = instant plus that
     def -(that: Duration) = instant minus that
     def +(that: DoubleAsTime) = instant plus that.toDuration
@@ -247,18 +293,24 @@ package object eio {
       if (n == 0) instant
       else instant.plusNanos(if (n < 500000000) -n else 1000000000 - n)
     }
-    def epoch = new DoubleAsTime(instant.getEpochSecond + instant.getNano/1e3)
+    def epoch = new DoubleAsTime(instant.getEpochSecond + instant.getNano/1e9)
     def local = instant.atZone(ZoneId.systemDefault).toLocalDateTime
     def utc = instant.atOffset(ZoneOffset.UTC)
     def zoned = instant.atZone(ZoneId.systemDefault)
     def filetime = FileTime from instant
   }
   implicit class LocalDateTimeCanDoThings(private val datetime: LocalDateTime) extends AnyVal {
+    def <(when: LocalDateTime) = datetime isBefore when
+    def <=(when: LocalDateTime) = !(when isBefore datetime)
+    def >=(when: LocalDateTime) = !(datetime isBefore when)
+    def >(when: LocalDateTime) = when isBefore datetime
+    def min(when: LocalDateTime) = if (when isBefore datetime) when else datetime
+    def max(when: LocalDateTime) = if (when isAfter datetime) when else datetime
     def +(that: Duration) = datetime plus that
     def -(that: Duration) = datetime minus that
     def +(that: DoubleAsTime) = datetime plus that.toDuration
     def -(that: DoubleAsTime) = datetime minus that.toDuration
-    def -(when: LocalDateTime) = Duration.between(when, instant)
+    def -(when: LocalDateTime) = Duration.between(when, datetime)
     def roundMillis = {
       val n = datetime.getNano % 1000000
       if (n == 0) datetime
@@ -269,17 +321,24 @@ package object eio {
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000000) -n else 1000000000 - n)
     }
-    def epoch = new DoubleAsTime(datetime.atZone(ZoneId.systemDefault).toInstant.getEpochSecond + datetime.getNano/1e3)
+    def epoch = new DoubleAsTime(datetime.atZone(ZoneId.systemDefault).toInstant.getEpochSecond + datetime.getNano/1e9)
     def utc = datetime.atZone(ZoneId.systemDefault).toOffsetDateTime.withOffsetSameInstant(ZoneOffset.UTC)
     def zoned = datetime.atZone(ZoneId.systemDefault)
     def instant = datetime.atZone(ZoneId.systemDefault).toInstant
     def filetime = FileTime from datetime.atZone(ZoneId.systemDefault).toInstant
   }
   implicit class ZonedDateTimeCanDoThings(private val datetime: ZonedDateTime) extends AnyVal {
+    def <(when: ZonedDateTime) = datetime isBefore when
+    def <=(when: ZonedDateTime) = !(when isBefore datetime)
+    def >=(when: ZonedDateTime) = !(datetime isBefore when)
+    def >(when: ZonedDateTime) = when isBefore datetime
+    def min(when: ZonedDateTime) = if (when isBefore datetime) when else datetime
+    def max(when: ZonedDateTime) = if (when isAfter datetime) when else datetime
     def +(that: Duration) = datetime plus that
     def -(that: Duration) = datetime minus that
     def +(that: DoubleAsTime) = datetime plus that.toDuration
     def -(that: DoubleAsTime) = datetime minus that.toDuration
+    def -(when: ZonedDateTime) = Duration.between(when, datetime)
     def roundMillis = {
       val n = datetime.getNano % 1000000
       if (n == 0) datetime
@@ -290,17 +349,24 @@ package object eio {
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000000) -n else 1000000000 - n)
     }
-    def epoch = new DoubleAsTime(datetime.toEpochSecond + datetime.getNano/1e3)
+    def epoch = new DoubleAsTime(datetime.toEpochSecond + datetime.getNano/1e9)
     def utc = datetime.toOffsetDateTime.withOffsetSameInstant(ZoneOffset.UTC)
     def local = datetime.withZoneSameInstant(ZoneId.systemDefault).toLocalDateTime
     def instant = datetime.toInstant
     def filetime = FileTime from datetime.toInstant
   }
   implicit class OffsetDateTimeCanDoThings(private val datetime: OffsetDateTime) extends AnyVal {
+    def <(when: OffsetDateTime) = datetime isBefore when
+    def <=(when: OffsetDateTime) = !(when isBefore datetime)
+    def >=(when: OffsetDateTime) = !(datetime isBefore when)
+    def >(when: OffsetDateTime) = when isBefore datetime
+    def min(when: OffsetDateTime) = if (when isBefore datetime) when else datetime
+    def max(when: OffsetDateTime) = if (when isAfter datetime) when else datetime
     def +(that: Duration) = datetime plus that
     def -(that: Duration) = datetime minus that
     def +(that: DoubleAsTime) = datetime plus that.toDuration
     def -(that: DoubleAsTime) = datetime minus that.toDuration
+    def -(when: OffsetDateTime) = Duration.between(when, datetime)
     def roundMillis = {
       val n = datetime.getNano % 1000000
       if (n == 0) datetime
@@ -311,7 +377,7 @@ package object eio {
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000000) -n else 1000000000 - n)
     }
-    def epoch = new DoubleAsTime(datetime.toEpochSecond + datetime.getNano/1e3)
+    def epoch = new DoubleAsTime(datetime.toEpochSecond + datetime.getNano/1e9)
     def utc = datetime.withOffsetSameInstant(ZoneOffset.UTC)
     def zoned = datetime.toZonedDateTime.withZoneSameInstant(ZoneId.systemDefault)
     def local = datetime.toInstant.atZone(ZoneId.systemDefault).toLocalDateTime
@@ -319,10 +385,17 @@ package object eio {
     def filetime = FileTime from datetime.toInstant
   }
   implicit class FileTimeCanDoThings(private val filetime: FileTime) extends AnyVal {
+    def <(when: FileTime) = filetime.compareTo(when) < 0
+    def <=(when: FileTime) = filetime.compareTo(when) <= 0
+    def >=(when: FileTime) = filetime.compareTo(when) >= 0
+    def >(when: FileTime) = filetime.compareTo(when) > 0
+    def min(when: FileTime) = if (filetime.compareTo(when) > 0) when else filetime
+    def max(when: FileTime) = if (filetime.compareTo(when) < 0) when else filetime
     def +(that: Duration) = FileTime from (filetime.toInstant plus that)
     def -(that: Duration) = FileTime from (filetime.toInstant minus that)
-    def +(that: DoubleAsTime) = (epoch + that).epochFileTime
-    def -(that: DoubleAsTime) = (epoch - that).epochFileTime
+    def +(that: DoubleAsTime) = FileTime from (filetime.toInstant plus that.toDuration)
+    def -(that: DoubleAsTime) = FileTime from (filetime.toInstant minus that.toDuration)
+    def -(when: FileTime) = Duration.between(when.toInstant, filetime.toInstant)
     def roundMillis = {
       val i = filetime.toInstant
       if (i == Instant.MAX || i == Instant.MIN) filetime
