@@ -662,8 +662,9 @@ package object eio {
     def canon = underlying.getCanonicalFile
     def parent = Option(underlying.getParentFile)
     
-    def path = underlying.getPath
-    def zipname = {
+    def path = underlying.toPath
+    def pathName = underlying.getPath
+    def zipname: String = {
       if (underlying.isAbsolute) {
         var f = underlying
         var names = List.empty[String]
@@ -678,7 +679,7 @@ package object eio {
         }
       }
       else {
-        if (File.separatorChar == '/') path else path.replace(File.separatorChar, '/')
+        if (File.separatorChar == '/') pathName else pathName.replace(File.separatorChar, '/')
       }
     }
     
