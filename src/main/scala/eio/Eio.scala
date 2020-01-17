@@ -1086,21 +1086,42 @@ package object eio {
     import PathShouldDoThis._
 
     def name = underlying.getFileName.toString
+    def nameFn(f: String => String) = underlying resolveSibling f(underlying.getFileName.toString)
     def ext = {
       val n = underlying.getFileName.toString
       val i = n.lastIndexOf('.')
-      if (i < 0) "" else n.substring(i+1)
+      if (i < 1) "" else n.substring(i+1)
+    }
+    def extFn(f: String => String) = {
+      val n = underlying.getFileName.toString
+      val i = n.lastIndexOf('.')
+      val e = if (i < 1) "" else n.substring(i+1)
+      val x = f(e)
+      if (x == e) underlying
+      else if (i < 1) underlying resolveSibling n+"."+x
+      else if (x.isEmpty) underlying resolveSibling n.substring(0, i)
+      else underlying resolveSibling n.substring(0, i+1)+x
     }
     def base = {
       val n = underlying.getFileName.toString
       val i = n.lastIndexOf('.')
       if (i < 1) n else n.substring(0, i)
     }
+    def baseFn(f: String => String) = {
+      val n = underlying.getFileName.toString
+      val i = n.lastIndexOf('.')
+      val b = if (i < 1) n else n.substring(0, i)
+      val x = f(b)
+      if (b == x) underlying
+      else if (i < 1) underlying resolveSibling x
+      else underlying resolveSibling x+n.substring(i)
+    }
     def parentName = underlying.getParent match { case null => ""; case p => p.getFileName.toString }
     def namesIterator = Iterator.iterate(underlying)(_.getParent).takeWhile(_ != null).map(_.getFileName.toString)
     def pathsIterator = Iterator.iterate(underlying)(_.getParent).takeWhile(_ != null)   
     def parentOption = Option(underlying.getParent)
     def real = underlying.toRealPath()
+    def file = underlying.toFile
 
     def /(that: String) = underlying resolve that
     def /(that: Path) = underlying resolve that
@@ -1120,11 +1141,29 @@ package object eio {
     def t_=(ft: FileTime) {
       Files.setLastModifiedTime(underlying, ft)
     }
+    def mkdir() = Files createDirectory underlying
+    def delete() = Files delete underlying
+    def touch() {
+      if (Files exists underlying) Files.setLastModifiedTime(underlying, FileTime from Instant.now)
+      else Files.write(underlying, new Array[Byte](0))
+    }
 
     def paths =
       if (!(Files exists underlying)) emptyPathArray
       else if (!(Files isDirectory underlying)) emptyPathArray
       else safe{ val list = Files.list(underlying); val ans = list.toArray(i => new Array[Path](i)); list.close; ans }.yesOr(_ => emptyPathArray)
+
+    def slurp: Ok[String, Vector[String]] = safe{
+      val s = Files lines underlying
+      val vb = Vector.newBuilder[String]
+      s.forEach(vb += _)
+      s.close
+      vb.result
+    }.mapNo(_.explain())
+
+    def gulp: Ok[String, Array[Byte]] = safe{
+      Files readAllBytes underlying
+    }.mapNo(_.explain())
 
     def copyTo(to: Path) {
       Files.copy(underlying, to, StandardCopyOption.REPLACE_EXISTING)
@@ -1136,6 +1175,7 @@ package object eio {
       Files.copy(underlying, temp, StandardCopyOption.REPLACE_EXISTING)
       Files.move(underlying, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     }
+
     def atomicMove(to: Path) {
       if (Files.getFileStore(underlying) == Files.getFileStore(to))
         Files.move(underlying, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
@@ -1147,9 +1187,90 @@ package object eio {
         Files.delete(underlying)
       }
     }
+
+    def atomicZipCopy(to: Path, compression: Option[Int] = None, maxDirectoryDepth: Int = 10) {
+      val temp = to.resolveSibling(to.getFileName.toString + ".atomic")
+      to.getParent.tap{ gp => if (gp ne null) { if (!Files.exists(gp)) Files.createDirectories(gp) }}
+      val zos = new ZipOutputStream(new FileOutputStream(temp.toFile))
+      compression.foreach(zos.setLevel)
+      if (Files.isDirectory(underlying)) {
+        val base = underlying.getParent.pipe{ fp => if (fp eq null) "".file.toPath else fp }
+        def recurse(current: Path, maxDepth: Int) {
+          val stable = (new PathShouldDoThis(current)).paths
+          val (directories, files) = stable.sortBy(_.getFileName.toString).partition(x => Files.isDirectory(x))
+          files.foreach{ fi =>
+            val rel = base relativize fi
+            val ze = new ZipEntry(rel.toString)
+            ze.setLastModifiedTime(Files.getLastModifiedTime(fi))
+            zos.putNextEntry(ze)
+            Files.copy(fi, zos)
+            zos.closeEntry
+          }
+          if (maxDepth > 1) directories.foreach(d => recurse(d, maxDepth-1))
+        }
+        recurse(underlying, maxDirectoryDepth)
+      }
+      else {
+        val ze = new ZipEntry(underlying.getFileName.toString)
+        ze.setLastModifiedTime(Files.getLastModifiedTime(underlying))
+        zos.putNextEntry(ze)
+        Files.copy(underlying, zos)
+        zos.closeEntry
+      }
+      zos.close
+      Files.move(temp, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    def recursively(root: Path = underlying) =
+      if (underlying startsWith root) new RootedRecursion(root, underlying)
+      else throw new IOException(s"Trying recursive operation in $root but started outside at $underlying")
   }
   object PathShouldDoThis {
     val emptyPathArray = new Array[Path](0)
+    val doNothingHook: Path => Unit = _ => ()
+
+    class RootedRecursion(val root: Path, val origin: Path) {
+      def delete(hook: Path => Unit = doNothingHook) = recursiveDelete(origin, root, hook)
+      def atomicDelete(hook: Path => Unit = doNothingHook) = atomicRecursiveDelete(origin, root, hook)
+    }
+
+    private[PathShouldDoThis] def recursiveDelete(f: Path, root: Path, hook: Path => Unit = _ => ()) {
+      if (f startsWith root) {
+        if (Files.isDirectory(f) && !Files.isSymbolicLink(f)) {
+          (new PathShouldDoThis(f)).paths.foreach(fi => recursiveDelete(fi, root, hook))
+        }
+        hook(f)
+        Files delete f
+      }
+      else throw new IOException(s"Tried to delete $f but escaped root path $root")
+    }
+
+    private[PathShouldDoThis] def atomicRecursiveDelete(f: Path, root: Path, hook: Path => Unit = _ => ()) {
+      if (f startsWith root) {
+        val name = f.getFileName.toString
+        val i = name.lastIndexOf('.')
+        val delext = if (i > 0) name.substring(i+1) else ""
+        val delnum = 
+          if (!delext.startsWith("deleted")) None
+          else if (delext.length > "deleted".length + 8) None
+          else if (delext.length > "deleted".length) {
+            val more = delext.substring("deleted".length)
+            if (!more.forall(_.isDigit)) None
+            else safe{ more.toInt }.toOption
+          }
+          else Some(1)
+        val delname = delnum match {
+          case Some(n) => name.substring(0, i) + ".deleted" + (n+1).toString
+          case _ => name + ".deleted"
+        }
+        val del = f.resolveSibling(delname).normalize
+        if (Files exists del) atomicRecursiveDelete(del, root, hook)
+        Files.move(f, del, StandardCopyOption.ATOMIC_MOVE)
+        val drp = del.toRealPath()
+        recursiveDelete(drp, drp, hook)
+      }
+      else throw new IOException(s"Tried to delete $f but escaped root path $root")
+    }
   }
 
   
@@ -1198,6 +1319,74 @@ package object eio {
       }
       safe{ fexisted.foreach(_.delete) }
       Ok.UnitYes
+    }
+  }
+  
+  implicit class ConvenientPathOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
+    def toFile(f: Path, lineEnding: String = null) {
+      val p = new java.io.PrintWriter(Files newOutputStream f)
+      try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
+    }
+    /** Atomically replaces the file.
+      *
+      * It is guaranteed not to be corrupted as long as this operation is not run concurrently.
+      *
+      * Returns `true` there were any changes, `false` if not
+      */
+    def atomicallyReplace(f: Path, lineEnding: String = null): Ok[String, Boolean] = {
+      val replacing = Files exists f
+      if (replacing && underlying.isTraversableAgain) {
+        f.slurp match {
+          case Yes(lines) =>
+            val i = lines.iterator
+            if (underlying.forall(line => i.hasNext && i.next == line)) return Yes(false)   // Didn't change anything
+          case _ =>
+        }
+      }
+      val fnew = f resolveSibling f.getFileName.toString + ".atomic-new"
+      if (Files exists fnew) return No(s"New file for writing, $fnew, already exists")
+      safe {
+        if (!replacing || underlying.isTraversableAgain) toFile(fnew, lineEnding)
+        else f.slurp match {
+          case Yes(lines) =>
+            var identical = true
+            val i = lines.iterator
+            val p = new java.io.PrintWriter(Files newOutputStream fnew)
+            try {
+              if (lineEnding == null) underlying.foreach{ line =>
+                identical = identical && i.hasNext && i.next == line
+                p.println(line)
+              }
+              else underlying.foreach{ line =>
+                identical = identical && i.hasNext && i.next == line
+                p.print(line + lineEnding)
+              }
+            }
+            finally { p.close() }
+            if (identical) return safe { Files delete fnew }.mapNo(_.explain()).map(_ => false)
+          case _ => toFile(fnew, lineEnding)
+        }
+      } match {
+        case No(t) => return No(s"Could not write file $fnew: ${t.getClass.getName}")
+        case _ =>
+      }
+      val fexisted = 
+        if (replacing) {
+          val fold = f resolveSibling f.getFileName.toString + ".atomic-old"
+          if (Files exists fold) return No(s"Wrote new file but could not move old version because $fold already exists")
+          safe{ Files.move(f, fold) } match {
+            case No(t) => return No(s"Could not move old version to $fold because of ${exceptionAsString(t)}")
+            case _ =>
+          }
+          Some(fold)
+        }
+        else None
+      safe{ Files.move(fnew, f) } match {
+        case No(t) => return No(s"Could not move new version to $f because of ${exceptionAsString(t)}")
+        case _ =>
+      }
+      safe{ fexisted.foreach(Files delete _) }
+      Yes(true)
     }
   }
   
