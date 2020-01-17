@@ -51,7 +51,7 @@ object FindFiles {
       if (Files isDirectory p) {
         val pb = Array.newBuilder[Ok[Path, Path]]
         val ls = Files list p
-        ls.forEach{ (pi: Path) =>
+        ls.forEach{ pi =>
           val rp = 
             if (Files isSymbolicLink pi) Files readSymbolicLink pi
             else pi
@@ -68,7 +68,7 @@ object FindFiles {
 
   def apply(s: String): FindFiles = apply(Paths get s)
   def apply(f: File): FindFiles = apply(f.toPath)
-  def apply(p: Path): FindFiles = apply(p, (q: Path) => !Files.isDirectory(q))
+  def apply(p: Path): FindFiles = apply(p, q => !Files.isDirectory(q))
   def apply(s: String, pick: Path => Boolean): FindFiles = apply(Paths get s, pick)
   def apply(f: File, pick: Path => Boolean): FindFiles = apply(f.toPath, pick)
   def apply(p: Path, pick: Path => Boolean): FindFiles = new FindFiles("", p :: Nil, pick)

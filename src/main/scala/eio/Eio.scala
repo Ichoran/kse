@@ -19,7 +19,7 @@ import kse.jsonal._
 package object eio {
   import java.io._
   import java.nio._
-  import java.nio.file.{Path, Files, FileSystem, FileSystems, Paths}
+  import java.nio.file.{Path, Files, FileSystem, FileSystems, Paths, StandardCopyOption}
   import java.nio.file.attribute.FileTime
   
   import java.time._
@@ -532,8 +532,8 @@ package object eio {
   }
 
   implicit class StringAsPath(private val underlying: String) extends AnyVal {
-    def path = try { Some(FileSystems.getDefault.getPath(underlying)) } catch { case ipe: file.InvalidPathException => None }
-    def getPath = FileSystems.getDefault.getPath(underlying)
+    def path = FileSystems.getDefault.getPath(underlying)
+    def pathOption = try { Some(FileSystems.getDefault.getPath(underlying)) } catch { case ipe: file.InvalidPathException => None }
     def grabPath(implicit oops: Oops): Path = try { FileSystems.getDefault.getPath(underlying) } catch { case ipe: file.InvalidPathException => OOPS }
   }
 
@@ -609,6 +609,7 @@ package object eio {
       }
       finally { underlying.close }
     }
+
     def gulp(): Ok[String, Array[Byte]] = bigGulp(Int.MaxValue - 1).map{
       case Nil        => new Array[Byte](0)
       case one :: Nil => one
@@ -621,7 +622,9 @@ package object eio {
         }
         combined
     }
+
     def reader() = new BufferedReader(new InputStreamReader(underlying))
+
     def slurp(): Ok[String, Vector[String]] = safe {
       val reader = new BufferedReader(new java.io.InputStreamReader(underlying))
       val vb = Vector.newBuilder[String]
@@ -633,6 +636,8 @@ package object eio {
       }
       vb.result()
     }.mapNo(e => s"Error consuming InputStream:\n${e.explain()}")
+
+    def walker(size: Int = 8192): Walker[Array[Byte]] = new InputStreamStepper(underlying, size)
   }
 
   implicit class FileShouldDoThis(private val underlying: java.io.File) extends AnyVal {
@@ -692,6 +697,16 @@ package object eio {
       case p \: b => new File(p, f(b.getName))
       case b % x => new File(f(b.getName) + "." + x)
       case _ => new File(f(underlying.getName))
+    }
+
+    def files = underlying.listFiles match {
+      case null => FileShouldDoThis.emptyFileArray
+      case x    => x
+    }
+
+    def t: FileTime = FileTime fromMillis underlying.lastModified
+    def t_=(ft: FileTime) {
+      underlying.setLastModified(ft.toMillis)
     }
     
     def relativize(absolutes: Array[File]): Ok[Vector[String], Array[File]] = {
@@ -1062,10 +1077,81 @@ package object eio {
       }
     }
   }
-  
-  implicit class InputStreamsShouldDoThis(private val underlying: InputStream) extends AnyVal {
-    def walker(size: Int = 8192): Walker[Array[Byte]] = new InputStreamStepper(underlying, size)
+  object FileShouldDoThis {
+    val emptyFileArray = new Array[File](0)
   }
+  
+
+  implicit class PathShouldDoThis(private val underlying: Path) extends AnyVal {
+    import PathShouldDoThis._
+
+    def name = underlying.getFileName.toString
+    def ext = {
+      val n = underlying.getFileName.toString
+      val i = n.lastIndexOf('.')
+      if (i < 0) "" else n.substring(i+1)
+    }
+    def base = {
+      val n = underlying.getFileName.toString
+      val i = n.lastIndexOf('.')
+      if (i < 1) n else n.substring(0, i)
+    }
+    def parentName = underlying.getParent match { case null => ""; case p => p.getFileName.toString }
+    def namesIterator = Iterator.iterate(underlying)(_.getParent).takeWhile(_ != null).map(_.getFileName.toString)
+    def pathsIterator = Iterator.iterate(underlying)(_.getParent).takeWhile(_ != null)   
+    def parentOption = Option(underlying.getParent)
+    def real = underlying.toRealPath()
+
+    def /(that: String) = underlying resolve that
+    def /(that: Path) = underlying resolve that
+    def `..` = underlying.getParent match { case null => underlying; case p => p }
+    def sib(that: String) = underlying resolveSibling that
+    def sib(that: Path) = underlying resolveSibling that
+    def transplant(oldRoot: Path, newRoot: Path): Option[Path] =
+      if (underlying startsWith oldRoot) Some(newRoot resolve oldRoot.relativize(underlying))
+      else None
+    def prune(child: Path): Option[Path] =
+      if (child startsWith underlying) Some(underlying relativize child)
+      else None
+
+    def exists = Files.exists(underlying)
+    def isDirectory = Files.isDirectory(underlying)
+    def t: FileTime = Files getLastModifiedTime underlying
+    def t_=(ft: FileTime) {
+      Files.setLastModifiedTime(underlying, ft)
+    }
+
+    def paths =
+      if (!(Files exists underlying)) emptyPathArray
+      else if (!(Files isDirectory underlying)) emptyPathArray
+      else safe{ val list = Files.list(underlying); val ans = list.toArray(i => new Array[Path](i)); list.close; ans }.yesOr(_ => emptyPathArray)
+
+    def copyTo(to: Path) {
+      Files.copy(underlying, to, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    def atomicCopy(to: Path) {
+      val temp = to.resolveSibling(to.getFileName.toString + ".atomic")
+      to.getParent.tap{ gp => if (gp ne null) { if (!Files.exists(gp)) Files.createDirectories(gp) }}
+      Files.copy(underlying, temp, StandardCopyOption.REPLACE_EXISTING)
+      Files.move(underlying, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    }
+    def atomicMove(to: Path) {
+      if (Files.getFileStore(underlying) == Files.getFileStore(to))
+        Files.move(underlying, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+      else {        
+        val temp = to.resolveSibling(to.getFileName.toString + ".atomic")
+        to.getParent.tap{ gp => if (gp ne null) { if (!Files.exists(gp)) Files.createDirectories(gp) }}
+        Files.copy(underlying, temp, StandardCopyOption.REPLACE_EXISTING)
+        Files.move(temp, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        Files.delete(underlying)
+      }
+    }
+  }
+  object PathShouldDoThis {
+    val emptyPathArray = new Array[Path](0)
+  }
+
   
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
     def toFile(f: File, lineEnding: String = null) {
