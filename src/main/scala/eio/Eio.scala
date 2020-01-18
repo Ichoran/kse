@@ -1136,8 +1136,10 @@ package object eio {
       if (child startsWith underlying) Some(underlying relativize child)
       else None
 
-    def exists = Files.exists(underlying)
-    def isDirectory = Files.isDirectory(underlying)
+    def exists = Files exists underlying
+    def isDirectory = Files isDirectory underlying
+    def isSymbolic = Files isSymbolicLink underlying
+    def size = Files size underlying
     def t: FileTime = Files getLastModifiedTime underlying
     def t_=(ft: FileTime) {
       Files.setLastModifiedTime(underlying, ft)
@@ -1226,9 +1228,9 @@ package object eio {
       Files.move(temp, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     }
 
-    def recursively(root: Path = underlying) =
-      if (underlying startsWith root) new RootedRecursion(root, underlying)
-      else throw new IOException(s"Trying recursive operation in $root but started outside at $underlying")
+    def recursively(inside: Path = underlying) =
+      if (underlying startsWith inside) new RootedRecursion(inside, underlying)
+      else throw new IOException(s"Trying recursive operation in $inside but started outside at $underlying")
   }
   object PathShouldDoThis {
     val emptyPathArray = new Array[Path](0)
