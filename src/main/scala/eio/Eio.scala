@@ -1174,11 +1174,15 @@ package object eio {
       val temp = to.resolveSibling(to.getFileName.toString + ".atomic")
       to.getParent.tap{ gp => if (gp ne null) { if (!Files.exists(gp)) Files.createDirectories(gp) }}
       Files.copy(underlying, temp, StandardCopyOption.REPLACE_EXISTING)
-      Files.move(underlying, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+      Files.move(temp, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     }
 
     def atomicMove(to: Path) {
-      if (Files.getFileStore(underlying) == Files.getFileStore(to))
+      val up = to.getParent
+      if (up != null) {
+        if (!Files.exists(up)) Files.createDirectories(up)
+      }
+      if (up != null && Files.getFileStore(underlying) == Files.getFileStore(up))
         Files.move(underlying, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
       else {        
         val temp = to.resolveSibling(to.getFileName.toString + ".atomic")
