@@ -1121,7 +1121,18 @@ package object eio {
     def namesIterator = Iterator.iterate(underlying)(_.getParent).takeWhile(_ != null).map(_.getFileName.toString)
     def pathsIterator = Iterator.iterate(underlying)(_.getParent).takeWhile(_ != null)   
     def parentOption = Option(underlying.getParent)
-    def real = underlying.toRealPath()
+    def absolute = underlying.toAbsolutePath()
+    def real = {
+      var abs = underlying.toAbsolutePath().normalize()
+      var tail: Path = null
+      var found = false
+      while (abs != null && !{ found = Files exists abs; found }) {
+        tail = if (tail eq null) abs.getFileName else abs.getFileName resolve tail
+        abs = abs.getParent
+      }
+      val trunk = if (found) abs.toRealPath() else abs
+      if (tail eq null) trunk else trunk resolve tail
+    }
     def file = underlying.toFile
 
     def /(that: String) = underlying resolve that
@@ -1306,6 +1317,27 @@ package object eio {
         else -1L
       }
       catch { case e if NonFatal(e) => -1L }
+    def real = 
+      try {
+        val abs = underlying.toAbsolutePath()
+        try {
+          val norm = abs.normalize()
+          try {
+            var p = norm
+            var tail: Path = null
+            var found = false
+            while (p != null && !{ found = Files exists p; found }) {
+              tail = if (tail eq null) p.getFileName else p.getFileName resolve tail
+              p = p.getParent
+            }
+            val trunk = if (found) p.toRealPath() else p
+            if (tail eq null) trunk else trunk resolve tail
+          }
+          catch { case e if NonFatal(e) => norm }
+        }
+        catch { case e if NonFatal(e) => abs }
+      }
+      catch { case e if NonFatal(e) => underlying }
   }
 
 
