@@ -1228,7 +1228,9 @@ package object eio {
       Files.move(temp, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     }
 
-    def recursively(inside: Path = underlying) =
+    def recursively = new RootedRecursion(underlying, underlying)
+
+    def recurseIn(inside: Path) =
       if (underlying startsWith inside) new RootedRecursion(inside, underlying)
       else throw new IOException(s"Trying recursive operation in $inside but started outside at $underlying")
   }
