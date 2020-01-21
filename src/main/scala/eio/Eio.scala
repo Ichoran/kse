@@ -1129,9 +1129,10 @@ package object eio {
     def `..` = underlying.getParent match { case null => underlying; case p => p }
     def sib(that: String) = underlying resolveSibling that
     def sib(that: Path) = underlying resolveSibling that
-    def transplant(oldRoot: Path, newRoot: Path): Option[Path] =
+    def reroot(oldRoot: Path, newRoot: Path): Option[Path] =
       if (underlying startsWith oldRoot) Some(newRoot resolve oldRoot.relativize(underlying))
       else None
+    def reroot(roots: (Path, Path)): Option[Path] = reroot(roots._1, roots._2)
     def prune(child: Path): Option[Path] =
       if (child startsWith underlying) Some(underlying relativize child)
       else None
@@ -1170,6 +1171,10 @@ package object eio {
 
     def copyTo(to: Path) {
       Files.copy(underlying, to, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    def moveTo(to: Path) {
+      Files.move(underlying, to, StandardCopyOption.REPLACE_EXISTING)
     }
 
     def atomicCopy(to: Path) {
