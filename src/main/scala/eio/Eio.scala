@@ -1141,6 +1141,9 @@ package object eio {
     def isDirectory = Files isDirectory underlying
     def isSymbolic = Files isSymbolicLink underlying
     def size = Files size underlying
+
+    def safely = new PathShouldSafelyDoThis(underlying)
+
     def t: FileTime = Files getLastModifiedTime underlying
     def t_=(ft: FileTime) {
       Files.setLastModifiedTime(underlying, ft)
@@ -1287,7 +1290,25 @@ package object eio {
     }
   }
 
-  
+  class PathShouldSafelyDoThis private[eio] (private val underlying: Path) extends AnyVal {
+    def exists =
+      try { Files exists underlying }
+      catch { case e if NonFatal(e) => false }
+    def isDirectory =
+      try { Files isDirectory underlying }
+      catch { case e if NonFatal(e) => false }
+    def isSymbolic =
+      try { Files isSymbolicLink underlying }
+      catch { case e if NonFatal(e) => false }
+    def size =
+      try { 
+        if (Files exists underlying) Files size underlying
+        else -1L
+      }
+      catch { case e if NonFatal(e) => -1L }
+  }
+
+
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
     def toFile(f: File, lineEnding: String = null) {
       val p = new java.io.PrintWriter(f)
