@@ -3,6 +3,7 @@
 
 package kse
 
+import scala.reflect.ClassTag
 import scala.util.{Try, Success, Failure}
 
 import scala.language.implicitConversions
@@ -1106,6 +1107,75 @@ package object coll {
     }
   }
 
+  implicit class CanUnmixArrayOk[N, Y](private val a: Array[Ok[N, Y]]) extends AnyVal {
+    def unmix(implicit ntag: reflect.ClassTag[N], ytag: reflect.ClassTag[Y]): (Array[N], Array[Y]) = {
+      val is = new Array[Int](a.length)
+      var iA = 0
+      var iB = is.length - 1
+      var i = 0
+      while (i < a.length) {
+        if (a(i).isOk) { is(iA) = i; iA += 1 }
+        else           { is(iB) = i; iB -= 1 }
+        i += 1
+      }
+      val ys = new Array[Y](iA)
+      val ns = new Array[N](a.length - iA)
+      i = 0
+      while (i < ys.length) { ys(i) = a(is(i)).yes; i += 1 }
+      i = 0
+      while (i < ns.length) { ns(i) = a(is(is.length - 1 - i)).no; i += 1 }
+      (ns, ys)
+    }
+    def unmixWithIndex(implicit ntag: reflect.ClassTag[(N, Int)], ytag: reflect.ClassTag[(Y, Int)]): (Array[(N, Int)], Array[(Y, Int)]) = {
+      val is = new Array[Int](a.length)
+      var iA = 0
+      var iB = is.length - 1
+      var i = 0
+      while (i < a.length) {
+        if (a(i).isOk) { is(iA) = i; iA += 1 }
+        else           { is(iB) = i; iB -= 1 }
+        i += 1
+      }
+      val ys = new Array[(Y, Int)](iA)
+      val ns = new Array[(N, Int)](a.length - iA)
+      i = 0
+      while (i < ys.length) {
+        val j = is(i)
+        ys(i) = (a(j).yes, j)
+        i += 1
+      }
+      i = 0
+      while (i < ns.length) { 
+        val j = is(is.length - 1 - i)
+        ns(i) = (a(j).no, j)
+        i += 1
+      }
+      (ns, ys)
+    }
+    def unmixIndices: (Array[Int], Array[Int]) = {
+      val is = new Array[Int](a.length)
+      var iA = 0
+      var iB = is.length - 1
+      var i = 0
+      while (i < a.length) {
+        if (a(i).isOk) { is(iA) = i; iA += 1 }
+        else           { is(iB) = i; iB -= 1 }
+        i += 1
+      }
+      if (iA == is.length) (new Array[Int](0), is)
+      else {
+        val yis = java.util.Arrays.copyOf(is, iA)
+        val nis = new Array[Int](is.length - iA)
+        i = 0
+        while (i < nis.length) {
+          nis(i) = is(is.length - 1 - i)
+          i += 1
+        }
+        (nis, yis)
+      }
+    }
+  }
+
   implicit class CanUnmixEither[L, R, CC[_]](cc: CC[Either[L, R]])(implicit trav: CC[Either[L, R]] => collection.TraversableOnce[Either[L, R]]) {
     import collection.generic.CanBuildFrom
     def unmix(implicit cbfl: CanBuildFrom[CC[Either[L, R]], L, CC[L]], cbfr: CanBuildFrom[CC[Either[L, R]], R, CC[R]]) = {
@@ -1129,6 +1199,68 @@ package object coll {
     }
   }
 
+
+  implicit class CanUnmixArrayEither[L, R](private val a: Array[Either[L, R]]) extends AnyVal {
+    def unmix(implicit ntag: reflect.ClassTag[L], ytag: reflect.ClassTag[R]): (Array[L], Array[R]) = {
+      var i = 0
+      var ynum = 0
+      while (i < a.length) { if (a(i).isRight) ynum += 1; i += 1 }
+      var ns = new Array[L](a.length - ynum)
+      var ys = new Array[R](ynum)
+      var ni = 0
+      var yi = 0
+      i = 0
+      while (i < a.length) {
+        a(i) match {
+          case Right(y) => ys(yi) = y; yi += 1
+          case Left(n)  => ns(ni) = n; ni += 1
+        }
+        i += 1
+      }
+      (ns, ys)
+    }
+    def unmixWithIndex(implicit ntag: ClassTag[(L, Int)], ytag: ClassTag[(R, Int)]): (Array[(L, Int)], Array[(R, Int)]) = {
+      var i = 0
+      var ynum = 0
+      while (i < a.length) { if (a(i).isRight) ynum += 1; i += 1 }
+      var ns = new Array[(L, Int)](a.length - ynum)
+      var ys = new Array[(R, Int)](ynum)
+      var ni = 0
+      var yi = 0
+      i = 0
+      while (i < a.length) {
+        a(i) match {
+          case Right(y) => ys(yi) = (y, i); yi += 1
+          case Left(n)  => ns(ni) = (n, i); ni += 1
+        }
+        i += 1
+      }
+      (ns, ys)
+    }
+    def unmixIndices: (Array[Int], Array[Int]) = {
+      val is = new Array[Int](a.length)
+      var iA = 0
+      var iB = is.length - 1
+      var i = 0
+      while (i < a.length) {
+        if (a(i).isRight) { is(iA) = i; iA += 1 }
+        else              { is(iB) = i; iB -= 1 }
+        i += 1
+      }
+      if (iA == is.length) (new Array[Int](0), is)
+      else {
+        val yis = java.util.Arrays.copyOf(is, iA)
+        val nis = new Array[Int](is.length - iA)
+        i = 0
+        while (i < nis.length) {
+          nis(i) = is(is.length - 1 - i)
+          i += 1
+        }
+        (nis, yis)
+      }
+    }
+  }
+
   implicit class CanUnmixTry[A, CC[_]](cc: CC[Try[A]])(implicit trav: CC[Try[A]] => collection.TraversableOnce[Try[A]]) {
     import collection.generic.CanBuildFrom
     def unmix(implicit cbff: CanBuildFrom[CC[Try[A]], Throwable, CC[Throwable]], cbfs: CanBuildFrom[CC[Try[A]], A, CC[A]]) = {
@@ -1149,6 +1281,71 @@ package object coll {
         case Failure(t) => bff += (t -> i); i += 1
       }
       (bff.result(), bfs.result())
+    }
+  }
+
+  implicit class CanUnmixArrayTry[A](private val a: Array[Try[A]]) extends AnyVal {
+    def unmix(implicit atag: ClassTag[A]): (Array[Throwable], Array[A]) = {
+      val good = new Array[A](a.length)
+      var bad: Array[Throwable] = null
+      var i = 0
+      var j = 0
+      var k = 0
+      while (i < a.length) {
+        a(i) match {
+          case Success(x) => good(j) = x; j += 1
+          case Failure(t) =>
+            if (bad == null) bad = new Array[Throwable](8)
+            else if (k >= bad.length) bad = java.util.Arrays.copyOf(bad, if (bad.length >= Int.MaxValue/2) Int.MaxValue -2 else bad.length*2)
+            bad(k) = t; k += 1
+        }
+        i += 1
+      }
+      if (j == good.length) (new Array[Throwable](0), good)
+      else (
+        if (k == bad.length) bad else java.util.Arrays.copyOf(bad, k),
+        { val temp = new Array[A](j); System.arraycopy(good, 0, temp, 0, j); temp }
+      )
+    }
+    def unmixWithIndex(implicit atag: ClassTag[A]): (Array[(Throwable, Int)], Array[(A, Int)]) = {
+      var i = 0
+      var ynum = 0
+      while (i < a.length) { if (a(i).isSuccess) ynum += 1; i += 1 }
+      var ns = new Array[(Throwable, Int)](a.length - ynum)
+      var ys = new Array[(A, Int)](ynum)
+      var ni = 0
+      var yi = 0
+      i = 0
+      while (i < a.length) {
+        a(i) match {
+          case Success(x) => ys(yi) = (x, i); yi += 1
+          case Failure(t) => ns(ni) = (t, i); ni += 1
+        }
+        i += 1
+      }
+      (ns, ys)
+    }
+    def unmixIndices: (Array[Int], Array[Int]) = {
+      val is = new Array[Int](a.length)
+      var iA = 0
+      var iB = is.length - 1
+      var i = 0
+      while (i < a.length) {
+        if (a(i).isSuccess) { is(iA) = i; iA += 1 }
+        else                { is(iB) = i; iB -= 1 }
+        i += 1
+      }
+      if (iA == is.length) (new Array[Int](0), is)
+      else {
+        val yis = java.util.Arrays.copyOf(is, iA)
+        val nis = new Array[Int](is.length - iA)
+        i = 0
+        while (i < nis.length) {
+          nis(i) = is(is.length - 1 - i)
+          i += 1
+        }
+        (nis, yis)
+      }
     }
   }
 }
