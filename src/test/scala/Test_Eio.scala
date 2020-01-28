@@ -46,16 +46,16 @@ object Test_Eio extends Test_Kse {
     10.secs - 5.millis =~= 9995.millis &&
     10.secs - Duration.ofMillis(-5) =~= 10005.millis &&
     10.secs.timeFn(t => 2*t + 15.5) =~= 35500.millis &&
-    0.017499.asTime.roundMillis =~= 17.millis &&
-    0.01750001.asTime.roundMillis =~= 18.millis &&
+    0.017499.asTime.roundMillis =~= 17.millis && 0.017499.asTime.floorMillis =~= 17.millis &&
+    0.01750001.asTime.roundMillis =~= 18.millis && 0.01750001.asTime.floorMillis =~= 17.millis &&
     0.0175.asTime.roundMillis =~= 18.millis &&
-    (-0.017499).asTime.roundMillis =~= -17.millis &&
+    (-0.017499).asTime.roundMillis =~= -17.millis && (-0.017499).asTime.floorMillis =~= -18.millis &&
     (-0.01750001).asTime.roundMillis =~= -18.millis &&
     (-0.0175).asTime.roundMillis =~= -18.millis &&
-    17.5.asTime.roundSecs =~= 18.secs &&
-    1050.asTime.roundMins =~= 18.minutes &&
-    63000.asTime.roundHours =~= 18.hours &&
-    1512000.asTime.roundDays =~= 18.days &&
+    17.5.asTime.roundSecs =~= 18.secs && 17.5.asTime.floorSecs =~= 17.secs &&
+    1050.asTime.roundMins =~= 18.minutes && 1050.asTime.floorMins =~= 17.minutes &&
+    63000.asTime.roundHours =~= 18.hours && 63000.asTime.floorHours =~= 17.hours &&
+    1512000.asTime.roundDays =~= 18.days && 1512000.asTime.floorDays =~= 17.days &&
     11.millis.toNanos == 11000000L &&
     11.secs.toMillis == 11000L &&
     11.minutes.toSecs == 660L &&
@@ -102,6 +102,10 @@ object Test_Eio extends Test_Kse {
     !(Duration.ofNanos(15) >= Duration.ofNanos(16)) && Duration.ofNanos(15) >= Duration.ofNanos(15) && Duration.ofNanos(15) >= Duration.ofNanos(-30) &&
     Duration.ofDays(-5).abs == Duration.ofDays(5) &&
     Duration.ofSeconds(3).abs == Duration.ofSeconds(3) &&
+    Duration.ofNanos(17684382L).roundMillis =?= Duration.ofMillis(18) &&
+    Duration.ofNanos(17684382L).floorMillis =?= Duration.ofMillis(17) &&
+    Duration.ofMillis(1582).roundSeconds =?= Duration.ofSeconds(2) &&
+    Duration.ofMillis(1582).floorSeconds =?= Duration.ofSeconds(1) &&
     (Duration.ofMillis(1512) min Duration.ofSeconds(2)) == Duration.ofMillis(1512) &&
     (Duration.ofMillis(1512) max Duration.ofSeconds(2)) == Duration.ofSeconds(2) &&
     (Duration.ofSeconds(2) min Duration.ofMillis(1512)) == Duration.ofMillis(1512) &&
@@ -128,8 +132,9 @@ object Test_Eio extends Test_Kse {
     val i2 = Instant.now
     (i + d) - i == d &&
     (i + t) - i == t.toDuration &&
-    (i + t).roundMillis - i == d &&
+    (i.roundMillis + t).roundMillis - i.roundMillis == d && (i.floorMillis + t).floorMillis - i.floorMillis =?= d &&
     (i.roundSeconds + d).roundSeconds =?= i.roundSeconds.plus(Duration ofSeconds 2) &&
+    (i.floorSeconds + d).floorSeconds =?= i.floorSeconds.plus(Duration ofSeconds 1) &&
     i < i+d && !(i < i) && !(i+t < i) &&
     i <= i+d && i <= i && !(i+t <= i) &&
     !(i > i+d) && !(i > i) && i+t > i &&
@@ -154,8 +159,9 @@ object Test_Eio extends Test_Kse {
     val l2 = LocalDateTime.now
     (l + d) - l == d &&
     (l + t) - l == t.toDuration &&
-    (l + t).roundMillis - l == d &&
+    (l.roundMillis + t).roundMillis - l.roundMillis == d && (l.floorMillis + t).floorMillis - l.floorMillis == d &&
     (l.roundSeconds + d).roundSeconds =?= l.roundSeconds.plus(Duration ofSeconds 2) &&
+    (l.floorSeconds + d).floorSeconds =?= l.floorSeconds.plus(Duration ofSeconds 1) &&
     l < l+d && !(l < l) && !(l+t < l) &&
     l <= l+d && l <= l && !(l+t <= l) &&
     !(l > l+d) && !(l > l) && l+t > l &&
@@ -180,8 +186,9 @@ object Test_Eio extends Test_Kse {
     val z2 = ZonedDateTime.now
     (z + d) - z == d &&
     (z + t) - z == t.toDuration &&
-    (z + t).roundMillis - z == d &&
+    (z.roundMillis + t).roundMillis - z.roundMillis == d && (z.floorMillis + t).floorMillis - z.floorMillis == d &&
     (z.roundSeconds + d).roundSeconds =?= z.roundSeconds.plus(Duration ofSeconds 2) &&
+    (z.floorSeconds + d).floorSeconds =?= z.floorSeconds.plus(Duration ofSeconds 1) &&
     z < z+d && !(z < z) && !(z+t < z) &&
     z <= z+d && z <= z && !(z+t <= z) &&
     !(z > z+d) && !(z > z) && z+t > z &&
@@ -206,8 +213,9 @@ object Test_Eio extends Test_Kse {
     val o2 = OffsetDateTime.now.withOffsetSameInstant(ZoneOffset.UTC)
     (o + d) - o == d &&
     (o + t) - o == t.toDuration &&
-    (o + t).roundMillis - o == d &&
+    (o.roundMillis + t).roundMillis - o.roundMillis == d && (o.floorMillis + t).floorMillis - o.floorMillis == d &&
     (o.roundSeconds + d).roundSeconds =?= o.roundSeconds.plus(Duration ofSeconds 2) &&
+    (o.floorSeconds + d).floorSeconds =?= o.floorSeconds.plus(Duration ofSeconds 1) &&
     o < o+d && !(o < o) && !(o+t < o) &&
     o <= o+d && o <= o && !(o+t <= o) &&
     !(o > o+d) && !(o > o) && o+t > o &&
@@ -232,8 +240,9 @@ object Test_Eio extends Test_Kse {
     val f2 = FileTime from Instant.now
     (f + d) - f == d &&
     (f + t) - f == t.toDuration &&
-    (f + t).roundMillis - f == d &&
+    (f.roundMillis + t).roundMillis - f.roundMillis == d && (f.floorMillis + t).floorMillis - f.floorMillis == d &&
     (f.roundSeconds + d).roundSeconds.to(TimeUnit.SECONDS) =?= f.roundSeconds.to(TimeUnit.SECONDS) + 2 &&
+    (f.floorSeconds + d).floorSeconds.to(TimeUnit.SECONDS) =?= f.floorSeconds.to(TimeUnit.SECONDS) + 1 &&
     f < f+d && !(f < f) && !(f+t < f) &&
     f <= f+d && f <= f && !(f+t <= f) &&
     !(f > f+d) && !(f > f) && f+t > f &&

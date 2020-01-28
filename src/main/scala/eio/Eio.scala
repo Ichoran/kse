@@ -122,6 +122,11 @@ package object eio {
     def timeFn(f: Double => Double) = DoubleAsTime.apply(f(time))
     def +(that: Duration) = new DoubleAsTime(time + that.getSeconds + that.getNano/1e9)
     def -(that: Duration) = new DoubleAsTime(time - (that.getSeconds.toDouble + that.getNano/1e9))
+    def floorMillis = new DoubleAsTime(math.floor(time * 1e3) / 1e3)
+    def floorSecs = new DoubleAsTime(math.floor(time))
+    def floorMins = new DoubleAsTime(math.floor(time / 60) * 60)
+    def floorHours = new DoubleAsTime(math.floor(time / 3600) * 3600)
+    def floorDays = new DoubleAsTime(math.floor(time / 86400) * 86400)
     def roundMillis = new DoubleAsTime(math.rint(time * 1e3) / 1e3)
     def roundSecs = new DoubleAsTime(math.rint(time))
     def roundMins = new DoubleAsTime(math.rint(time / 60) * 60)
@@ -255,16 +260,25 @@ package object eio {
         else Duration.ofSeconds(s+1)
       }
     }
+    def floorMillis = {
+      val n = duration.getNano
+      val r = n % 1000000
+      if (r == 0) duration else duration.withNanos(n - r)
+    }
     def roundSeconds = {
       val n = duration.getNano
       if (n == 0) duration
       else if (n < 500000000) duration.withNanos(0)
       else {
         val s = duration.getSeconds
-        if (n > 500000000) Duration.ofSeconds(s)
+        if (n > 500000000) Duration.ofSeconds(s+1)
         else if (s < 0) duration.withNanos(0)
         else Duration.ofSeconds(s + 1)
       }
+    }
+    def floorSeconds = {
+      val n = duration.getNano
+      if (n == 0) duration else duration.withNanos(0)
     }
     def +(when: Instant       ): Instant        = when plus duration
     def +(when: LocalDateTime ): LocalDateTime  = when plus duration
@@ -289,10 +303,18 @@ package object eio {
       if (n == 0) instant
       else instant.plusNanos(if (n < 500000) -n else 1000000 - n)
     }
+    def floorMillis = {
+      val r = instant.getNano % 1000000
+      if (r == 0) instant else instant.minusNanos(r)
+    }
     def roundSeconds = {
       val n = instant.getNano
       if (n == 0) instant
       else instant.plusNanos(if (n < 500000000) -n else 1000000000 - n)
+    }
+    def floorSeconds = {
+      val n = instant.getNano
+      if (n == 0) instant else instant.minusNanos(n)
     }
     def epoch = new DoubleAsTime(instant.getEpochSecond + instant.getNano/1e9)
     def local = instant.atZone(ZoneId.systemDefault).toLocalDateTime
@@ -317,10 +339,18 @@ package object eio {
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000) -n else 1000000 - n)
     }
+    def floorMillis = {
+      val r = datetime.getNano % 1000000
+      if (r == 0) datetime else datetime.minusNanos(r)
+    }
     def roundSeconds = {
       val n = datetime.getNano
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000000) -n else 1000000000 - n)
+    }
+    def floorSeconds = {
+      val n = datetime.getNano
+      if (n == 0) datetime else datetime.minusNanos(n)
     }
     def epoch = new DoubleAsTime(datetime.atZone(ZoneId.systemDefault).toInstant.getEpochSecond + datetime.getNano/1e9)
     def utc = datetime.atZone(ZoneId.systemDefault).toOffsetDateTime.withOffsetSameInstant(ZoneOffset.UTC)
@@ -345,10 +375,18 @@ package object eio {
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000) -n else 1000000 - n)
     }
+    def floorMillis = {
+      val r = datetime.getNano % 1000000
+      if (r == 0) datetime else datetime.minusNanos(r)
+    }
     def roundSeconds = {
       val n = datetime.getNano
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000000) -n else 1000000000 - n)
+    }
+    def floorSeconds = {
+      val n = datetime.getNano
+      if (n == 0) datetime else datetime.minusNanos(n)
     }
     def epoch = new DoubleAsTime(datetime.toEpochSecond + datetime.getNano/1e9)
     def utc = datetime.toOffsetDateTime.withOffsetSameInstant(ZoneOffset.UTC)
@@ -373,10 +411,18 @@ package object eio {
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000) -n else 1000000 - n)
     }
+    def floorMillis = {
+      val r = datetime.getNano % 1000000
+      if (r == 0) datetime else datetime.minusNanos(r)
+    }
     def roundSeconds = {
       val n = datetime.getNano
       if (n == 0) datetime
       else datetime.plusNanos(if (n < 500000000) -n else 1000000000 - n)
+    }
+    def floorSeconds = {
+      val n = datetime.getNano
+      if (n == 0) datetime else datetime.minusNanos(n)
     }
     def epoch = new DoubleAsTime(datetime.toEpochSecond + datetime.getNano/1e9)
     def utc = datetime.withOffsetSameInstant(ZoneOffset.UTC)
@@ -402,8 +448,15 @@ package object eio {
       if (i == Instant.MAX || i == Instant.MIN) filetime
       else {
         val i2 = (new InstantCanDoThings(i)).roundMillis
-        if (i == i2) filetime
-        else FileTime from i2
+        if (i == i2) filetime else FileTime from i2
+      }
+    }
+    def floorMillis = {
+      val i = filetime.toInstant
+      if (i == Instant.MAX || i == Instant.MIN) filetime
+      else {
+        val i2 = (new InstantCanDoThings(i)).floorMillis
+        if (i == i2) filetime else FileTime from i2
       }
     }
     def roundSeconds = {
@@ -411,8 +464,15 @@ package object eio {
       if (i == Instant.MAX || i == Instant.MIN) filetime
       else {
         val i2 = (new InstantCanDoThings(i)).roundSeconds
-        if (i == i2) filetime
-        else FileTime from i2
+        if (i == i2) filetime else FileTime from i2
+      }
+    }
+    def floorSeconds = {
+      val i = filetime.toInstant
+      if (i == Instant.MAX || i == Instant.MIN) filetime
+      else {
+        val i2 = (new InstantCanDoThings(i)).floorSeconds
+        if (i == i2) filetime else FileTime from i2
       }
     }
     def epoch = {
