@@ -233,8 +233,8 @@ object Prng {
     val leadingZeros = java.lang.Integer.numberOfLeadingZeros(i)
     if (leadingZeros <= 22) {
       val exponent = 126 - leadingZeros
-      val mantissa = ((i >>> 9) << leadingZeros) & 0x003FFFFF
-      java.lang.Float.intBitsToFloat( (exponent << 22) | mantissa )
+      val mantissa = ((i >>> 8) << leadingZeros) & 0x007FFFFF
+      java.lang.Float.intBitsToFloat( (exponent << 23) | mantissa )
     }
     else 0.001953125f*i + 9.765625E-4f     // Subnormal values aren't symmetric, so we remap them equally spaced between 0 and 1
   }
