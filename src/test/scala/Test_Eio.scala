@@ -139,6 +139,8 @@ object Test_Eio extends Test_Kse {
     i <= i+d && i <= i && !(i+t <= i) &&
     !(i > i+d) && !(i > i) && i+t > i &&
     !(i >= i+d) && i >= i && i+t >= i &&
+    !(i < f) && i <= f && i >= f && !(i > f) &&
+    (i + t) > f && (i - t) < f &&
     (i min i+d) == i && (i+d min i) == i &&
     (i max i+d) == i+d && (i+d max i) == i+d &&
     i2.epoch >= i.epoch &&
@@ -247,6 +249,7 @@ object Test_Eio extends Test_Kse {
     f <= f+d && f <= f && !(f+t <= f) &&
     !(f > f+d) && !(f > f) && f+t > f &&
     !(f >= f+d) && f >= f && f+t >= f &&
+    (!(f > i)) && (f <= i) && (f+t >= i) && (f-t < i) &&
     (f min f+d) == f && (f+d min f) == f &&
     (f max f+d) == f+d && (f+d max f) == f+d &&
     f2.epoch >= f.epoch &&

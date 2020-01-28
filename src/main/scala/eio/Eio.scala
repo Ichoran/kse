@@ -287,10 +287,14 @@ package object eio {
     def +(when: FileTime): FileTime = FileTime from when.toInstant.plus(duration)
   }
   implicit class InstantCanDoThings(private val instant: Instant) extends AnyVal {
-    def <(when: Instant) = instant isBefore when
+    def <(when: Instant)  = instant isBefore when
     def <=(when: Instant) = !(when isBefore instant)
     def >=(when: Instant) = !(instant isBefore when)
-    def >(when: Instant) = when isBefore instant
+    def >(when: Instant)  = when isBefore instant
+    def <(when: FileTime)  = { val j = when.toInstant; if (j==Instant.MAX || j==Instant.MIN) FileTime.from(instant).compareTo(when) < 0  else instant isBefore j }
+    def <=(when: FileTime) = { val j = when.toInstant; if (j==Instant.MAX || j==Instant.MIN) FileTime.from(instant).compareTo(when) <= 0 else !(j isBefore instant) }
+    def >=(when: FileTime) = { val j = when.toInstant; if (j==Instant.MAX || j==Instant.MIN) FileTime.from(instant).compareTo(when) >= 0 else !(instant isBefore j) }
+    def >(when: FileTime)  = { val j = when.toInstant; if (j==Instant.MAX || j==Instant.MIN) FileTime.from(instant).compareTo(when) > 0  else j isBefore instant }
     def min(when: Instant) = if (when isBefore instant) when else instant
     def max(when: Instant) = if (when isAfter instant) when else instant
     def +(that: Duration) = instant plus that
@@ -432,10 +436,14 @@ package object eio {
     def filetime = FileTime from datetime.toInstant
   }
   implicit class FileTimeCanDoThings(private val filetime: FileTime) extends AnyVal {
-    def <(when: FileTime) = filetime.compareTo(when) < 0
+    def <(when: FileTime)  = filetime.compareTo(when) < 0
     def <=(when: FileTime) = filetime.compareTo(when) <= 0
     def >=(when: FileTime) = filetime.compareTo(when) >= 0
-    def >(when: FileTime) = filetime.compareTo(when) > 0
+    def >(when: FileTime)  = filetime.compareTo(when) > 0
+    def <(when: Instant)  = (new InstantCanDoThings(when)).>(filetime)
+    def <=(when: Instant) = (new InstantCanDoThings(when)).>=(filetime)
+    def >=(when: Instant) = (new InstantCanDoThings(when)).<=(filetime)
+    def >(when: Instant)  = (new InstantCanDoThings(when)).<(filetime)
     def min(when: FileTime) = if (filetime.compareTo(when) > 0) when else filetime
     def max(when: FileTime) = if (filetime.compareTo(when) < 0) when else filetime
     def +(that: Duration) = FileTime from (filetime.toInstant plus that)
