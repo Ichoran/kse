@@ -594,15 +594,12 @@ package object eio {
     }
   }
   
-  implicit class StringAsFile(private val underlying: String) extends AnyVal {
+  implicit class StringAsPathOrFile(private val underlying: String) extends AnyVal {
     def file = new File(underlying)
     def \:(parent: File) = new File(parent, underlying)
-  }
-
-  implicit class StringAsPath(private val underlying: String) extends AnyVal {
     def path = FileSystems.getDefault.getPath(underlying)
-    def pathOption = try { Some(FileSystems.getDefault.getPath(underlying)) } catch { case ipe: file.InvalidPathException => None }
-    def grabPath(implicit oops: Oops): Path = try { FileSystems.getDefault.getPath(underlying) } catch { case ipe: file.InvalidPathException => OOPS }
+    def pathOption = try { Some(FileSystems.getDefault.getPath(underlying)) } catch { case ipe: java.nio.file.InvalidPathException => None }
+    def grabPath(implicit oops: Oops): Path = try { FileSystems.getDefault.getPath(underlying) } catch { case ipe: java.nio.file.InvalidPathException => OOPS }
   }
 
   implicit class BytesAsStrings(private val underlying: Array[Byte]) extends AnyVal {
@@ -626,7 +623,7 @@ package object eio {
   }
 
   implicit class InputStreamShouldDoThis(private val underlying: java.io.InputStream) extends AnyVal {
-    def bigGulp(limit: Long): Ok[String, List[Array[Byte]]] = {
+    def bigGulp(limit: Long, leaveOpen: Boolean = false): Ok[String, List[Array[Byte]]] = {
       if (limit < 0) return No("Negative size limit")
       if (limit == 0) return Yes(Nil)
       try {
@@ -675,10 +672,23 @@ package object eio {
       catch {
         case t if NonFatal(t) => No(s"Error while consuming InputStream:\n${t.explain(128)}")
       }
-      finally { underlying.close }
+      finally { if (!leaveOpen) underlying.close }
     }
 
     def gulp(): Ok[String, Array[Byte]] = bigGulp(Int.MaxValue - 1).map{
+      case Nil        => new Array[Byte](0)
+      case one :: Nil => one
+      case lots       =>
+        val combined = new Array[Byte](lots.map(_.length).sum)
+        var n = 0
+        lots.foreach{ one =>
+          System.arraycopy(one, 0, combined, n, one.length)
+          n += one.length
+        }
+        combined
+    }
+
+    def drain(): Ok[String, Array[Byte]] = bigGulp(Int.MaxValue - 1, leaveOpen = true).map{
       case Nil        => new Array[Byte](0)
       case one :: Nil => one
       case lots       =>
@@ -704,6 +714,28 @@ package object eio {
       }
       vb.result()
     }.mapNo(e => s"Error consuming InputStream:\n${e.explain()}")
+
+    def unzipMap[A](selector: ZipEntry => Option[Array[Byte] => A]): Ok[String, List[A]] = safe{
+      try {
+        val zis = new java.util.zip.ZipInputStream(underlying)
+        val z = new InputStreamShouldDoThis(zis)
+        var ze = zis.getNextEntry
+        if (ze eq null) {
+          if (underlying.available == 0) return Yes(Nil)
+          else return No(s"InputStream does not look like a zip archive")
+        }
+        var answer = List.newBuilder[A]
+        while (ze ne null) {
+          selector(ze) match {
+            case Some(f) => answer += f(z.drain.?)
+            case _ =>
+          }
+          ze = zis.getNextEntry
+        }
+        answer.result
+      }
+      finally { underlying.close }
+    }.mapNo(e => s"Error consuming InputStream\n${e.explain()}")
 
     def walker(size: Int = 8192): Walker[Array[Byte]] = new InputStreamStepper(underlying, size)
   }
@@ -846,6 +878,11 @@ package object eio {
       catch { case oome: OutOfMemoryError => fail(s"Out of memory reading ${underlying.getPath}") }
       finally { try { src.close } catch { case t if NonFatal(t) => } }
     }
+
+    // TODO -- evaluate whether it's better to use a ZipFile to do this
+    def unzipMap[A](selector: ZipEntry => Option[Array[Byte] => A]): Ok[String, List[A]] = safe{
+      (new InputStreamShouldDoThis(new FileInputStream(underlying))).unzipMap(selector).mapNo(e => s"Error while unzipping $underlying\n$e")
+    }.mapNo(e => s"Could not open file $underlying\n${e.explain()}").flatten
 
     private[this] def myHashWith(
       h0: SimpleIncrementalHash, h1: SimpleIncrementalHash, hmore: Seq[SimpleIncrementalHash]
@@ -1250,6 +1287,11 @@ package object eio {
     def gulp: Ok[String, Array[Byte]] = safe{
       Files readAllBytes underlying
     }.mapNo(_.explain())
+
+    // TODO -- evaluate whether it's better to use a ZipFileSystem to do this
+    def unzipMap[A](selector: ZipEntry => Option[Array[Byte] => A]): Ok[String, List[A]] = safe{
+      (new InputStreamShouldDoThis(Files newInputStream underlying)).unzipMap(selector).mapNo(e => s"Error while unzipping $underlying\n$e")
+    }.mapNo(e => s"Could not open path $underlying\n${e.explain()}").flatten
 
     def copyTo(to: Path) {
       Files.copy(underlying, to, StandardCopyOption.REPLACE_EXISTING)
