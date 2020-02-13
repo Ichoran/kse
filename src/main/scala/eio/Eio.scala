@@ -602,11 +602,13 @@ package object eio {
     def grabPath(implicit oops: Oops): Path = try { FileSystems.getDefault.getPath(underlying) } catch { case ipe: java.nio.file.InvalidPathException => OOPS }
   }
 
-  implicit class BytesAsStrings(private val underlying: Array[Byte]) extends AnyVal {
+  implicit class BytesAsThings(private val underlying: Array[Byte]) extends AnyVal {
     def utf8 = new String(underlying, java.nio.charset.StandardCharsets.UTF_8)
     def ascii = new String(underlying, java.nio.charset.StandardCharsets.US_ASCII)
     def rawString = new String(underlying, java.nio.charset.StandardCharsets.ISO_8859_1)
     def iso8859_1 = new String(underlying, java.nio.charset.StandardCharsets.ISO_8859_1)
+    def buffer = java.nio.ByteBuffer.wrap(underlying)
+    def input = new java.io.ByteArrayInputStream(underlying)
   }
   
   implicit class ZipEntryProperPaths(private val underlying: ZipEntry) extends AnyVal {
