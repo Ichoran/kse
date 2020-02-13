@@ -77,7 +77,6 @@ extends Act[R] {
     synchronized{ interesting = provisions.threads }
     val workers = Array.fill(provisions.threads)(new Thread {
       override def run(): Unit = {
-        println(s"Activated thread ${Thread.currentThread.getId}")
         actImplReentrant(p)
       }
     });
@@ -101,7 +100,6 @@ extends Act[R] {
               if (!lively) {
                 lively = true
                 interesting += 1
-                println(s"Interesting up to $interesting")
               }
               val x = count
               count += 1
@@ -130,7 +128,6 @@ extends Act[R] {
               if (lively) {
                 lively = false
                 interesting -= 1
-                println(s"Interesting down to $interesting")
               }
               else if (interesting <= 0) more = false
               else Thread.`yield`()
