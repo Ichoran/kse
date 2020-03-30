@@ -987,7 +987,10 @@ package object coll {
   }
 
   implicit class StringElementsCanBeInStrings(private val s: String) extends AnyVal {
-    def in(text: String) = text contains s
+    def in(text: String): Boolean = text contains s
+    def in(eltA: String, eltB: String, elts: String*): Boolean = s == eltA || s == eltB || elts.contains(s)
+    def in(alternatives: collection.Set[String]): Boolean = alternatives contains s
+    def in(alternatives: collection.Iterable[String]): Boolean = alternatives.exists(_ == s)
   }
 
   implicit class CanSplitWithIndicator[A, CC[A]](xs: CC[A])(implicit trav: CC[A] => collection.TraversableOnce[A]) {
