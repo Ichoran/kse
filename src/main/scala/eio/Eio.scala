@@ -1194,11 +1194,24 @@ package object eio {
     import PathShouldDoThis._
 
     def name = underlying.getFileName.toString
+    def nameTo(s: String) = underlying resolveSibling(s)
     def nameFn(f: String => String) = underlying resolveSibling f(underlying.getFileName.toString)
     def ext = {
       val n = underlying.getFileName.toString
       val i = n.lastIndexOf('.')
       if (i < 1) "" else n.substring(i+1)
+    }
+    def extTo(x: String) = {
+      val n = underlying.getFileName.toString
+      val i = n.lastIndexOf('.')
+      if (i < 1) {
+        if (x.isEmpty) underlying
+        else underlying resolveSibling n + "." + x
+      }
+      else {
+        if (x.isEmpty) underlying resolveSibling n.substring(0, i)
+        else underlying resolveSibling n.substring(0, i+1) + x
+      }
     }
     def extFn(f: String => String) = {
       val n = underlying.getFileName.toString
@@ -1206,14 +1219,26 @@ package object eio {
       val e = if (i < 1) "" else n.substring(i+1)
       val x = f(e)
       if (x == e) underlying
-      else if (i < 1) underlying resolveSibling n+"."+x
+      else if (i < 1) underlying resolveSibling n + "." + x
       else if (x.isEmpty) underlying resolveSibling n.substring(0, i)
-      else underlying resolveSibling n.substring(0, i+1)+x
+      else underlying resolveSibling n.substring(0, i+1) + x
     }
     def base = {
       val n = underlying.getFileName.toString
       val i = n.lastIndexOf('.')
       if (i < 1) n else n.substring(0, i)
+    }
+    def baseTo(b: String) = {
+      val n = underlying.getFileName.toString
+      val i = n.lastIndexOf('.')
+      if (i < 1) {
+        if (n == b) underlying
+        else underlying resolveSibling b
+      }
+      else {
+        if (i == b.length && n.substring(0, i) == b) underlying
+        else underlying resolveSibling b + n.substring(i)
+      }
     }
     def baseFn(f: String => String) = {
       val n = underlying.getFileName.toString
