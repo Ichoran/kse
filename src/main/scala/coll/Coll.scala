@@ -980,6 +980,16 @@ package object coll {
     }
   }
 
+  implicit class AnyElementCanTestInclusion[A <: AnyRef](private val a: A) extends AnyVal {
+    def in(alternatives: A*): Boolean = alternatives contains a
+    def in(alternatives: collection.Set[A]): Boolean = alternatives contains a
+    def in(alternatives: collection.Iterable[A]): Boolean = alternatives.exists(_ == a)
+  }
+
+  implicit class StringElementsCanBeInStrings(private val s: String) extends AnyVal {
+    def in(text: String) = text contains s
+  }
+
   implicit class CanSplitWithIndicator[A, CC[A]](xs: CC[A])(implicit trav: CC[A] => collection.TraversableOnce[A]) {
     import collection.generic.CanBuildFrom
     def equivalenceSplit[B](indicator: A => B)(implicit cbf: CanBuildFrom[CC[A], A, CC[A]], cbf2: CanBuildFrom[CC[A], CC[A], CC[CC[A]]]): CC[CC[A]] = {
