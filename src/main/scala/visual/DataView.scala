@@ -49,19 +49,19 @@ extends Derived[Grouping] {
           case (Some(peo), Some(so)) =>
             val hio = peo max so
             b += Grouping(
-              Circ(v, padR, padStyle.filly),
+              Marker.C(v, padR, padStyle.filly),
               Grouping.faded(hio)(
-                Circ(v, padR, padStyle.stroky + StrokeOpacity(peo/hio)),
+                Marker.C(v, padR, padStyle.stroky + StrokeOpacity(peo/hio)),
                 Line(summary, v, stemStyle + StrokeOpacity(so/hio))
               )
             )
           case _ =>
-            b += Grouping(Circ(v, padR, padStyle), Line(summary, v, stemStyle))
+            b += Grouping(Marker.C(v, padR, padStyle), Line(summary, v, stemStyle))
         }     
       }
-      else b += Circ(v, padR, padStyle)
+      else b += Marker.C(v, padR, padStyle)
     }
-    if (rootR.finite && rootR > 0) b += Circ(summary, rootR, rootStyle.filly)
+    if (rootR.finite && rootR > 0) b += Marker.C(summary, rootR, rootStyle.filly)
     Grouping(b.result)
   }
 }
