@@ -24,15 +24,15 @@ trait Deviable {
   def value: Double
   def error: Double
   def errorSq: Double
-  def coev: Double
+  def errorFrac: Double
   def neg: Dev = new Dev(-value, error)
-  def inv: Dev = { val r = 1.0/value; new Dev(r, r*coev) }
+  def inv: Dev = { val r = 1.0/value; new Dev(r, r*errorFrac) }
   def +(that: Deviable): Dev = new Dev(value + that.value, (errorSq + that.errorSq).sqrt)
   def -(that: Deviable): Dev = new Dev(value - that.value, (errorSq + that.errorSq).sqrt)
-  def *(that: Deviable): Dev = new Dev(value * that.value, value * that.value * (coev.sq + that.coev.sq).sqrt)
-  def /(that: Deviable): Dev = { val f = value / that.value; new Dev(f, f * (coev.sq + that.coev.sq).sqrt) }
+  def *(that: Deviable): Dev = new Dev(value * that.value, value * that.value * (errorFrac.sq + that.errorFrac.sq).sqrt)
+  def /(that: Deviable): Dev = { val f = value / that.value; new Dev(f, f * (errorFrac.sq + that.errorFrac.sq).sqrt) }
   def abs: Dev = new Dev(math.abs(value), error)
-  def sqrt: Dev = { val r = math.sqrt(value); new Dev(r, r*coev*0.5) }
+  def sqrt: Dev = { val r = math.sqrt(value); new Dev(r, r*errorFrac*0.5) }
   def sq: Dev = new Dev(value * value, value * error)
 }
 object Deviable {
@@ -41,7 +41,7 @@ object Deviable {
 
 case class Dev(value: Double, error: Double) extends Deviable {
   def errorSq = error*error
-  def coev = if (value != 0 || error != 0) error/value else 0.0
+  def errorFrac = if (value != 0 || error != 0) error/value else 0.0
 }
 object Dev {
   val zero = new Dev(0, 0)
@@ -84,7 +84,9 @@ trait Estimate extends Deviable {
   def sd = math.sqrt(variance)
   def errorSq = sse / (if (n > 1) n.toDouble*(n-1) else 1)
   def error = math.sqrt(errorSq)
-  def coev = error / mean
+  def sem = error
+  def cv = sd / mean
+  def errorFrac = error / mean
 }
 
 abstract class MutableEstimate(var n: Int, var mean: Double, var sse: Double) extends Estimate {
@@ -199,6 +201,18 @@ final case class Est(n: Int, mean: Double, sse: Double) extends Estimate {
 }
 object Est {
   val empty = new Est(0, 0, 0)
+
+  def withSD(n: Int, mean: Double, sd: Double) =
+    new Est(n, mean, (if (n > 2) n-1 else 1)*sd*sd)
+
+  def withSEM(n: Int, mean: Double, sem: Double) =
+    new Est(n, mean, (if (n > 1) n.toDouble*(n-1) else 1)*sem*sem)
+
+  def withFWHM(n: Int, mean: Double, fwhm: Double) =
+    withSD(n, mean, fwhm * NumericConstants.GaussianFWHMToSigma)
+
+  def withCV(n: Int, mean: Double, cv: Double) =
+    withSD(n, mean, mean*cv)
 
   def from(data: Array[Float], i0: Int, iN: Int): Est = {
     val iA = math.max(0, i0)
