@@ -1479,10 +1479,57 @@ package object eio {
 
 
   implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
+    /* Writes the current traversable as a new file */
     def toFile(f: File, lineEnding: String = null) {
       val p = new java.io.PrintWriter(f)
       try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
     }
+
+    /* Writes the current traversable onto the end of an existing file, or creates it if it's not there */
+    def appendToFile(f: File, lineEnding: String = null) {
+      if (!f.exists) toFile(f, lineEnding)
+      else {
+        val rw = new java.io.RandomAccessFile(f, "rw")
+        try {
+          val leBytes = (if (lineEnding != null) lineEnding else System.lineSeparator).getBytes
+          val l = rw.length
+          val endsNL =
+            if (l < leBytes.length) false
+            else {
+              rw.seek(l - leBytes.length)
+              val fBytes = java.util.Arrays.copyOf(leBytes, leBytes.length)
+              val n = rw.read(fBytes)
+              (n == leBytes.length) && {
+                var i = 0
+                var same = true
+                while (same && i < leBytes.length) {
+                  same = leBytes(i) == fBytes(i)
+                  i += 1
+                }
+                same
+              }
+            }
+          rw.seek(l)
+          val p = new java.io.PrintWriter(new RandomAccessFileOutputStream(rw))
+          try {
+            if (lineEnding == null) {
+              if (!endsNL) p.println()
+              underlying.foreach(p.println)
+            }
+            else {
+              if (!endsNL) p.print(lineEnding)
+              underlying.foreach(x => p.print(x + lineEnding))
+            }            
+          }
+          finally(p.close())
+        }
+        catch {
+          case e: Exception => println(e); throw e
+        }
+        finally { rw.close() }
+      }
+    }
+
     /** Atomically replaces the file.
       *
       * It is guaranteed not to be corrupted as long as this operation is not run concurrently.
@@ -1527,10 +1574,43 @@ package object eio {
   }
   
   implicit class ConvenientPathOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
+    /** Writes a collection of strings to a file, replacing any existing contents */
     def toFile(f: Path, lineEnding: String = null) {
       val p = new java.io.PrintWriter(Files newOutputStream f)
       try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
     }
+
+    /** Appends a collection of strings to an existing file, or creates a new one of the old one isn't there */
+    def appendToFile(f: Path, lineEnding: String = null) {
+      val fileOutputWorked =
+        (
+          try { f.getFileSystem == java.nio.file.FileSystems.getDefault }
+          catch { case e: Exception => false }
+        ) && 
+        (
+          try { (new ConvenientFileOutput(underlying)).appendToFile(f.toFile, lineEnding); true }
+          catch { case uoe: UnsupportedOperationException => false }
+        )
+      if (!fileOutputWorked) {
+        if (!(Files exists f)) toFile(f, lineEnding)
+        else {
+          import java.nio.file.StandardOpenOption._
+          val s = Files.newOutputStream(f, APPEND, CREATE, WRITE)
+          try {
+            val p = new java.io.PrintWriter(s)
+            try {
+              if (lineEnding == null) underlying.foreach(p.println)
+              else underlying.foreach(x => p.print(x + lineEnding))
+            }
+            finally { p.close() }
+          }
+          finally {
+            s.close()
+          }
+        }
+      }
+    }
+
     /** Atomically replaces the file.
       *
       * It is guaranteed not to be corrupted as long as this operation is not run concurrently.
@@ -1593,6 +1673,21 @@ package object eio {
       Yes(true)
     }
   }
+
+  implicit class ConvenientArrayOutput(private val underlying: Array[String]) extends AnyVal {
+    def toFile(f: File): Unit = (new ConvenientFileOutput(underlying.toSeq)).toFile(f)
+    def toFile(f: File, lineSeparator: String): Unit = (new ConvenientFileOutput(underlying.toSeq)).toFile(f, lineSeparator)
+    def toFile(f: Path): Unit = (new ConvenientPathOutput(underlying.toSeq)).toFile(f)
+    def toFile(f: Path, lineSeparator: String): Unit = (new ConvenientPathOutput(underlying.toSeq)).toFile(f, lineSeparator)
+    def appendToFile(f: File): Unit = (new ConvenientFileOutput(underlying.toSeq)).appendToFile(f)
+    def appendToFile(f: File, lineSeparator: String): Unit = (new ConvenientFileOutput(underlying.toSeq)).appendToFile(f, lineSeparator)
+    def appendToFile(f: Path): Unit = (new ConvenientPathOutput(underlying.toSeq)).appendToFile(f)
+    def appendToFile(f: Path, lineSeparator: String): Unit = (new ConvenientPathOutput(underlying.toSeq)).appendToFile(f, lineSeparator)
+    def atomicallyReplace(f: File) = (new ConvenientFileOutput(underlying.toSeq)).atomicallyReplace(f)
+    def atomicallyReplace(f: File, lineSeparator: String) = (new ConvenientFileOutput(underlying.toSeq)).atomicallyReplace(f, lineSeparator)
+    def atomicallyReplace(f: Path) = (new ConvenientPathOutput(underlying.toSeq)).atomicallyReplace(f)
+    def atomicallyReplace(f: Path, lineSeparator: String) = (new ConvenientPathOutput(underlying.toSeq)).atomicallyReplace(f, lineSeparator)
+  }
   
   private[eio] def exceptionAsString(t: Throwable) = t.getClass.getName + ": " + Option(t.getMessage).getOrElse("") + "; " + t.getStackTrace.take(2).mkString("; ")
 }
@@ -1600,6 +1695,14 @@ package object eio {
 package eio {
   import java.io._
   import java.util.zip._
+
+  /** Wraps java.io.RandomAccessFile in an OutputStream.  Behavior is undefined if you use the RandomAccessFile again. */
+  class RandomAccessFileOutputStream(val raf: java.io.RandomAccessFile) extends java.io.OutputStream {
+    override def close(): Unit = raf.close()
+    override def write(b: Array[Byte]): Unit = raf.write(b)
+    override def write(b: Array[Byte], off: Int, len: Int): Unit = raf.write(b, off, len)
+    def write(b: Int): Unit = raf.writeByte(b)
+  }
   
   /** Note: the minimum chunk size is 256 */
   class InputStreamStepper(is: InputStream, chunkSize: Int) extends Walker[Array[Byte]] {
