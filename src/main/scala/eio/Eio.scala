@@ -1478,15 +1478,24 @@ package object eio {
   }
 
 
-  implicit class ConvenientFileOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
-    /* Writes the current traversable as a new file */
-    def toFile(f: File, lineEnding: String = null) {
+  implicit class ConvenientLineOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
+    /** Writes the current traversable as a new file */
+    def toFile(f: File, lineEnding: String) {
       val p = new java.io.PrintWriter(f)
       try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
     }
+    /** Writes the current traversable as a new file with default line ending */
+    def toFile(f: File) { toFile(f, null) }
+    /** Writes the current traversable as a new file (denoted by a Path) */
+    def toFile(f: Path, lineEnding: String) {
+      val p = new java.io.PrintWriter(Files newOutputStream f)
+      try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
+    }
+    /** Writes the current traversable as a new file (denoted by a Path), using default line endings */
+    def toFile(f: Path) { toFile(f, null) }
 
-    /* Writes the current traversable onto the end of an existing file, or creates it if it's not there */
-    def appendToFile(f: File, lineEnding: String = null) {
+    /** Writes the current traversable onto the end of an existing file, or creates it if it's not there */
+    def appendToFile(f: File, lineEnding: String) {
       if (!f.exists) toFile(f, lineEnding)
       else {
         val rw = new java.io.RandomAccessFile(f, "rw")
@@ -1529,14 +1538,48 @@ package object eio {
         finally { rw.close() }
       }
     }
+    /** Writes the current traversable onto the end of an existing file, using standard line endings */
+    def appendToFile(f: File) { appendToFile(f, null) }
+    /** Writes the current traversable onto the end of an existing file (denoted by a Path), or creates it if it's not there */
+    def appendToFile(f: Path, lineEnding: String) {
+      val fileOutputWorked =
+        (
+          try { f.getFileSystem == java.nio.file.FileSystems.getDefault }
+          catch { case e: Exception => false }
+        ) && 
+        (
+          try { appendToFile(f.toFile, lineEnding); true }
+          catch { case uoe: UnsupportedOperationException => false }
+        )
+      if (!fileOutputWorked) {
+        if (!(Files exists f)) toFile(f, lineEnding)
+        else {
+          import java.nio.file.StandardOpenOption._
+          val s = Files.newOutputStream(f, APPEND, CREATE, WRITE)
+          try {
+            val p = new java.io.PrintWriter(s)
+            try {
+              if (lineEnding == null) underlying.foreach(p.println)
+              else underlying.foreach(x => p.print(x + lineEnding))
+            }
+            finally { p.close() }
+          }
+          finally {
+            s.close()
+          }
+        }
+      }
+    }
+    /** Writes the current traversable onto the end of an existing file (denoted by a Path), using standard line endings */
+    def appendToFile(f: Path) { appendToFile(f, null) }
 
     /** Atomically replaces the file.
       *
       * It is guaranteed not to be corrupted as long as this operation is not run concurrently.
       *
-      * Returns `true` if the update is successful (whether anything changed on disk or not)
+      * Returns `Yes(())` if the update is successful (whether anything changed on disk or not)
       */
-    def atomicallyReplace(f: File, lineEnding: String = null): Ok[String, Unit] = {
+    def atomicallyReplace(f: File, lineEnding: String): Ok[String, Unit] = {
       if (f.exists && underlying.isTraversableAgain) {
         f.slurp match {
           case Yes(lines) =>
@@ -1571,53 +1614,16 @@ package object eio {
       safe{ fexisted.foreach(_.delete) }
       Ok.UnitYes
     }
-  }
-  
-  implicit class ConvenientPathOutput(private val underlying: TraversableOnce[String]) extends AnyVal {
-    /** Writes a collection of strings to a file, replacing any existing contents */
-    def toFile(f: Path, lineEnding: String = null) {
-      val p = new java.io.PrintWriter(Files newOutputStream f)
-      try { if (lineEnding == null) underlying.foreach(p.println) else underlying.foreach(x => p.print(x + lineEnding)) } finally { p.close() }
-    }
+    /** Atomically replaces the file using standard line endings.  (See other version for details.) */
+    def atomicallyReplace(f: File): Ok[String, Unit] = atomicallyReplace(f, null)
 
-    /** Appends a collection of strings to an existing file, or creates a new one of the old one isn't there */
-    def appendToFile(f: Path, lineEnding: String = null) {
-      val fileOutputWorked =
-        (
-          try { f.getFileSystem == java.nio.file.FileSystems.getDefault }
-          catch { case e: Exception => false }
-        ) && 
-        (
-          try { (new ConvenientFileOutput(underlying)).appendToFile(f.toFile, lineEnding); true }
-          catch { case uoe: UnsupportedOperationException => false }
-        )
-      if (!fileOutputWorked) {
-        if (!(Files exists f)) toFile(f, lineEnding)
-        else {
-          import java.nio.file.StandardOpenOption._
-          val s = Files.newOutputStream(f, APPEND, CREATE, WRITE)
-          try {
-            val p = new java.io.PrintWriter(s)
-            try {
-              if (lineEnding == null) underlying.foreach(p.println)
-              else underlying.foreach(x => p.print(x + lineEnding))
-            }
-            finally { p.close() }
-          }
-          finally {
-            s.close()
-          }
-        }
-      }
-    }
-
-    /** Atomically replaces the file.
+    /** Atomically replaces the file (denoted by a Path).
       *
       * It is guaranteed not to be corrupted as long as this operation is not run concurrently.
       *
       * Returns `true` there were any changes, `false` if not
       */
-    def atomicallyReplace(f: Path, lineEnding: String = null): Ok[String, Boolean] = {
+    def atomicallyReplace(f: Path, lineEnding: String): Ok[String, Boolean] = {
       val replacing = Files exists f
       if (replacing && underlying.isTraversableAgain) {
         f.slurp match {
@@ -1672,21 +1678,23 @@ package object eio {
       safe{ fexisted.foreach(Files delete _) }
       Yes(true)
     }
-  }
+    /** Atomically replaces the file (denoted by a Path) using standard line endings.  (See other version for details.) */
+    def atomicallyReplace(f: Path): Ok[String, Boolean] = atomicallyReplace(f, null)
+ }
 
   implicit class ConvenientArrayOutput(private val underlying: Array[String]) extends AnyVal {
-    def toFile(f: File): Unit = (new ConvenientFileOutput(underlying.toSeq)).toFile(f)
-    def toFile(f: File, lineSeparator: String): Unit = (new ConvenientFileOutput(underlying.toSeq)).toFile(f, lineSeparator)
-    def toFile(f: Path): Unit = (new ConvenientPathOutput(underlying.toSeq)).toFile(f)
-    def toFile(f: Path, lineSeparator: String): Unit = (new ConvenientPathOutput(underlying.toSeq)).toFile(f, lineSeparator)
-    def appendToFile(f: File): Unit = (new ConvenientFileOutput(underlying.toSeq)).appendToFile(f)
-    def appendToFile(f: File, lineSeparator: String): Unit = (new ConvenientFileOutput(underlying.toSeq)).appendToFile(f, lineSeparator)
-    def appendToFile(f: Path): Unit = (new ConvenientPathOutput(underlying.toSeq)).appendToFile(f)
-    def appendToFile(f: Path, lineSeparator: String): Unit = (new ConvenientPathOutput(underlying.toSeq)).appendToFile(f, lineSeparator)
-    def atomicallyReplace(f: File) = (new ConvenientFileOutput(underlying.toSeq)).atomicallyReplace(f)
-    def atomicallyReplace(f: File, lineSeparator: String) = (new ConvenientFileOutput(underlying.toSeq)).atomicallyReplace(f, lineSeparator)
-    def atomicallyReplace(f: Path) = (new ConvenientPathOutput(underlying.toSeq)).atomicallyReplace(f)
-    def atomicallyReplace(f: Path, lineSeparator: String) = (new ConvenientPathOutput(underlying.toSeq)).atomicallyReplace(f, lineSeparator)
+    def toFile(f: File): Unit = (new ConvenientLineOutput(underlying.toSeq)).toFile(f)
+    def toFile(f: File, lineSeparator: String): Unit = (new ConvenientLineOutput(underlying.toSeq)).toFile(f, lineSeparator)
+    def toFile(f: Path): Unit = (new ConvenientLineOutput(underlying.toSeq)).toFile(f)
+    def toFile(f: Path, lineSeparator: String): Unit = (new ConvenientLineOutput(underlying.toSeq)).toFile(f, lineSeparator)
+    def appendToFile(f: File): Unit = (new ConvenientLineOutput(underlying.toSeq)).appendToFile(f)
+    def appendToFile(f: File, lineSeparator: String): Unit = (new ConvenientLineOutput(underlying.toSeq)).appendToFile(f, lineSeparator)
+    def appendToFile(f: Path): Unit = (new ConvenientLineOutput(underlying.toSeq)).appendToFile(f)
+    def appendToFile(f: Path, lineSeparator: String): Unit = (new ConvenientLineOutput(underlying.toSeq)).appendToFile(f, lineSeparator)
+    def atomicallyReplace(f: File) = (new ConvenientLineOutput(underlying.toSeq)).atomicallyReplace(f)
+    def atomicallyReplace(f: File, lineSeparator: String) = (new ConvenientLineOutput(underlying.toSeq)).atomicallyReplace(f, lineSeparator)
+    def atomicallyReplace(f: Path) = (new ConvenientLineOutput(underlying.toSeq)).atomicallyReplace(f)
+    def atomicallyReplace(f: Path, lineSeparator: String) = (new ConvenientLineOutput(underlying.toSeq)).atomicallyReplace(f, lineSeparator)
   }
   
   private[eio] def exceptionAsString(t: Throwable) = t.getClass.getName + ": " + Option(t.getMessage).getOrElse("") + "; " + t.getStackTrace.take(2).mkString("; ")
