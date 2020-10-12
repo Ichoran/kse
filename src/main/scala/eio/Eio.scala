@@ -1,5 +1,5 @@
 // This file is distributed under the BSD 3-clause license.  See file LICENSE.
-// Copyright (c) 2014-2015 Rex Kerr, UCSF, and Calico Labs.
+// Copyright (c) 2014-2015 and 2020 Rex Kerr, UCSF, and Calico Labs.
 
 package kse
 
@@ -609,6 +609,9 @@ package object eio {
     def iso8859_1 = new String(underlying, java.nio.charset.StandardCharsets.ISO_8859_1)
     def buffer = java.nio.ByteBuffer.wrap(underlying)
     def input = new java.io.ByteArrayInputStream(underlying)
+    def cursor[A](f: kse.eio.cursor.ByteCursor => A): Ok[String, A] = safe{
+      f(new kse.eio.cursor.ByteCursor(Left(underlying)))
+    }.mapNo(e => s"Error processing byte array:\n${e.explain()}")
   }
   
   implicit class ZipEntryProperPaths(private val underlying: ZipEntry) extends AnyVal {
@@ -879,6 +882,18 @@ package object eio {
       }
       catch { case oome: OutOfMemoryError => fail(s"Out of memory reading ${underlying.getPath}") }
       finally { try { src.close } catch { case t if NonFatal(t) => } }
+    }
+
+    def cursor[A](f: kse.eio.cursor.ByteCursor => A): Ok[String, A] = {
+      val raf = safe{ new java.io.RandomAccessFile(underlying, "r") }.mapNo(e => s"Error opening file $underlying\n${e.explain()}").?
+      try {
+        Yes(f(new kse.eio.cursor.ByteCursor(Right(raf))))
+      }
+      catch {
+        case oome: OutOfMemoryError => No(s"Out of memory error reading ${underlying.getPath}")
+        case t if NonFatal(t) => No(s"Error processing $underlying\n${t.explain()}")
+      }
+      finally{ try { raf.close } catch { case t if NonFatal(t) => } }
     }
 
     // TODO -- evaluate whether it's better to use a ZipFile to do this
@@ -1711,7 +1726,8 @@ package eio {
     override def write(b: Array[Byte], off: Int, len: Int): Unit = raf.write(b, off, len)
     def write(b: Int): Unit = raf.writeByte(b)
   }
-  
+
+
   /** Note: the minimum chunk size is 256 */
   class InputStreamStepper(is: InputStream, chunkSize: Int) extends Walker[Array[Byte]] {
     private var buf = new Array[Byte](math.max(256, chunkSize))
