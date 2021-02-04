@@ -226,7 +226,7 @@ object Configgy {
         val end = if (line startsWith "[") "]" else "}"
         val name = if (line startsWith "[") "array" else "object"
         val adjoined =
-          if (trim endsWith "]") trim
+          if (trim endsWith end) trim
           else {
             val sb = new java.lang.StringBuilder
             sb append trim
@@ -249,7 +249,7 @@ object Configgy {
             case js: Json => js
           }
         )
-        if (!(trim endsWith "]")) j += 1
+        if (!(trim endsWith end)) j += 1
       }
       else if (line.startsWith("\""))
         v = Value.J(Jast.parse(line.trim) match {
@@ -291,7 +291,7 @@ object Configgy {
     val ds = MHashMap.empty[String, (Int, Value)]
     var i = 0
     while (i < lines.length) i = parseSingle(lines, i, es, ds, decoder).?
-    
+
     val vb = Vector.newBuilder[Singleton]
     i = 0
     while (i < es.length) {
