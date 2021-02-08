@@ -178,6 +178,61 @@ object Configgy {
     else -1
   }
 
+  def isJsonNumber(line: String): Boolean = {
+    if (line.isEmpty) return false
+
+    // Invariant: when you leave a block
+    //    i is at the first character of the thing afterwards
+    //    c contains the char there, unless you've already hit the end
+    var i = 0
+    var c = line.charAt(i)
+
+    // Handle leading minus sign
+    if (c == '-') {
+      i += 1
+      if (i >= line.length) return false
+      c = line.charAt(i)
+    }
+
+    // First group of digits
+    if (c < '0' || c > '9') return false
+    i += 1
+    if (c != '0') {
+      while (i < line.length && { c = line.charAt(i); '0' <= c && c <= '9'}) i += 1
+      if (i >= line.length) return true
+    }
+    else if (i >= line.length) return true
+    else c = line.charAt(i)
+
+    // Decimal plus following digits, if any
+    if (c == '.') {
+      i += 1
+      if (i >= line.length) return false
+      c = line.charAt(i)
+      if (c < '0' || c > '9') return false
+      i += 1
+      while (i < line.length && { c = line.charAt(i); '0' <= c && c <= '9' }) i += 1
+      if (i >= line.length) return true
+    }
+
+    // Exponent, if any (may have +- signs)
+    if (c == 'e') {
+      i += 1
+      if (i >= line.length) return false
+      c = line.charAt(i)
+      if (c == '+' || c == '-') {
+        i += 1
+        if (i >= line.length) return false
+        c = line.charAt(i)
+      }
+      if (c < '0' || c > '9') return false
+      i += 1
+      while (i < line.length && { c = line.charAt(i); '0' <= c && c <= '9'}) i += 1
+    }
+
+    i >= line.length
+  }
+
   private def parseSingle(
     lines: Array[String], index: Int,
     es: ArrayBuffer[Singleton], ds: MHashMap[String, (Int, Value)],
@@ -262,7 +317,7 @@ object Configgy {
             case e: JastError => return No(s"Strange JSON error:\n$e")
             case js: Json => js
           })
-        case x if x.length > 0 && x.head.isDigit => 
+        case x if isJsonNumber(x) => 
           v = Jast.parse(x) match {
             case jj: Json => Value.J(jj)
             case _        => Value.S(x)
